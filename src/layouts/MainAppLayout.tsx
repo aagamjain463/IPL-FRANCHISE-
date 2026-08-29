@@ -14,7 +14,7 @@ export const MainAppLayout: React.FC<MainAppLayoutProps> = ({ children }) => {
   if (!gameState) return null;
 
   return (
-    <div className="min-h-screen bg-[#05070a] text-[#e2e8f0] font-sans flex flex-col selection:bg-[#D4AF37] selection:text-black relative">
+    <div className="min-h-screen bg-canvas text-ink font-sans flex flex-col selection:bg-gold selection:text-black relative">
       {/* Global Navigation Hub (Top Bar + Desktop Tabs + Mobile Bottom Nav) */}
       <Navbar />
 
@@ -27,16 +27,16 @@ export const MainAppLayout: React.FC<MainAppLayoutProps> = ({ children }) => {
       <MusicPlayerHud />
 
       {/* Sophisticated Dark Global Footer */}
-      <footer className="hidden md:flex px-6 md:px-8 py-3 bg-[#05070a] border-t border-[#1e293b] justify-between items-center gap-2 mt-auto">
+      <footer className="hidden md:flex px-6 md:px-8 py-3 bg-canvas border-t border-line justify-between items-center gap-2 mt-auto">
         <div className="flex items-center space-x-6">
           <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-[#64748b]">
+            <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-faint">
               FRANCHISE XI ENGINE: {gameState.currentSeason} Season Synchronized
             </span>
           </div>
         </div>
-        <div className="text-[10px] text-[#475569] uppercase tracking-wider font-mono">
+        <div className="text-[10px] text-ink-faint/70 uppercase tracking-wider font-mono">
           Build. Bid. Dominate. • Ball-by-Ball Tactical Core
         </div>
       </footer>
