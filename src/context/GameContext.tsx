@@ -376,6 +376,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setGameState(newState);
     setCurrentScreen('Auction');
     setActiveTab('AuctionLive');
+    window.history.pushState({}, '', '/auction');
     saveCurrentGame();
   };
 
@@ -633,7 +634,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             teamId: aiBid.teamId,
             teamShortName: prev.teams[aiBid.teamId]?.shortName || 'AI',
             bidAmountCr: aiBid.bidAmountCr,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            decisionType: aiBid.decisionContext?.decision,
+            isPressureBid: aiBid.decisionContext?.isBluffOrPressure,
+            biddingWarCount: auc.bidHistory.length + 1
           });
 
           if (wasUserLeading) {
@@ -771,6 +775,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
     setCurrentScreen('MatchLive');
     setActiveTab('MatchLive');
+    window.history.pushState({}, '', '/play/live');
   };
 
   const prepareScenarioChallenge = (challenge: ChallengeScenario) => {
@@ -812,6 +817,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       currentScreen: 'MatchLive'
     });
     setCurrentScreen('MatchLive');
+    setActiveTab('MatchLive');
+    window.history.pushState({}, '', '/play/live');
   };
 
   const bowlBall = () => {

@@ -92,6 +92,25 @@ export const PlayerCardModal: React.FC<Props> = ({ player, onClose }) => {
                   {player.role} • {player.age} yrs • {player.battingStyle} • {player.bowlingStyle}
                 </p>
 
+                {/* Signature PlayStyle & Traits Badges */}
+                <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                  {player.battingPlaystyle && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-lg bg-amber-500/20 text-[#D4AF37] font-black border border-amber-500/30 flex items-center gap-1">
+                      <Zap className="w-3 h-3 text-[#D4AF37]" /> {player.battingPlaystyle}
+                    </span>
+                  )}
+                  {player.bowlingPlaystyle && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-lg bg-blue-500/20 text-blue-300 font-black border border-blue-500/30 flex items-center gap-1">
+                      <Shield className="w-3 h-3 text-blue-400" /> {player.bowlingPlaystyle}
+                    </span>
+                  )}
+                  {(player.traits || []).map(t => (
+                    <span key={t} className="text-[10px] px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+                      ★ {t}
+                    </span>
+                  ))}
+                </div>
+
                 <div className="flex items-center gap-3 text-xs mt-2 font-mono">
                   <span className="text-[#94a3b8]">Base: <strong className="text-white">₹{player.basePriceCr} Cr</strong></span>
                   <span className="text-[#94a3b8]">Salary: <strong className="text-emerald-400">₹{player.salaryCr} Cr</strong></span>

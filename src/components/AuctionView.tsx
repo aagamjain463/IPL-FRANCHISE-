@@ -366,7 +366,7 @@ export const AuctionView: React.FC = () => {
                 <div className="bg-[#0f172a] rounded-2xl border border-[#1e293b] p-6 relative overflow-hidden shadow-2xl">
                   {/* Real IPL Set Tag & Capped Indicator Header */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-[#1e293b]/60 text-xs">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="px-2.5 py-0.5 rounded-full bg-[#D4AF37]/15 text-[#D4AF37] font-mono font-bold border border-[#D4AF37]/30 uppercase text-[11px]">
                         {player.auctionSetCode ? `[${player.auctionSetCode}] ${AUCTION_SETS_INFO[player.auctionSetCode as AuctionSetCode]?.name || player.auctionSetName}` : 'Set 1 Marquee'}
                       </span>
@@ -377,6 +377,23 @@ export const AuctionView: React.FC = () => {
                       ) : (
                         <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[10px] border border-emerald-500/30 flex items-center gap-1">
                           🌱 UNCAPPED
+                        </span>
+                      )}
+
+                      {/* Dynamic Scarcity & War Badges */}
+                      {aiAdvice?.scarcityAnalysis?.isFinalEliteOption && (
+                        <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-bold text-[10px] border border-purple-500/30 flex items-center gap-1 animate-pulse">
+                          ⚡ FINAL ELITE SCARCITY
+                        </span>
+                      )}
+                      {auc.bidHistory.length >= 4 && (
+                        <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-bold text-[10px] border border-orange-500/30 flex items-center gap-1">
+                          🔥 BIDDING WAR ({auc.bidHistory.length} BIDS)
+                        </span>
+                      )}
+                      {(aiAdvice?.scarcityAnalysis?.teamsNeedingRoleCount || 0) >= 4 && (
+                        <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold text-[10px] border border-blue-500/30 flex items-center gap-1">
+                          🎯 HIGH RIVAL DEMAND
                         </span>
                       )}
                     </div>
@@ -550,7 +567,12 @@ export const AuctionView: React.FC = () => {
                         <span className="font-mono font-bold text-[#D4AF37] text-sm">₹{aiAdvice.recommendedMaxBidCr} Cr</span>
                       </div>
 
-                      <div className="bg-[#05070a] p-3 rounded-xl border border-[#1e293b] sm:col-span-2">
+                      <div className="bg-[#05070a] p-3 rounded-xl border border-[#1e293b]">
+                        <span className="text-[#64748b] block text-[10px] uppercase font-semibold">Rival Competition</span>
+                        <p className="text-[#94a3b8] text-[11px] mt-0.5 leading-snug truncate sm:whitespace-normal">{aiAdvice.rivalInterestAssessment}</p>
+                      </div>
+
+                      <div className="bg-[#05070a] p-3 rounded-xl border border-[#1e293b]">
                         <span className="text-[#64748b] block text-[10px] uppercase font-semibold">Squad Need Analysis</span>
                         <p className="text-[#94a3b8] text-[11px] mt-0.5 leading-snug">{aiAdvice.squadNeedAnalysis}</p>
                       </div>
@@ -612,12 +634,32 @@ export const AuctionView: React.FC = () => {
 
                 {/* Recent Bids Feed */}
                 <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-3 shadow-xl">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-[#94a3b8]">Live Paddle Bids Log</h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-[#94a3b8]">Live Paddle Bids Log</h4>
+                    <span className="text-[10px] text-[#64748b] font-mono">{auc.bidHistory.length} Bids Logged</span>
+                  </div>
                   {auc.bidHistory.length > 0 ? (
                     <div className="space-y-2 max-h-36 overflow-y-auto pr-1 text-xs">
                       {auc.bidHistory.map((b, i) => (
                         <div key={i} className="flex items-center justify-between p-2.5 bg-[#05070a] rounded-lg border border-[#1e293b]">
-                          <span className="font-bold text-white">{b.teamShortName || (b.teamId || '').toUpperCase() || 'BIDDER'}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white">{b.teamShortName || (b.teamId || '').toUpperCase() || 'BIDDER'}</span>
+                            {b.decisionType === 'PRESSURE_BID' && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+                                PRESSURE BID
+                              </span>
+                            )}
+                            {b.decisionType === 'AGGRESSIVE_BID' && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 font-bold border border-red-500/30">
+                                AGGRESSIVE
+                              </span>
+                            )}
+                            {b.decisionType === 'VALUE_BID' && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                                VALUE
+                              </span>
+                            )}
+                          </div>
                           <span className="font-mono font-bold text-[#D4AF37]">₹{b.bidAmountCr.toFixed(2)} Cr</span>
                         </div>
                       ))}

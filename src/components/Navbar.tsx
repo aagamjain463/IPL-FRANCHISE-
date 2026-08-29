@@ -9,6 +9,7 @@ import {
   Building2, Crown, Gift, Sparkles, MoreHorizontal, ChevronRight
 } from 'lucide-react';
 import { getFranchiseLevelInfo } from '../engine/progressionEngine';
+import { getRouteForState } from '../utils/router';
 
 export const Navbar: React.FC = () => {
   const { 
@@ -52,10 +53,32 @@ export const Navbar: React.FC = () => {
     setActiveTab(tabId);
     if (tabId === 'AuctionLive') {
       setCurrentScreen('Auction');
+      window.history.pushState({}, '', '/auction');
     } else if (tabId === 'MatchLive') {
       setCurrentScreen('MatchLive');
+      window.history.pushState({}, '', '/play/live');
+    } else if (tabId === 'Play') {
+      setCurrentScreen('Dashboard');
+      window.history.pushState({}, '', '/play');
+    } else if (tabId === 'PlayingXI') {
+      setCurrentScreen('Dashboard');
+      window.history.pushState({}, '', '/tactics');
+    } else if (tabId === 'Squad') {
+      setCurrentScreen('Dashboard');
+      window.history.pushState({}, '', '/squad');
+    } else if (tabId === 'Club') {
+      setCurrentScreen('Dashboard');
+      window.history.pushState({}, '', '/club');
+    } else if (tabId === 'Rewards') {
+      setCurrentScreen('Dashboard');
+      window.history.pushState({}, '', '/rewards');
+    } else if (tabId === 'Dashboard') {
+      setCurrentScreen('Dashboard');
+      window.history.pushState({}, '', '/');
     } else {
       setCurrentScreen('Dashboard');
+      const route = getRouteForState('Dashboard', tabId);
+      window.history.pushState({}, '', route);
     }
   };
 

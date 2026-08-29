@@ -58,6 +58,36 @@ export interface PlayerAttributes {
   bigMatchPerformance: number;
 }
 
+export type BattingPlayStyle = 
+  | 'Power Hitter'
+  | 'Chase Master'
+  | 'Anchor'
+  | 'Death Specialist'
+  | 'Spin Destroyer'
+  | 'Pace Dominator'
+  | '360 Batter'
+  | 'Big Match Player';
+
+export type BowlingPlayStyle =
+  | 'Yorker Specialist'
+  | 'Express Pace'
+  | 'Swing Master'
+  | 'Mystery Spinner'
+  | 'Death Specialist'
+  | 'Powerplay Specialist'
+  | 'Economy Monster'
+  | 'Variation Expert';
+
+export type PlayerTrait =
+  | 'Clutch Finisher'
+  | 'Chepauk Spin Master'
+  | 'Wankhede Six Hitter'
+  | 'Captain Fantastic'
+  | 'Boundary Rider'
+  | 'Pressure Absorber'
+  | 'Breakout Prodigy'
+  | 'Iron Man';
+
 export interface Player {
   id: string;
   name: string;
@@ -78,6 +108,12 @@ export interface Player {
   battingRating: number;
   bowlingRating: number;
   potential: number; // 50 - 99
+
+  // PlayStyles & Traits
+  battingPlaystyle?: BattingPlayStyle;
+  bowlingPlaystyle?: BowlingPlayStyle;
+  playstyle?: string; // general display playstyle
+  traits?: PlayerTrait[];
 
   // Attributes
   attributes: PlayerAttributes;

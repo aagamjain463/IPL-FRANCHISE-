@@ -1,4 +1,4 @@
-import { Player, PlayerAttributes, PlayerRole, BattingStyle, BowlingStyle } from '../types/cricket';
+import { Player, PlayerAttributes, PlayerRole, BattingStyle, BowlingStyle, BattingPlayStyle, BowlingPlayStyle, PlayerTrait } from '../types/cricket';
 
 function createAttributes(
   power: number,
@@ -42,6 +42,79 @@ function createAttributes(
   };
 }
 
+function derivePlaystyleAndTraits(
+  id: string,
+  name: string,
+  role: PlayerRole,
+  battingRating: number,
+  bowlingRating: number,
+  attrs: PlayerAttributes
+): { battingPlaystyle?: BattingPlayStyle; bowlingPlaystyle?: BowlingPlayStyle; playstyle: string; traits: PlayerTrait[] } {
+  // Explicit Superstar Mappings
+  const explicit: Record<string, { batting?: BattingPlayStyle; bowling?: BowlingPlayStyle; traits: PlayerTrait[] }> = {
+    'csk_dhoni': { batting: 'Death Specialist', traits: ['Clutch Finisher', 'Pressure Absorber', 'Captain Fantastic'] },
+    'csk_ruturaj': { batting: 'Anchor', traits: ['Captain Fantastic', 'Pressure Absorber'] },
+    'csk_jadeja': { batting: 'Anchor', bowling: 'Economy Monster', traits: ['Chepauk Spin Master', 'Boundary Rider'] },
+    'csk_dube': { batting: 'Spin Destroyer', traits: ['Chepauk Spin Master', 'Wankhede Six Hitter'] },
+    'csk_pathirana': { bowling: 'Yorker Specialist', traits: ['Clutch Finisher'] },
+    'mi_rohit': { batting: 'Power Hitter', traits: ['Wankhede Six Hitter', 'Captain Fantastic'] },
+    'mi_bumrah': { bowling: 'Yorker Specialist', traits: ['Clutch Finisher', 'Iron Man'] },
+    'mi_surya': { batting: '360 Batter', traits: ['Wankhede Six Hitter', 'Clutch Finisher'] },
+    'mi_hardik': { batting: 'Death Specialist', bowling: 'Variation Expert', traits: ['Captain Fantastic', 'Clutch Finisher'] },
+    'rcb_kohli': { batting: 'Chase Master', traits: ['Pressure Absorber', 'Iron Man', 'Captain Fantastic'] },
+    'rcb_siraj': { bowling: 'Swing Master', traits: ['Clutch Finisher'] },
+    'kkr_rinku': { batting: 'Death Specialist', traits: ['Clutch Finisher', 'Pressure Absorber'] },
+    'kkr_russell': { batting: 'Power Hitter', bowling: 'Death Specialist', traits: ['Wankhede Six Hitter', 'Clutch Finisher'] },
+    'kkr_narine': { batting: 'Power Hitter', bowling: 'Mystery Spinner', traits: ['Chepauk Spin Master'] },
+    'srh_klaasen': { batting: 'Spin Destroyer', traits: ['Wankhede Six Hitter', 'Clutch Finisher'] },
+    'srh_head': { batting: 'Power Hitter', traits: ['Breakout Prodigy', 'Wankhede Six Hitter'] },
+    'srh_cummins': { bowling: 'Economy Monster', traits: ['Captain Fantastic', 'Clutch Finisher'] },
+    'rr_samson': { batting: 'Power Hitter', traits: ['Captain Fantastic'] },
+    'rr_chahal': { bowling: 'Mystery Spinner', traits: ['Chepauk Spin Master', 'Clutch Finisher'] },
+    'gt_gill': { batting: 'Anchor', traits: ['Captain Fantastic', 'Breakout Prodigy'] },
+    'gt_rashid': { bowling: 'Mystery Spinner', batting: 'Death Specialist', traits: ['Clutch Finisher'] },
+    'dc_pant': { batting: '360 Batter', traits: ['Clutch Finisher', 'Captain Fantastic'] },
+    'dc_kuldeep': { bowling: 'Mystery Spinner', traits: ['Chepauk Spin Master'] },
+    'lsg_pooran': { batting: 'Power Hitter', traits: ['Wankhede Six Hitter', 'Clutch Finisher'] },
+    'lsg_mayank': { bowling: 'Express Pace', traits: ['Breakout Prodigy'] }
+  };
+
+  const override = explicit[id];
+  let battingPlaystyle: BattingPlayStyle | undefined = override?.batting;
+  let bowlingPlaystyle: BowlingPlayStyle | undefined = override?.bowling;
+  const traits: PlayerTrait[] = override?.traits || [];
+
+  if (!battingPlaystyle && battingRating >= 70) {
+    if (attrs.deathOverBatting >= 90 || attrs.finishing >= 90) battingPlaystyle = 'Death Specialist';
+    else if (attrs.chasingAbility >= 88) battingPlaystyle = 'Chase Master';
+    else if (attrs.spinAbility >= 90) battingPlaystyle = 'Spin Destroyer';
+    else if (attrs.power >= 90) battingPlaystyle = 'Power Hitter';
+    else if (attrs.strikeRotation >= 88 && attrs.wicketPreservation >= 85) battingPlaystyle = 'Anchor';
+    else if (attrs.boundaryAbility >= 90) battingPlaystyle = '360 Batter';
+    else battingPlaystyle = 'Power Hitter';
+  }
+
+  if (!bowlingPlaystyle && bowlingRating >= 70) {
+    if (attrs.deathBowling >= 90 || attrs.accuracy >= 92) bowlingPlaystyle = 'Yorker Specialist';
+    else if (attrs.pace >= 92) bowlingPlaystyle = 'Express Pace';
+    else if (attrs.swing >= 88) bowlingPlaystyle = 'Swing Master';
+    else if (attrs.spin >= 88) bowlingPlaystyle = 'Mystery Spinner';
+    else if (attrs.economy >= 88) bowlingPlaystyle = 'Economy Monster';
+    else if (attrs.powerplayBowling >= 88) bowlingPlaystyle = 'Powerplay Specialist';
+    else bowlingPlaystyle = 'Variation Expert';
+  }
+
+  if (traits.length === 0) {
+    if (attrs.pressure >= 90) traits.push('Pressure Absorber');
+    if (attrs.bigMatchPerformance >= 92) traits.push('Clutch Finisher');
+    if (attrs.leadership >= 90) traits.push('Captain Fantastic');
+    if (attrs.fielding >= 92) traits.push('Boundary Rider');
+  }
+
+  const playstyle = battingPlaystyle || bowlingPlaystyle || (role.includes('Bowler') ? 'Pace Dominator' : 'Power Hitter');
+  return { battingPlaystyle, bowlingPlaystyle, playstyle, traits };
+}
+
 function makePlayer(
   id: string,
   name: string,
@@ -61,6 +134,10 @@ function makePlayer(
   teamId: string | null = null,
   salaryCr: number = basePriceCr
 ): Player {
+  const { battingPlaystyle, bowlingPlaystyle, playstyle, traits } = derivePlaystyleAndTraits(
+    id, name, role, battingRating, bowlingRating, attrs
+  );
+
   return {
     id,
     name,
@@ -79,6 +156,10 @@ function makePlayer(
     battingRating,
     bowlingRating,
     potential,
+    battingPlaystyle,
+    bowlingPlaystyle,
+    playstyle,
+    traits,
     attributes: attrs,
     form: 4,
     confidence: 85,

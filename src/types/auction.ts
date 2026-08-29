@@ -38,15 +38,92 @@ export type AuctionSetCategory =
   | 'Uncapped Spinners (USP1)' 
   | 'Accelerated Round (ACC1)';
 
+export type AuctionPlayerStatus = 'Upcoming' | 'On Auction' | 'Sold' | 'Unsold' | 'Passed';
+
+export type AuctionPhase = 'EARLY' | 'MIDDLE' | 'LATE' | 'FINAL' | 'ACCELERATED';
+
+export type AIDecisionType = 
+  | 'BID' 
+  | 'WAIT' 
+  | 'DROP_OUT' 
+  | 'AGGRESSIVE_BID' 
+  | 'VALUE_BID' 
+  | 'PRESSURE_BID' 
+  | 'SAVE_BUDGET' 
+  | 'TARGET_LATER';
+
 export interface AuctionBid {
   teamId: string;
   teamShortName?: string;
   bidAmountCr: number;
   timestamp: number;
   bidNumber?: number;
+  decisionType?: AIDecisionType;
+  isPressureBid?: boolean;
+  biddingWarCount?: number;
 }
 
-export type AuctionPlayerStatus = 'Upcoming' | 'On Auction' | 'Sold' | 'Unsold' | 'Passed';
+export interface SquadNeedDetail {
+  current: number;
+  target: number;
+  urgency: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  weight: number; // multiplier e.g. 0.7 to 1.35
+}
+
+export interface TeamSquadNeeds {
+  teamId: string;
+  totalPlayers: number;
+  overseasCount: number;
+  indianCount: number;
+  needs: {
+    topOrder: SquadNeedDetail;
+    middleOrder: SquadNeedDetail;
+    finisher: SquadNeedDetail;
+    wicketkeeper: SquadNeedDetail;
+    allRounder: SquadNeedDetail;
+    paceBowler: SquadNeedDetail;
+    spinBowler: SquadNeedDetail;
+    powerplayBowler: SquadNeedDetail;
+    deathBowler: SquadNeedDetail;
+  };
+  overallNeedScore: number; // 0 - 100
+  criticalNeedsCount: number;
+}
+
+export interface PlayerScarcityAnalysis {
+  playerId: string;
+  role: string;
+  comparableRemainingCount: number; // players in same tier remaining
+  roleRemainingCount: number; // players in same role remaining
+  eliteRemainingCount: number; // OVR >= 88 or potential >= 90
+  teamsNeedingRoleCount: number; // other teams with high/critical need
+  scarcityIndex: number; // 0 to 1.0 (1.0 = highly scarce)
+  isFinalEliteOption: boolean;
+  scarcityMultiplier: number; // e.g. 0.90 to 1.45
+}
+
+export interface AIDecisionContext {
+  teamId: string;
+  teamShortName: string;
+  playerId: string;
+  playerName: string;
+  decision: AIDecisionType;
+  reasoning: string;
+  baseValuationCr: number;
+  squadNeedMultiplier: number;
+  scarcityMultiplier: number;
+  personalityMultiplier: number;
+  budgetMultiplier: number;
+  phaseMultiplier: number;
+  rivalPressureAdjustmentCr: number;
+  momentumBonusCr: number;
+  effectiveCeilingCr: number;
+  currentBidCr: number;
+  nextBidAmountCr: number;
+  willingnessScore: number;
+  confidencePercent: number;
+  isBluffOrPressure: boolean;
+}
 
 export interface SoldPlayerRecord {
   player: Player;
@@ -74,6 +151,7 @@ export interface AuctionState {
   isCompleted: boolean;
   isAcceleratedMode: boolean;
   autoBidUser: boolean;
+  isAutoBidEnabled?: boolean;
 }
 
 export interface AIAssistantAdvice {
@@ -83,5 +161,9 @@ export interface AIAssistantAdvice {
   rivalInterestAssessment: string;
   valuePremiumPercent: number;
   isHighValueTarget: boolean;
+  scarcityAnalysis?: PlayerScarcityAnalysis;
+  squadNeeds?: TeamSquadNeeds;
+  biddingWarActive?: boolean;
+  alternativeTargetsRemaining?: number;
 }
 

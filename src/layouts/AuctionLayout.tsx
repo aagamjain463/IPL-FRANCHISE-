@@ -7,6 +7,7 @@ import {
 import { Player } from '../types/cricket';
 import { Team } from '../types/team';
 import { MusicPlayerHud } from '../components/MusicPlayerHud';
+import { PlayerCardModal } from '../components/PlayerCardModal';
 
 interface AuctionLayoutProps {
   children: React.ReactNode;
@@ -19,6 +20,7 @@ export const AuctionLayout: React.FC<AuctionLayoutProps> = ({ children }) => {
     setActiveTab, 
     isMuted, 
     toggleMute,
+    selectedPlayerForModal,
     setSelectedPlayerForModal 
   } = useGame();
 
@@ -388,6 +390,12 @@ export const AuctionLayout: React.FC<AuctionLayoutProps> = ({ children }) => {
           </div>
         </div>
       )}
+
+      {/* Global Player Card Modal */}
+      <PlayerCardModal
+        player={selectedPlayerForModal}
+        onClose={() => setSelectedPlayerForModal(null)}
+      />
 
       {/* Floating Audio Soundtrack & Broadcast HUD */}
       <MusicPlayerHud />

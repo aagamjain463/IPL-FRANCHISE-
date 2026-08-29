@@ -1,6 +1,17 @@
-import { Player } from '../types/cricket';
+import { Player, PlayerRole } from '../types/cricket';
 import { Team } from '../types/team';
-import { AuctionState, AuctionBid, AIAssistantAdvice, AuctionSetInfo, AuctionSetCode } from '../types/auction';
+import { 
+  AuctionState, 
+  AuctionBid, 
+  AIAssistantAdvice, 
+  AuctionSetInfo, 
+  AuctionSetCode,
+  AuctionPhase,
+  AIDecisionType,
+  TeamSquadNeeds,
+  PlayerScarcityAnalysis,
+  AIDecisionContext
+} from '../types/auction';
 
 export const AUCTION_SETS_INFO: Record<AuctionSetCode, AuctionSetInfo> = {
   'M1': {
@@ -102,7 +113,6 @@ export const SET_ORDER: AuctionSetCode[] = [
 ];
 
 export function assignPlayerAuctionSets(players: Player[]): Player[] {
-  // Known mapping for realistic IPL Mega Auction sets
   const setMapping: Record<string, { set: AuctionSetCode; capped: boolean }> = {
     // M1
     'auc_starc': { set: 'M1', capped: true },
@@ -187,7 +197,6 @@ export function assignPlayerAuctionSets(players: Player[]): Player[] {
       pCopy.auctionSetName = AUCTION_SETS_INFO[mapped.set]?.name || mapped.set;
       pCopy.isCapped = mapped.capped;
     } else {
-      // Dynamic fallback set tagging
       const isCapped = pCopy.isCapped !== undefined ? pCopy.isCapped : (pCopy.overall >= 86 || pCopy.isOverseas || pCopy.basePriceCr >= 1.0);
       pCopy.isCapped = isCapped;
 
@@ -238,7 +247,6 @@ export function sortAuctionPlayerPool(pool: Player[]): Player[] {
       return setIdxA - setIdxB;
     }
 
-    // Within same set: higher base price first, then higher overall rating
     if (b.basePriceCr !== a.basePriceCr) {
       return b.basePriceCr - a.basePriceCr;
     }
@@ -251,282 +259,765 @@ export function getBidIncrement(currentBidCr: number): number {
   if (currentBidCr < 2.0) return 0.20; // 20 Lakhs
   if (currentBidCr < 5.0) return 0.25; // 25 Lakhs
   if (currentBidCr < 10.0) return 0.50; // 50 Lakhs
-  return 0.50; // 50 Lakhs increment above 10 Cr (matches real IPL Mega Auction increments)
+  return 0.50; // 50 Lakhs standard above 10 Cr in IPL
 }
 
-/**
- * Calculates a realistic IPL Mega Auction valuation for a player from the perspective of a specific franchise.
- * Reflects genuine IPL economics:
- * - Top-tier Marquee superstars (Pant, Starc, Iyer, Cummins) cap out around ₹22 - 27.5 Cr.
- * - Star capped match-winners trade around ₹10 - 18 Cr.
- * - Solid capped regulars trade around ₹4 - 9 Cr.
- * - Uncapped prodigies & bidding war breakout sensations can reach ₹6 - 13.5 Cr (like Kushagra, Rizvi, Shahrukh).
- * - Standard uncapped & depth trade around ₹0.3 - 3.0 Cr.
- * - Prevents runaway compounding multipliers and enforces franchise purse allocation discipline.
- */
+// -------------------------------------------------------------
+// 1. DYNAMIC SQUAD-NEEDS ENGINE
+// -------------------------------------------------------------
+
+export function calculateTeamSquadNeeds(team: Team, teamPlayers: Player[]): TeamSquadNeeds {
+  const totalPlayers = teamPlayers.length;
+  const overseasCount = teamPlayers.filter(p => p.isOverseas).length;
+  const indianCount = totalPlayers - overseasCount;
+
+  // Granular role categorization
+  const topOrderCount = teamPlayers.filter(p => 
+    p.role === 'Top-order Batter' || (p.attributes?.powerplayBatting && p.attributes.powerplayBatting >= 78)
+  ).length;
+
+  const middleOrderCount = teamPlayers.filter(p => 
+    p.role === 'Middle-order Batter' || (p.attributes?.middleOverBatting && p.attributes.middleOverBatting >= 78)
+  ).length;
+
+  const finisherCount = teamPlayers.filter(p => 
+    p.role === 'Finisher' || (p.attributes?.finishing && p.attributes.finishing >= 80) || (p.attributes?.deathOverBatting && p.attributes.deathOverBatting >= 80)
+  ).length;
+
+  const wicketkeeperCount = teamPlayers.filter(p => 
+    p.role === 'Wicketkeeper Batter' || p.role.includes('Wicketkeeper')
+  ).length;
+
+  const allRounderCount = teamPlayers.filter(p => 
+    p.role.includes('All-rounder') || (p.battingRating >= 70 && p.bowlingRating >= 65)
+  ).length;
+
+  const paceBowlerCount = teamPlayers.filter(p => 
+    p.role === 'Pace Bowler' || p.bowlingStyle.includes('fast') || p.bowlingStyle.includes('medium')
+  ).length;
+
+  const spinBowlerCount = teamPlayers.filter(p => 
+    p.role === 'Spin Bowler' || p.bowlingStyle.includes('spin') || p.bowlingStyle.includes('break') || p.bowlingStyle.includes('orthodox')
+  ).length;
+
+  const powerplayBowlerCount = teamPlayers.filter(p => 
+    p.attributes?.powerplayBowling && p.attributes.powerplayBowling >= 80
+  ).length;
+
+  const deathBowlerCount = teamPlayers.filter(p => 
+    p.attributes?.deathBowling && p.attributes.deathBowling >= 80
+  ).length;
+
+  // Helper to compute need urgency and weight with correct conditional ordering
+  const evaluateNeed = (current: number, target: number): { urgency: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'; weight: number } => {
+    if (current === 0 && target >= 1) {
+      return { urgency: 'CRITICAL', weight: 1.35 };
+    }
+    if (current < target) {
+      return { urgency: 'HIGH', weight: 1.20 };
+    }
+    if (current === target) {
+      return { urgency: 'MEDIUM', weight: 1.05 };
+    }
+    if (current === target + 1) {
+      return { urgency: 'LOW', weight: 0.88 };
+    }
+    // current >= target + 2 (Depth surplus)
+    return { urgency: 'NONE', weight: 0.70 };
+  };
+
+  const topOrder = { current: topOrderCount, target: 3, ...evaluateNeed(topOrderCount, 3) };
+  const middleOrder = { current: middleOrderCount, target: 3, ...evaluateNeed(middleOrderCount, 3) };
+  const finisher = { current: finisherCount, target: 2, ...evaluateNeed(finisherCount, 2) };
+  const wicketkeeper = { current: wicketkeeperCount, target: 2, ...evaluateNeed(wicketkeeperCount, 2) };
+  const allRounder = { current: allRounderCount, target: 3, ...evaluateNeed(allRounderCount, 3) };
+  const paceBowler = { current: paceBowlerCount, target: 4, ...evaluateNeed(paceBowlerCount, 4) };
+  const spinBowler = { current: spinBowlerCount, target: 3, ...evaluateNeed(spinBowlerCount, 3) };
+  const powerplayBowler = { current: powerplayBowlerCount, target: 2, ...evaluateNeed(powerplayBowlerCount, 2) };
+  const deathBowler = { current: deathBowlerCount, target: 2, ...evaluateNeed(deathBowlerCount, 2) };
+
+  const allNeeds = [topOrder, middleOrder, finisher, wicketkeeper, allRounder, paceBowler, spinBowler, powerplayBowler, deathBowler];
+  const criticalNeedsCount = allNeeds.filter(n => n.urgency === 'CRITICAL').length;
+  const highNeedsCount = allNeeds.filter(n => n.urgency === 'HIGH').length;
+
+  const overallNeedScore = Math.min(100, Math.round((criticalNeedsCount * 25 + highNeedsCount * 12) + Math.max(0, 18 - totalPlayers) * 3));
+
+  return {
+    teamId: team.id,
+    totalPlayers,
+    overseasCount,
+    indianCount,
+    needs: {
+      topOrder,
+      middleOrder,
+      finisher,
+      wicketkeeper,
+      allRounder,
+      paceBowler,
+      spinBowler,
+      powerplayBowler,
+      deathBowler
+    },
+    overallNeedScore,
+    criticalNeedsCount
+  };
+}
+
+export function calculatePlayerNeedFit(player: Player, squadNeeds: TeamSquadNeeds): { multiplier: number; reasoning: string; primaryUrgency: string } {
+  const needs = squadNeeds.needs;
+  let multiplier = 1.0;
+  const matchedReasons: string[] = [];
+  let highestUrgency: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' = 'LOW';
+
+  const updateUrgency = (u: 'NONE' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL') => {
+    const priority = { 'CRITICAL': 5, 'HIGH': 4, 'MEDIUM': 3, 'LOW': 2, 'NONE': 1 };
+    if (priority[u] > priority[highestUrgency]) {
+      highestUrgency = u;
+    }
+  };
+
+  // 1. Wicketkeeper check
+  if (player.role.includes('Wicketkeeper')) {
+    multiplier *= needs.wicketkeeper.weight;
+    updateUrgency(needs.wicketkeeper.urgency);
+    if (needs.wicketkeeper.urgency === 'CRITICAL') matchedReasons.push('Critical need for primary wicketkeeper');
+    else if (needs.wicketkeeper.urgency === 'HIGH') matchedReasons.push('High need for keeper-batter depth');
+  }
+
+  // 2. Death bowler check
+  if (player.attributes?.deathBowling && player.attributes.deathBowling >= 82) {
+    multiplier *= needs.deathBowler.weight;
+    updateUrgency(needs.deathBowler.urgency);
+    if (needs.deathBowler.urgency === 'CRITICAL') matchedReasons.push('Critical need for specialist death bowler');
+    else if (needs.deathBowler.urgency === 'HIGH') matchedReasons.push('Seeking proven death over weapon');
+  }
+
+  // 3. Powerplay bowling check
+  if (player.attributes?.powerplayBowling && player.attributes.powerplayBowling >= 82) {
+    multiplier *= (needs.powerplayBowler.weight * 0.5 + 0.5);
+    updateUrgency(needs.powerplayBowler.urgency);
+    if (needs.powerplayBowler.urgency === 'CRITICAL') matchedReasons.push('Desperately seeking new-ball swing weapon');
+  }
+
+  // 4. Role-based matching
+  if (player.role === 'Pace Bowler') {
+    multiplier *= needs.paceBowler.weight;
+    updateUrgency(needs.paceBowler.urgency);
+    if (needs.paceBowler.urgency === 'CRITICAL' || needs.paceBowler.urgency === 'HIGH') matchedReasons.push('Pace attack reinforcement required');
+  } else if (player.role === 'Spin Bowler') {
+    multiplier *= needs.spinBowler.weight;
+    updateUrgency(needs.spinBowler.urgency);
+    if (needs.spinBowler.urgency === 'CRITICAL' || needs.spinBowler.urgency === 'HIGH') matchedReasons.push('Spin bowling reinforcement required');
+  } else if (player.role.includes('All-rounder')) {
+    multiplier *= needs.allRounder.weight;
+    updateUrgency(needs.allRounder.urgency);
+    if (needs.allRounder.urgency === 'CRITICAL' || needs.allRounder.urgency === 'HIGH') matchedReasons.push('Multi-skill all-rounder needed for balance');
+  } else if (player.role === 'Finisher' || (player.attributes?.finishing && player.attributes.finishing >= 85)) {
+    multiplier *= needs.finisher.weight;
+    updateUrgency(needs.finisher.urgency);
+    if (needs.finisher.urgency === 'CRITICAL' || needs.finisher.urgency === 'HIGH') matchedReasons.push('Explosive late-overs finisher required');
+  } else if (player.role === 'Top-order Batter') {
+    multiplier *= needs.topOrder.weight;
+    updateUrgency(needs.topOrder.urgency);
+  } else if (player.role === 'Middle-order Batter') {
+    multiplier *= needs.middleOrder.weight;
+    updateUrgency(needs.middleOrder.urgency);
+  }
+
+  // 5. Overseas constraint penalty
+  if (player.isOverseas) {
+    if (squadNeeds.overseasCount >= 8) {
+      multiplier = 0;
+      matchedReasons.push('Overseas quota full (8/8)');
+      highestUrgency = 'NONE';
+    } else if (squadNeeds.overseasCount >= 7) {
+      multiplier *= 0.65;
+      matchedReasons.push('Final overseas slot remaining - preserving flexibility');
+    } else if (squadNeeds.overseasCount >= 6) {
+      multiplier *= 0.85;
+    }
+  } else {
+    // Indian premium
+    if (player.overall >= 88) {
+      multiplier *= 1.15;
+      matchedReasons.push('Premium Indian capped superstar core');
+    } else if (player.potential >= 90) {
+      multiplier *= 1.20;
+      matchedReasons.push('High-ceiling Indian prodigy');
+    }
+  }
+
+  // 6. Overall squad capacity constraint
+  if (squadNeeds.totalPlayers >= 25) {
+    multiplier = 0;
+    matchedReasons.push('Roster cap reached (25/25)');
+    highestUrgency = 'NONE';
+  }
+
+  const reasoning = matchedReasons.length > 0 ? matchedReasons.join(' • ') : 'Standard squad depth fit';
+  return {
+    multiplier: Math.max(0, Number(multiplier.toFixed(3))),
+    reasoning,
+    primaryUrgency: highestUrgency
+  };
+}
+
+// -------------------------------------------------------------
+// 2. PLAYER SCARCITY ANALYSIS
+// -------------------------------------------------------------
+
+export function calculatePlayerScarcity(
+  player: Player,
+  remainingPool: Player[],
+  allTeams?: Record<string, Team>,
+  allPlayers?: Record<string, Player>
+): PlayerScarcityAnalysis {
+  const isCapped = player.isCapped ?? (player.overall >= 86 || player.isOverseas || player.basePriceCr >= 1.0);
+  
+  // Count remaining players in same primary role
+  const roleRemaining = remainingPool.filter(p => p.role === player.role && p.id !== player.id);
+  const roleRemainingCount = roleRemaining.length;
+
+  // Comparable remaining (within rating bracket ±3 OVR)
+  const comparableRemaining = remainingPool.filter(p => 
+    Math.abs(p.overall - player.overall) <= 3 && 
+    (p.role === player.role || (player.role.includes('Bowler') && p.role.includes('Bowler')) || (player.role.includes('Batter') && p.role.includes('Batter'))) &&
+    p.id !== player.id
+  );
+  const comparableRemainingCount = comparableRemaining.length;
+
+  // Elite remaining (OVR >= 88 or potential >= 90)
+  const eliteRemaining = remainingPool.filter(p => 
+    p.id !== player.id &&
+    ((p.isCapped && p.overall >= 88) || (!p.isCapped && p.potential >= 90)) &&
+    (p.role === player.role || (player.role.includes('All-rounder') && p.role.includes('All-rounder')))
+  );
+  const eliteRemainingCount = eliteRemaining.length;
+
+  // Count how many teams still have high/critical need for this role
+  let teamsNeedingRoleCount = 0;
+  if (allTeams && allPlayers) {
+    Object.values(allTeams).forEach(t => {
+      const squad = (t.rosterPlayerIds || []).map(id => allPlayers[id]).filter(Boolean);
+      const needs = calculateTeamSquadNeeds(t, squad);
+      const fit = calculatePlayerNeedFit(player, needs);
+      if (fit.primaryUrgency === 'CRITICAL' || fit.primaryUrgency === 'HIGH') {
+        teamsNeedingRoleCount++;
+      }
+    });
+  } else {
+    // Default estimate if teams map not provided
+    teamsNeedingRoleCount = Math.max(1, Math.min(6, Math.floor(10 - (player.overall / 12))));
+  }
+
+  // Final elite option detection: only 1-2 elite options left with multiple teams competing
+  const isFinalEliteOption = (player.overall >= 88 || player.potential >= 90) && eliteRemainingCount <= 2 && teamsNeedingRoleCount >= 2;
+
+  // Scarcity Index (0.0 to 1.0)
+  let scarcityIndex = 0.5;
+  if (isFinalEliteOption) {
+    scarcityIndex = 0.95;
+  } else {
+    const roleScarcityFactor = Math.max(0, 1 - (roleRemainingCount / 12));
+    const demandFactor = Math.min(1, teamsNeedingRoleCount / 5);
+    scarcityIndex = Math.min(1.0, Math.max(0.1, roleScarcityFactor * 0.6 + demandFactor * 0.4));
+  }
+
+  // Scarcity Multiplier (0.88 to 1.40)
+  let scarcityMultiplier = 1.0;
+  if (isFinalEliteOption) {
+    scarcityMultiplier = 1.28 + Math.min(0.12, (teamsNeedingRoleCount - 2) * 0.04); // Up to +40% for final elite
+  } else if (scarcityIndex >= 0.75) {
+    scarcityMultiplier = 1.15 + (scarcityIndex - 0.75) * 0.5; // +15% to +27%
+  } else if (scarcityIndex <= 0.30) {
+    scarcityMultiplier = 0.90 + scarcityIndex * 0.25; // Depth surplus discount
+  } else {
+    scarcityMultiplier = 1.0 + (scarcityIndex - 0.5) * 0.25;
+  }
+
+  return {
+    playerId: player.id,
+    role: player.role,
+    comparableRemainingCount,
+    roleRemainingCount,
+    eliteRemainingCount,
+    teamsNeedingRoleCount,
+    scarcityIndex: Number(scarcityIndex.toFixed(2)),
+    isFinalEliteOption,
+    scarcityMultiplier: Number(scarcityMultiplier.toFixed(2))
+  };
+}
+
+// -------------------------------------------------------------
+// 3. AUCTION PHASE ENGINE
+// -------------------------------------------------------------
+
+export function getAuctionPhase(currentIndex: number, totalPool: number, setCode?: string): AuctionPhase {
+  if (setCode === 'ACC1') return 'ACCELERATED';
+  const progressRatio = totalPool > 0 ? currentIndex / totalPool : 0;
+
+  if (setCode === 'M1' || setCode === 'M2' || progressRatio < 0.18) {
+    return 'EARLY';
+  }
+  if (['BA1', 'AL1', 'WK1', 'FA1', 'SP1'].includes(setCode || '') || progressRatio < 0.55) {
+    return 'MIDDLE';
+  }
+  if (['UBA1', 'UAL1', 'UWK1', 'UFA1', 'USP1'].includes(setCode || '') || progressRatio < 0.85) {
+    return 'LATE';
+  }
+  return 'FINAL';
+}
+
+export function getPhaseMultiplier(phase: AuctionPhase, player: Player, personality?: Team['aiPersonality']): number {
+  const isMarquee = player.overall >= 92 || player.auctionSetCode === 'M1' || player.auctionSetCode === 'M2';
+  const isProdigy = !player.isCapped && player.potential >= 90;
+
+  switch (phase) {
+    case 'EARLY':
+      // Early phase: Franchises spend heavily on marquee pillars, but conserve purse on tier-3 filler
+      if (isMarquee) return 1.08;
+      if (player.overall >= 88) return 1.02;
+      return 0.92;
+
+    case 'MIDDLE':
+      // Middle phase: Peak tactical bidding to fill key starting XI roles
+      return 1.00;
+
+    case 'LATE':
+      // Late phase: Uncapped gems create bidding wars, depth players sell at fair/discount values
+      if (isProdigy) return 1.18;
+      return 0.95;
+
+    case 'FINAL':
+    case 'ACCELERATED':
+      // Accelerated / Final phase: Roster size compliance is paramount
+      return 0.90;
+  }
+}
+
+// -------------------------------------------------------------
+// 4. BUDGET MANAGEMENT & RESERVED PURSE
+// -------------------------------------------------------------
+
+export function calculateReservedPurse(team: Team, minTargetSquadSize: number = 18): { reservedPurseCr: number; availablePurseCr: number } {
+  const currentSquadSize = team.rosterPlayerIds.length;
+  const remainingSlotsNeeded = Math.max(0, minTargetSquadSize - currentSquadSize);
+
+  // Reserve min budget per remaining slot (₹0.30 - ₹0.50 Cr)
+  const costPerSlot = remainingSlotsNeeded > 8 ? 0.40 : 0.30;
+  const reservedPurseCr = Number((Math.max(0, remainingSlotsNeeded - 1) * costPerSlot).toFixed(2));
+  const availablePurseCr = Number(Math.max(0, team.purseCr - reservedPurseCr).toFixed(2));
+
+  return { reservedPurseCr, availablePurseCr };
+}
+
+// -------------------------------------------------------------
+// 5. BASE MARKET VALUE
+// -------------------------------------------------------------
+
+export function calculateBaseMarketValue(player: Player): number {
+  const isCapped = player.isCapped ?? (player.overall >= 86 || player.isOverseas || player.basePriceCr >= 1.0);
+
+  if (isCapped) {
+    if (player.overall >= 95) {
+      // Tier-1 All-Time Superstars (Bumrah, Klaasen, Starc, Pant) ~₹19 - 26.5 Cr
+      return 19.0 + (player.overall - 95) * 2.2;
+    }
+    if (player.overall >= 92) {
+      // Marquee Franchise Pillars (Iyer, Buttler, Cummins, Rahul, Rashid) ~₹13.5 - 18.5 Cr
+      return 13.5 + (player.overall - 92) * 1.6;
+    }
+    if (player.overall >= 89) {
+      // Capped Stars (Arshdeep, Siraj, Boult, Chahal, Maxwell, Phil Salt) ~₹9.0 - 13.0 Cr
+      return 9.0 + (player.overall - 89) * 1.3;
+    }
+    if (player.overall >= 86) {
+      // Established Capped Regulars (Bhuvi, Rahane, Ashwin, Deepak Chahar, Tripathi) ~₹4.5 - 8.5 Cr
+      return 4.5 + (player.overall - 86) * 1.3;
+    }
+    if (player.overall >= 83) {
+      // Solid Capped Squad Depth ~₹2.0 - 4.2 Cr
+      return 2.0 + (player.overall - 83) * 0.7;
+    }
+    return Math.max(player.basePriceCr, 0.8 + (player.overall - 75) * 0.12);
+  }
+
+  // UNCAPPED PLAYERS
+  const rawUncapped = 0.4 + Math.max(0, player.overall - 78) * 0.35;
+  let baseValue = Math.max(player.basePriceCr, rawUncapped);
+
+  const isHighPotentialYouth = player.age <= 24 && player.potential >= 90;
+  const hasExplosiveSkill = 
+    (player.attributes?.power && player.attributes.power >= 86) ||
+    (player.attributes?.pace && player.attributes.pace >= 88) ||
+    (player.attributes?.deathBowling && player.attributes.deathBowling >= 86) ||
+    (player.role.includes('Wicketkeeper') && player.battingRating >= 80);
+
+  if (isHighPotentialYouth && hasExplosiveSkill) {
+    // Breakout sensations (Rizvi, Kushagra, Ashutosh, Mayank Yadav, Tyagi) ~₹5.5 - 11.5 Cr
+    baseValue = Math.max(baseValue, 5.5 + (player.potential - 90) * 1.0 + (player.overall - 80) * 0.8);
+  } else if (isHighPotentialYouth || hasExplosiveSkill) {
+    baseValue = Math.max(baseValue, 2.5 + (player.potential - 88) * 0.5);
+  }
+
+  return Number(baseValue.toFixed(2));
+}
+
+// -------------------------------------------------------------
+// 6. MAIN CONTEXTUAL VALUATION FUNCTION (EVALUATE PLAYER VALUE)
+// -------------------------------------------------------------
+
 export function evaluatePlayerValueForTeam(
   player: Player,
   team: Team,
   teamPlayers: Player[],
-  remainingTargetsCount: number = 8
+  remainingTargetsCount: number = 8,
+  auctionPhase: AuctionPhase = 'MIDDLE',
+  remainingPool: Player[] = []
 ): number {
-  // Check squad limits first
   if (team.rosterPlayerIds.length >= 25) return 0;
   const currentOverseasCount = teamPlayers.filter(p => p.isOverseas).length;
   if (player.isOverseas && currentOverseasCount >= 8) return 0;
 
-  const isCapped = player.isCapped ?? (player.overall >= 86 || player.isOverseas || player.basePriceCr >= 1.0);
+  // 1. Base Market Value
+  const baseMarketValue = calculateBaseMarketValue(player);
 
-  // 1. Establish realistic Base Market Value curve
-  let baseMarketValue = player.basePriceCr;
+  // 2. Squad Needs Fit Multiplier
+  const squadNeeds = calculateTeamSquadNeeds(team, teamPlayers);
+  const needFit = calculatePlayerNeedFit(player, squadNeeds);
+  if (needFit.multiplier <= 0) return 0;
 
-  if (isCapped) {
-    if (player.overall >= 95) {
-      // Elite Tier-1 Superstars (e.g. Bumrah, Starc, Klaasen, Pant)
-      baseMarketValue = 18.0 + (player.overall - 95) * 2.5; // ~18.0 - 25.5 Cr
-    } else if (player.overall >= 92) {
-      // Tier-1 Franchise Pillars (e.g. Iyer, Buttler, Cummins, Rashid, Rahul)
-      baseMarketValue = 13.0 + (player.overall - 92) * 1.5; // ~13.0 - 17.5 Cr
-    } else if (player.overall >= 89) {
-      // High-Impact Capped Stars (e.g. Arshdeep, Siraj, Boult, Chahal, Maxwell, Phil Salt, Ishan)
-      baseMarketValue = 8.5 + (player.overall - 89) * 1.4; // ~8.5 - 12.7 Cr
-    } else if (player.overall >= 86) {
-      // Solid Established Capped Regulars (e.g. Bhuvi, Rahane, Ashwin, Deepak Chahar, Tripathi)
-      baseMarketValue = 4.0 + (player.overall - 86) * 1.3; // ~4.0 - 7.9 Cr
-    } else if (player.overall >= 83) {
-      // Capped Squad Players (e.g. Umesh, Manish Pandey, Alzarri)
-      baseMarketValue = 1.8 + (player.overall - 83) * 0.7; // ~1.8 - 3.9 Cr
-    } else {
-      // Depth / Reserve Capped
-      baseMarketValue = Math.max(player.basePriceCr, 0.8 + (player.overall - 75) * 0.10);
-    }
-  } else {
-    // UNCAPPED PLAYERS
-    // Base uncapped starting valuation
-    const rawUncapped = 0.4 + Math.max(0, player.overall - 78) * 0.35; // 0.4 to ~3.2 Cr
-    baseMarketValue = Math.max(player.basePriceCr, rawUncapped);
+  // 3. Scarcity Multiplier
+  const scarcity = calculatePlayerScarcity(player, remainingPool);
+  const scarcitySensitivity = (team.aiPersonality?.scarcitySensitivity ?? 75) / 100;
+  const appliedScarcity = 1.0 + (scarcity.scarcityMultiplier - 1.0) * scarcitySensitivity;
 
-    // Uncapped Excitement & Potential Multiplier:
-    // Real IPL teams (like CSK, PBKS, SRH, GT) go into heated paddle wars for young Indian talent
-    // with elite potential, express pace (145kph+), power hitters (powerHitting > 85), mystery spinners, or keeper-batters.
-    // Surprises can realistically go for 8 to 14 Crore!
-    const isHighPotentialYouth = player.age <= 24 && player.potential >= 90;
-    const hasExplosiveSkill = 
-      (player.attributes.power && player.attributes.power >= 88) ||
-      (player.attributes.pace && player.attributes.pace >= 90) ||
-      (player.attributes.deathBowling && player.attributes.deathBowling >= 88) ||
-      (player.role.includes('Wicketkeeper') && player.battingRating >= 82);
+  // 4. Phase Multiplier
+  const phaseMult = getPhaseMultiplier(auctionPhase, player, team.aiPersonality);
 
-    if (isHighPotentialYouth && hasExplosiveSkill) {
-      // Young breakout prodigy (e.g. Sameer Rizvi, Kumar Kushagra, Mayank Yadav, Ashutosh, Tyagi)
-      // Base demand pushes to 6.0 - 11.5 Cr with bidding momentum
-      baseMarketValue = Math.max(baseMarketValue, 5.5 + (player.potential - 90) * 1.0 + (player.overall - 80) * 0.8);
-    } else if (isHighPotentialYouth || hasExplosiveSkill) {
-      baseMarketValue = Math.max(baseMarketValue, 2.5 + (player.potential - 88) * 0.5);
-    }
-  }
-
-  // 2. Additive / Proportional Percentage Adjustments (Bounded to avoid runaway 50 Cr spikes)
-  let adjustmentMultiplier = 1.0;
-
-  // A. Indian Scarcity Premium (Crucial for playing XI balance)
-  if (!player.isOverseas) {
-    if (isCapped && player.overall >= 88) {
-      adjustmentMultiplier += 0.15; // +15% for top Indian stars
-    } else if (!isCapped && player.potential >= 90) {
-      adjustmentMultiplier += 0.20; // +20% for top Indian prodigies
-    } else {
-      adjustmentMultiplier += 0.08;
-    }
-  } else {
-    // Overseas depth penalties
-    if (currentOverseasCount >= 7) {
-      adjustmentMultiplier -= 0.40;
-    } else if (currentOverseasCount >= 6) {
-      adjustmentMultiplier -= 0.20;
-    }
-  }
-
-  // B. Positional Need in Team
-  const roleCount = teamPlayers.filter(p => p.role === player.role).length;
-  if (roleCount === 0) {
-    adjustmentMultiplier += 0.18; // Desperately needed primary slot
-  } else if (roleCount === 1) {
-    adjustmentMultiplier += 0.06;
-  } else if (roleCount >= 3) {
-    adjustmentMultiplier -= 0.20; // Already deep in this role
-  } else if (roleCount >= 4) {
-    adjustmentMultiplier -= 0.35;
-  }
-
-  // C. Death Bowling & Specialized Needs
-  if (player.attributes.deathBowling && player.attributes.deathBowling >= 88) {
-    const deathBowlersInSquad = teamPlayers.filter(p => p.attributes.deathBowling && p.attributes.deathBowling >= 85).length;
-    if (deathBowlersInSquad === 0) {
-      adjustmentMultiplier += 0.15;
-    }
-  }
-
-  // D. Franchise AI Personality Nuance
+  // 5. Franchise Personality Multiplier
+  let personalityMult = 1.0;
   const p = team.aiPersonality;
   if (p) {
     if (player.overall >= 90) {
-      adjustmentMultiplier += ((p.starPreference - 50) / 50) * 0.12; // +/- 12%
+      personalityMult += ((p.starPreference - 50) / 50) * 0.12;
     }
-    if (player.age <= 23 || (!isCapped && player.potential >= 90)) {
-      adjustmentMultiplier += ((p.youthPreference - 50) / 50) * 0.25; // +/- 25% (allows youth-heavy teams to bid 10+ Cr on gems!)
+    if (player.age <= 23 || (!player.isCapped && player.potential >= 90)) {
+      personalityMult += ((p.youthPreference - 50) / 50) * 0.22;
     }
-    adjustmentMultiplier += ((p.aggression - 50) / 50) * 0.10; // +/- 10%
-    adjustmentMultiplier -= ((p.budgetDiscipline - 50) / 50) * 0.10; // +/- 10%
+    if (player.role.includes('Bowler')) {
+      personalityMult += ((p.bowlingPriority - 50) / 50) * 0.10;
+    }
+    if (player.role.includes('Batter')) {
+      personalityMult += ((p.battingPriority - 50) / 50) * 0.10;
+    }
+    personalityMult += ((p.aggression - 50) / 50) * 0.08;
+    personalityMult -= ((p.budgetDiscipline - 50) / 50) * 0.08;
   }
 
-  // Calculate adjusted team valuation
-  let adjustedValue = baseMarketValue * Math.max(0.4, adjustmentMultiplier);
+  // Combine valuation
+  let contextualValuation = baseMarketValue * needFit.multiplier * appliedScarcity * phaseMult * personalityMult;
 
-  // 3. Realistic Franchise Purse & Budget Allocation (How Real IPL Teams Budget)
-  // A team never spends 40-50% of its entire starting purse on one player because it must build
-  // a balanced 18-25 man squad.
-  const currentSquadSize = team.rosterPlayerIds.length;
-  const minRemainingSlots = Math.max(1, 18 - currentSquadSize);
-  
-  // Reserve at least ₹0.50 Cr per remaining slot to avoid getting stranded
-  const reserveForOtherSlots = Math.max(0, (minRemainingSlots - 1) * 0.50);
-  const availablePurse = Math.max(0, team.purseCr - reserveForOtherSlots);
+  // 6. Purse & Budget Constraints
+  const { reservedPurseCr, availablePurseCr } = calculateReservedPurse(team, 18);
+  if (availablePurseCr <= 0) return 0;
 
-  // Maximum share of available purse a team will allocate to a single player
-  let maxPurseShare = 0.32; // Default ~32% of available purse
-  if (minRemainingSlots <= 2) {
-    maxPurseShare = 0.85; // Nearly full squad, can splurge remaining funds
-  } else if (minRemainingSlots <= 5) {
-    maxPurseShare = 0.50;
-  } else if (minRemainingSlots <= 8) {
-    maxPurseShare = 0.40;
+  // Dynamic max share of available purse
+  const slotsRemaining = Math.max(1, 18 - team.rosterPlayerIds.length);
+  let maxPurseShare = 0.32;
+  if (slotsRemaining <= 2) {
+    maxPurseShare = 0.88;
+  } else if (slotsRemaining <= 5) {
+    maxPurseShare = 0.55;
+  } else if (slotsRemaining <= 8) {
+    maxPurseShare = 0.42;
   } else {
     maxPurseShare = 0.30;
   }
 
-  // For genuine marquee superstars (94+ OVR) or historic bidding wars, allow up to 36% of purse
   if (player.overall >= 94) {
-    maxPurseShare = Math.min(0.85, maxPurseShare + 0.08);
+    maxPurseShare = Math.min(0.88, maxPurseShare + 0.08);
   }
 
-  const teamBudgetCap = availablePurse * maxPurseShare;
-  const finalValuation = Math.min(adjustedValue, teamBudgetCap, team.purseCr - reserveForOtherSlots);
+  const teamBudgetCap = availablePurseCr * maxPurseShare;
+  const finalValuation = Math.min(contextualValuation, teamBudgetCap, availablePurseCr);
 
-  return Number(Math.max(player.basePriceCr, finalValuation).toFixed(2));
+  return Number(Math.max(player.basePriceCr, Math.min(team.purseCr, finalValuation)).toFixed(2));
 }
 
-export function generateAIAssistantAdvice(
+// -------------------------------------------------------------
+// 7. COMPREHENSIVE AI DECISION ENGINE
+// -------------------------------------------------------------
+
+export function evaluateAIDecisionForTeam(
   player: Player,
-  userTeam: Team,
-  userSquad: Player[],
-  currentBidCr: number
-): AIAssistantAdvice {
-  const estimatedVal = evaluatePlayerValueForTeam(player, userTeam, userSquad);
-  const premium = currentBidCr > estimatedVal ? Math.round(((currentBidCr - estimatedVal) / estimatedVal) * 100) : 0;
-  
-  const roleCount = userSquad.filter(p => p.role === player.role).length;
-  let needAnalysis = `You have ${roleCount} ${player.role}(s) in your squad.`;
-  if (roleCount === 0) {
-    needAnalysis += ` CRITICAL NEED: You have no players in this role!`;
-  } else if (roleCount >= 3) {
-    needAnalysis += ` Moderate priority: You already have healthy depth here.`;
+  team: Team,
+  teamPlayers: Player[],
+  auctionState: AuctionState,
+  allTeams: Record<string, Team>,
+  allPlayers: Record<string, Player>
+): AIDecisionContext {
+  const currentBid = auctionState.currentBidCr;
+  const nextBidAmount = Number((currentBid + getBidIncrement(currentBid)).toFixed(2));
+  const currentLeaderId = auctionState.currentLeadingTeamId;
+  const isAlreadyLeader = currentLeaderId === team.id;
+  const p = team.aiPersonality;
+
+  // Default negative context helper
+  const makeDecision = (
+    decision: AIDecisionType, 
+    reasoning: string, 
+    ceiling: number = 0, 
+    willingness: number = 0, 
+    isPressure: boolean = false
+  ): AIDecisionContext => ({
+    teamId: team.id,
+    teamShortName: team.shortName,
+    playerId: player.id,
+    playerName: player.name,
+    decision,
+    reasoning,
+    baseValuationCr: calculateBaseMarketValue(player),
+    squadNeedMultiplier: 1.0,
+    scarcityMultiplier: 1.0,
+    personalityMultiplier: 1.0,
+    budgetMultiplier: 1.0,
+    phaseMultiplier: 1.0,
+    rivalPressureAdjustmentCr: 0,
+    momentumBonusCr: 0,
+    effectiveCeilingCr: ceiling,
+    currentBidCr: currentBid,
+    nextBidAmountCr: nextBidAmount,
+    willingnessScore: willingness,
+    confidencePercent: Math.min(100, Math.max(10, Math.round(willingness * 10))),
+    isBluffOrPressure: isPressure
+  });
+
+  // Hard Rule Checks
+  if (isAlreadyLeader) {
+    return makeDecision('WAIT', 'Currently holding the highest bid');
+  }
+  if (team.rosterPlayerIds.length >= 25) {
+    return makeDecision('DROP_OUT', 'Maximum squad size limit reached (25 players)');
+  }
+  if (team.purseCr < nextBidAmount) {
+    return makeDecision('DROP_OUT', 'Insufficient franchise purse');
+  }
+  const overseasCount = teamPlayers.filter(pl => pl.isOverseas).length;
+  if (player.isOverseas && overseasCount >= 8) {
+    return makeDecision('DROP_OUT', 'Overseas quota full (8/8)');
   }
 
-  let verdict = 'Fair Value';
-  if (currentBidCr > estimatedVal * 1.25) {
-    verdict = 'Overpriced / Risky';
-  } else if (currentBidCr < estimatedVal * 0.80) {
-    verdict = 'High Value Steal Target';
+  // Calculate Reserved Purse & Remaining Slots
+  const { reservedPurseCr, availablePurseCr } = calculateReservedPurse(team, 18);
+  if (availablePurseCr < nextBidAmount) {
+    return makeDecision('SAVE_BUDGET', 'Preserving purse for remaining squad slots');
   }
 
-  return {
-    verdict,
-    recommendedMaxBidCr: estimatedVal,
-    squadNeedAnalysis: needAnalysis,
-    rivalInterestAssessment: `Heavy interest expected from teams needing ${player.role}.`,
-    valuePremiumPercent: premium,
-    isHighValueTarget: estimatedVal > 7.0 && currentBidCr <= estimatedVal
+  // Contextual Evaluation
+  const pool = auctionState.allPlayerPool || [];
+  const phase = getAuctionPhase(auctionState.currentPlayerIndex, pool.length, player.auctionSetCode);
+  const remainingPool = pool.slice(auctionState.currentPlayerIndex + 1);
+  const squadNeeds = calculateTeamSquadNeeds(team, teamPlayers);
+  const needFit = calculatePlayerNeedFit(player, squadNeeds);
+  const scarcity = calculatePlayerScarcity(player, remainingPool, allTeams, allPlayers);
+  const baseValuation = calculateBaseMarketValue(player);
+
+  const baseCeiling = evaluatePlayerValueForTeam(
+    player,
+    team,
+    teamPlayers,
+    8,
+    phase,
+    remainingPool
+  );
+
+  // Bidding Momentum & War Persistence
+  const bidsByTeamInLot = auctionState.bidHistory.filter(b => b.teamId === team.id).length;
+  const totalBidsInLot = auctionState.bidHistory.length;
+  const isBiddingWar = totalBidsInLot >= 4;
+
+  let momentumStretch = 1.0;
+  if (isBiddingWar && (p?.biddingPersistence ?? 70) > 70) {
+    // High persistence teams stretch up to +6% in a war for priority targets
+    if (needFit.primaryUrgency === 'CRITICAL' || needFit.primaryUrgency === 'HIGH') {
+      momentumStretch = 1.0 + ((p?.biddingPersistence ?? 70) - 70) * 0.002;
+    }
+  }
+
+  // Aggression stretch
+  const aggressionFactor = ((p?.aggression ?? 50) - 50) / 100;
+  const aggressionStretch = 1.0 + Math.max(-0.05, Math.min(0.10, aggressionFactor * 0.08));
+
+  // Effective ceiling for this team in this auction state
+  let effectiveCeiling = Number((baseCeiling * momentumStretch * aggressionStretch).toFixed(2));
+  effectiveCeiling = Math.min(effectiveCeiling, availablePurseCr, team.purseCr);
+
+  // Controlled Randomness / Realistic Variance (±3%)
+  const randomVariance = (Math.random() - 0.5) * 0.06;
+  const randomizedCeiling = Number((effectiveCeiling * (1 + randomVariance)).toFixed(2));
+
+  // Check if current bid exceeds team's willingness
+  if (nextBidAmount > randomizedCeiling) {
+    // Check Strategic Pressure / Bluff condition
+    const isLeadingRivalDesperate = currentLeaderId && allTeams[currentLeaderId] && (() => {
+      const leaderTeam = allTeams[currentLeaderId];
+      const leaderSquad = (leaderTeam.rosterPlayerIds || []).map(id => allPlayers[id]).filter(Boolean);
+      const leaderNeeds = calculateTeamSquadNeeds(leaderTeam, leaderSquad);
+      const leaderFit = calculatePlayerNeedFit(player, leaderNeeds);
+      return leaderFit.primaryUrgency === 'CRITICAL' || leaderFit.primaryUrgency === 'HIGH';
+    })();
+
+    const canAffordPressure = availablePurseCr >= nextBidAmount * 1.5;
+    const isPriceFarBelowMarket = nextBidAmount <= baseValuation * 0.88;
+    const hasAggressivePersona = (p?.aggression ?? 50) >= 75 || (p?.riskTolerance ?? 50) >= 75;
+
+    if (isLeadingRivalDesperate && canAffordPressure && isPriceFarBelowMarket && hasAggressivePersona && Math.random() < 0.22) {
+      return makeDecision(
+        'PRESSURE_BID',
+        `Strategic pressure bid against rival (${allTeams[currentLeaderId!]?.shortName}) for high-value asset`,
+        nextBidAmount,
+        5.5,
+        true
+      );
+    }
+
+    return makeDecision(
+      'DROP_OUT',
+      `Bid ₹${nextBidAmount} Cr exceeds maximum calculated valuation of ₹${effectiveCeiling} Cr`,
+      effectiveCeiling,
+      0
+    );
+  }
+
+  // Next bid is within ceiling -> Determine Bid Decision Type & Willingness
+  const margin = randomizedCeiling - nextBidAmount;
+  const isHighPriority = needFit.primaryUrgency === 'CRITICAL' || needFit.primaryUrgency === 'HIGH';
+  const isStealValue = nextBidAmount <= baseValuation * 0.75;
+  const isStarPlayer = player.overall >= 92 || player.auctionSetCode === 'M1' || player.auctionSetCode === 'M2';
+
+  let decisionType: AIDecisionType = 'BID';
+  let willingness = 5.0 + margin;
+
+  if (isStarPlayer && isHighPriority) {
+    decisionType = 'AGGRESSIVE_BID';
+    willingness += 4.0;
+  } else if (isStealValue) {
+    decisionType = 'VALUE_BID';
+    willingness += 3.5;
+  } else if (isBiddingWar) {
+    decisionType = 'AGGRESSIVE_BID';
+    willingness += 2.0;
+  } else if (margin <= 0.50) {
+    decisionType = 'BID';
+  }
+
+  const decisionContext: AIDecisionContext = {
+    teamId: team.id,
+    teamShortName: team.shortName,
+    playerId: player.id,
+    playerName: player.name,
+    decision: decisionType,
+    reasoning: needFit.reasoning,
+    baseValuationCr: baseValuation,
+    squadNeedMultiplier: needFit.multiplier,
+    scarcityMultiplier: scarcity.scarcityMultiplier,
+    personalityMultiplier: 1.0,
+    budgetMultiplier: 1.0,
+    phaseMultiplier: 1.0,
+    rivalPressureAdjustmentCr: 0,
+    momentumBonusCr: Number((baseCeiling * (momentumStretch - 1)).toFixed(2)),
+    effectiveCeilingCr: effectiveCeiling,
+    currentBidCr: currentBid,
+    nextBidAmountCr: nextBidAmount,
+    willingnessScore: Number(willingness.toFixed(2)),
+    confidencePercent: Math.min(100, Math.max(15, Math.round((margin / (baseValuation || 1)) * 100 + 40))),
+    isBluffOrPressure: false
   };
+
+  return decisionContext;
 }
+
+// -------------------------------------------------------------
+// 8. GET NEXT AI BID (FOR LIVE AUCTION TICKER)
+// -------------------------------------------------------------
 
 export function getNextAIBid(
   auctionState: AuctionState,
   teams: Record<string, Team>,
   allPlayers: Record<string, Player>,
   userTeamId: string
-): { teamId: string; bidAmountCr: number } | null {
+): { teamId: string; bidAmountCr: number; decisionContext?: AIDecisionContext } | null {
   if (!auctionState.activePlayer) return null;
   const player = auctionState.activePlayer;
-  const currentBid = auctionState.currentBidCr;
   const currentLeader = auctionState.currentLeadingTeamId;
-  const nextBidAmount = Number((currentBid + getBidIncrement(currentBid)).toFixed(2));
 
-  // Find all candidate AI teams willing to bid at or above nextBidAmount
-  const interestedAIs: Array<{ teamId: string; maxVal: number; willingness: number }> = [];
+  const candidateDecisions: AIDecisionContext[] = [];
 
   Object.values(teams).forEach(team => {
     if (team.id === userTeamId) return; // User handles own bids
     if (team.id === currentLeader) return; // Already leading
 
-    // Check squad size limit (max 25)
-    if (team.rosterPlayerIds.length >= 25) return;
+    const teamPlayers = (team.rosterPlayerIds || []).map(id => allPlayers[id]).filter(Boolean);
+    const decisionCtx = evaluateAIDecisionForTeam(
+      player,
+      team,
+      teamPlayers,
+      auctionState,
+      teams,
+      allPlayers
+    );
 
-    // Check budget
-    if (team.purseCr < nextBidAmount) return;
-
-    // Overseas quota check
-    const teamPlayers = team.rosterPlayerIds.map(id => allPlayers[id]).filter(Boolean);
-    if (player.isOverseas) {
-      const osCount = teamPlayers.filter(p => p.isOverseas).length;
-      if (osCount >= 8) return;
-    }
-
-    const maxVal = evaluatePlayerValueForTeam(player, team, teamPlayers);
-
-    // AI bidding psychology: In heated paddle wars, aggressive franchises can stretch
-    // by 5-10% of their valuation before finally pulling out
-    const aggressionBonus = (team.aiPersonality?.aggression || 50) > 75 ? 1.08 : 1.02;
-    const effectiveCeiling = Number((maxVal * aggressionBonus).toFixed(2));
-
-    if (effectiveCeiling >= nextBidAmount) {
-      // Willingness score based on valuation margin and aggression
-      const margin = effectiveCeiling - nextBidAmount;
-      const aggression = (team.aiPersonality?.aggression || 50) / 100;
-      const willingness = (margin + 1.0) * (0.5 + aggression * 0.5);
-      interestedAIs.push({ teamId: team.id, maxVal: effectiveCeiling, willingness });
+    if (
+      decisionCtx.decision === 'BID' || 
+      decisionCtx.decision === 'AGGRESSIVE_BID' || 
+      decisionCtx.decision === 'VALUE_BID' || 
+      decisionCtx.decision === 'PRESSURE_BID'
+    ) {
+      candidateDecisions.push(decisionCtx);
     }
   });
 
-  if (interestedAIs.length === 0) return null;
+  if (candidateDecisions.length === 0) return null;
 
-  // Sort by willingness and pick the highest
-  interestedAIs.sort((a, b) => b.willingness - a.willingness);
-  const chosen = interestedAIs[0];
+  // Sort by willingness and highest margin
+  candidateDecisions.sort((a, b) => b.willingnessScore - a.willingnessScore);
+  const chosen = candidateDecisions[0];
 
   return {
     teamId: chosen.teamId,
-    bidAmountCr: nextBidAmount
+    bidAmountCr: chosen.nextBidAmountCr,
+    decisionContext: chosen
   };
 }
 
-/**
- * Simulates a realistic competitive auction outcome between all interested teams
- * based on second-price auction mechanics with bidding war momentum.
- */
+// -------------------------------------------------------------
+// 9. SIMULATE COMPETITIVE AUCTION BATTLE (FOR RESOLVING A LOT)
+// -------------------------------------------------------------
+
 export function simulateAuctionBattle(
   player: Player,
   teams: Record<string, Team>,
   allPlayers: Record<string, Player>,
   userTeamId?: string,
   userMaxBidCr?: number
-): { winningTeamId: string; finalPriceCr: number } | null {
-  const interestedTeams: Array<{ teamId: string; ceiling: number }> = [];
+): { winningTeamId: string; finalPriceCr: number; bidHistory?: AuctionBid[] } | null {
+  // Collect all interested teams and compute their contextual ceilings
+  interface TeamCompetitor {
+    teamId: string;
+    teamShortName: string;
+    ceiling: number;
+    persistence: number;
+    aggression: number;
+    bidsPlaced: number;
+  }
+
+  const competitors: TeamCompetitor[] = [];
 
   Object.values(teams).forEach(team => {
     if (team.rosterPlayerIds.length >= 25) return;
-    const teamPlayers = team.rosterPlayerIds.map(id => allPlayers[id]).filter(Boolean);
-    
+    const teamPlayers = (team.rosterPlayerIds || []).map(id => allPlayers[id]).filter(Boolean);
+
     if (player.isOverseas) {
       const osCount = teamPlayers.filter(p => p.isOverseas).length;
       if (osCount >= 8) return;
@@ -536,45 +1027,152 @@ export function simulateAuctionBattle(
     if (userTeamId && team.id === userTeamId) {
       ceiling = userMaxBidCr ?? 0;
     } else {
-      const maxVal = evaluatePlayerValueForTeam(player, team, teamPlayers);
-      const aggressionBonus = (team.aiPersonality?.aggression || 50) > 75 ? 1.08 : 1.02;
-      ceiling = Number((maxVal * aggressionBonus).toFixed(2));
+      const val = evaluatePlayerValueForTeam(player, team, teamPlayers, 8, 'MIDDLE');
+      const p = team.aiPersonality;
+      const persistenceBonus = (p?.biddingPersistence ?? 70) > 75 ? 1.05 : 1.01;
+      const randomVar = (Math.random() - 0.5) * 0.05;
+      ceiling = Number((val * persistenceBonus * (1 + randomVar)).toFixed(2));
     }
 
-    if (ceiling >= player.basePriceCr && team.purseCr >= player.basePriceCr) {
-      const affordableCeiling = Math.min(ceiling, team.purseCr);
-      if (affordableCeiling >= player.basePriceCr) {
-        interestedTeams.push({ teamId: team.id, ceiling: affordableCeiling });
-      }
+    const { availablePurseCr } = calculateReservedPurse(team, 18);
+    const affordableCeiling = Math.min(ceiling, availablePurseCr, team.purseCr);
+
+    if (affordableCeiling >= player.basePriceCr) {
+      competitors.push({
+        teamId: team.id,
+        teamShortName: team.shortName,
+        ceiling: affordableCeiling,
+        persistence: team.aiPersonality?.biddingPersistence ?? 70,
+        aggression: team.aiPersonality?.aggression ?? 50,
+        bidsPlaced: 0
+      });
     }
   });
 
-  if (interestedTeams.length === 0) return null;
+  if (competitors.length === 0) return null;
 
-  // Sort by ceiling descending
-  interestedTeams.sort((a, b) => b.ceiling - a.ceiling);
-
-  if (interestedTeams.length === 1) {
-    // Only 1 team interested: sold at opening base price
+  // Single team interested -> Sold at base price
+  if (competitors.length === 1) {
     return {
-      winningTeamId: interestedTeams[0].teamId,
+      winningTeamId: competitors[0].teamId,
       finalPriceCr: player.basePriceCr
     };
   }
 
-  // 2 or more teams competed in a bidding war:
-  // Winner is top team (T1), price is determined by where 2nd team (T2) dropped out + 1 bid increment
-  const winner = interestedTeams[0];
-  const runnerUp = interestedTeams[1];
-  const increment = getBidIncrement(runnerUp.ceiling);
-  const battlePrice = Number(Math.min(winner.ceiling, runnerUp.ceiling + increment).toFixed(2));
-  const finalPriceCr = Math.max(player.basePriceCr, battlePrice);
+  // Multi-team bidding battle simulation
+  let currentPrice = player.basePriceCr;
+  let activeLeaderId = competitors[0].teamId;
+  let activeCompetitors = [...competitors];
+  const simulatedHistory: AuctionBid[] = [];
+
+  // Opening bid
+  simulatedHistory.push({
+    teamId: activeLeaderId,
+    teamShortName: competitors[0].teamShortName,
+    bidAmountCr: currentPrice,
+    timestamp: Date.now()
+  });
+
+  let safetyCounter = 0;
+  while (activeCompetitors.length > 1 && safetyCounter < 60) {
+    safetyCounter++;
+    const nextInc = getBidIncrement(currentPrice);
+    const nextPrice = Number((currentPrice + nextInc).toFixed(2));
+
+    // Filter competitors who are still willing and able to pay nextPrice
+    activeCompetitors = activeCompetitors.filter(c => {
+      if (c.teamId === activeLeaderId) return true;
+      return c.ceiling >= nextPrice;
+    });
+
+    if (activeCompetitors.length <= 1) {
+      break;
+    }
+
+    // Pick next challenger (other than activeLeader) with highest willingness
+    const challengers = activeCompetitors.filter(c => c.teamId !== activeLeaderId);
+    challengers.sort((a, b) => (b.ceiling - nextPrice) - (a.ceiling - nextPrice));
+
+    const nextBidder = challengers[0];
+    if (!nextBidder) break;
+
+    currentPrice = nextPrice;
+    activeLeaderId = nextBidder.teamId;
+    nextBidder.bidsPlaced++;
+
+    simulatedHistory.unshift({
+      teamId: nextBidder.teamId,
+      teamShortName: nextBidder.teamShortName,
+      bidAmountCr: currentPrice,
+      timestamp: Date.now()
+    });
+  }
 
   return {
-    winningTeamId: winner.teamId,
-    finalPriceCr
+    winningTeamId: activeLeaderId,
+    finalPriceCr: currentPrice,
+    bidHistory: simulatedHistory
   };
 }
+
+// -------------------------------------------------------------
+// 10. AI ASSISTANT ADVICE GENERATOR
+// -------------------------------------------------------------
+
+export function generateAIAssistantAdvice(
+  player: Player,
+  userTeam: Team,
+  userSquad: Player[],
+  currentBidCr: number
+): AIAssistantAdvice {
+  const estimatedVal = evaluatePlayerValueForTeam(player, userTeam, userSquad);
+  const premium = currentBidCr > estimatedVal ? Math.round(((currentBidCr - estimatedVal) / (estimatedVal || 1)) * 100) : 0;
+  
+  const squadNeeds = calculateTeamSquadNeeds(userTeam, userSquad);
+  const needFit = calculatePlayerNeedFit(player, squadNeeds);
+  const scarcity = calculatePlayerScarcity(player, []);
+
+  let verdict = 'Fair Market Value';
+  if (currentBidCr > estimatedVal * 1.25) {
+    verdict = 'Overpriced / Risky';
+  } else if (currentBidCr < estimatedVal * 0.80) {
+    verdict = 'High Value Steal Target';
+  } else if (scarcity.isFinalEliteOption) {
+    verdict = 'Elite Scarcity Target';
+  }
+
+  let needAnalysis = needFit.reasoning;
+  if (needFit.primaryUrgency === 'CRITICAL') {
+    needAnalysis = `CRITICAL NEED: ${needFit.reasoning}. Recommended to secure without hesitation.`;
+  } else if (needFit.primaryUrgency === 'HIGH') {
+    needAnalysis = `HIGH PRIORITY: ${needFit.reasoning}.`;
+  } else if (needFit.primaryUrgency === 'NONE') {
+    needAnalysis = `LOW PRIORITY: Squad already deep in this category. Preserve purse for scarce positions.`;
+  }
+
+  let rivalInterest = `Moderate franchise demand expected for ${player.role}.`;
+  if (scarcity.isFinalEliteOption) {
+    rivalInterest = `INTENSE BIDDING WAR EXPECTED: Only ${scarcity.eliteRemainingCount} elite option(s) remaining for ${scarcity.teamsNeedingRoleCount} needy teams!`;
+  } else if (player.overall >= 92) {
+    rivalInterest = `Heavy paddle wars guaranteed from top franchises (MI, RCB, SRH).`;
+  }
+
+  return {
+    verdict,
+    recommendedMaxBidCr: estimatedVal,
+    squadNeedAnalysis: needAnalysis,
+    rivalInterestAssessment: rivalInterest,
+    valuePremiumPercent: premium,
+    isHighValueTarget: estimatedVal >= 6.5 && currentBidCr <= estimatedVal,
+    scarcityAnalysis: scarcity,
+    squadNeeds,
+    alternativeTargetsRemaining: scarcity.comparableRemainingCount
+  };
+}
+
+// -------------------------------------------------------------
+// 11. INITIALIZE AUCTION STATE
+// -------------------------------------------------------------
 
 export function initAuctionState(playerPool: Player[]): AuctionState {
   const sortedPool = sortAuctionPlayerPool(playerPool);
@@ -595,13 +1193,15 @@ export function initAuctionState(playerPool: Player[]): AuctionState {
     isPaused: false,
     isCompleted: false,
     isAcceleratedMode: false,
-    autoBidUser: false
+    autoBidUser: false,
+    isAutoBidEnabled: false
   };
 }
 
-/**
- * Simulates all remaining players (or entire pool from index 0) through competitive AI bidding
- */
+// -------------------------------------------------------------
+// 12. FULL AUCTION SIMULATION (FAST & ROBUST)
+// -------------------------------------------------------------
+
 export function simulateFullAuctionPool(
   auctionState: AuctionState,
   teams: Record<string, Team>,
@@ -628,20 +1228,18 @@ export function simulateFullAuctionPool(
     auc.soldPlayerRecords = [];
     auc.unsoldPlayerIds = [];
     auc.passedPlayerIds = [];
-    // Reset auction allocations for players in pool
     auc.allPlayerPool.forEach(p => {
       if (playersCopy[p.id]) {
         playersCopy[p.id].currentTeamId = null;
         playersCopy[p.id].salaryCr = 0;
       }
     });
-    // Reset team rosters to only pre-auction retained players
+
     Object.values(teamsCopy).forEach(t => {
       t.rosterPlayerIds = t.rosterPlayerIds.filter(id => {
         const pl = playersCopy[id];
         return pl && !auc.allPlayerPool.some(ap => ap.id === id);
       });
-      // Restore initial base purse ₹120.0 Cr minus pre-retained salary
       let spent = 0;
       t.rosterPlayerIds.forEach(id => {
         spent += playersCopy[id]?.salaryCr || 0;
@@ -654,7 +1252,6 @@ export function simulateFullAuctionPool(
     const player = auc.allPlayerPool[i];
     if (!player) continue;
 
-    // Check if user should aggressively bid
     let userMaxBid: number | undefined = undefined;
     const userTeam = teamsCopy[userTeamId];
     if (userTeam) {
@@ -663,7 +1260,7 @@ export function simulateFullAuctionPool(
       
       if (options?.userAutoBid || isTarget) {
         const baseVal = evaluatePlayerValueForTeam(player, userTeam, userSquad);
-        const multiplier = isTarget ? 1.35 : 1.05;
+        const multiplier = isTarget ? 1.30 : 1.02;
         userMaxBid = Number((baseVal * multiplier).toFixed(2));
       }
     }
@@ -693,7 +1290,8 @@ export function simulateFullAuctionPool(
         auc.soldPlayerRecords.push({
           player,
           sellingPriceCr: battle.finalPriceCr,
-          buyingTeamId: winningTeam.id
+          buyingTeamId: winningTeam.id,
+          biddingHistory: battle.bidHistory
         });
       }
     } else {
@@ -701,7 +1299,7 @@ export function simulateFullAuctionPool(
     }
   }
 
-  // ACCELERATED DEPTH DRAFT ROUND: Ensure every team satisfies IPL roster depth (21 - 25 players)
+  // ACCELERATED DEPTH ROUND: Ensure every team satisfies minimum roster quota (18 - 25 players)
   const remainingUnsold = [...auc.unsoldPlayerIds];
   const updatedUnsold: string[] = [];
 
@@ -709,9 +1307,8 @@ export function simulateFullAuctionPool(
     const player = playersCopy[unsoldId];
     if (!player) continue;
 
-    // Find teams that still need depth (squad size < 22 and have purse >= basePrice)
     const needyTeams = Object.values(teamsCopy)
-      .filter(t => t.rosterPlayerIds.length < 22 && t.purseCr >= player.basePriceCr)
+      .filter(t => t.rosterPlayerIds.length < 21 && t.purseCr >= player.basePriceCr)
       .sort((a, b) => a.rosterPlayerIds.length - b.rosterPlayerIds.length);
 
     if (needyTeams.length > 0) {
@@ -756,7 +1353,7 @@ export function simulateFullAuctionPool(
     const top11 = sorted.slice(0, 11).map(p => p.id);
     const pacers = sorted.filter(p => p.bowlingStyle.includes('fast') || p.bowlingStyle.includes('medium')).map(p => p.id);
     const spinners = sorted.filter(p => p.bowlingStyle.includes('spin') || p.bowlingStyle.includes('break') || p.bowlingStyle.includes('orthodox')).map(p => p.id);
-    const death = sorted.filter(p => p.attributes.deathBowling > 75).map(p => p.id);
+    const death = sorted.filter(p => p.attributes?.deathBowling && p.attributes.deathBowling > 75).map(p => p.id);
     const wk = sorted.find(p => p.role.includes('Wicketkeeper'))?.id || sorted[0]?.id || '';
 
     t.playingXI = {
@@ -779,9 +1376,10 @@ export function simulateFullAuctionPool(
   };
 }
 
-/**
- * Simulates just the current auction set
- */
+// -------------------------------------------------------------
+// 13. SIMULATE CURRENT SET IN AUCTION
+// -------------------------------------------------------------
+
 export function simulateCurrentSetInAuction(
   auctionState: AuctionState,
   teams: Record<string, Team>,
@@ -833,7 +1431,8 @@ export function simulateCurrentSetInAuction(
         auc.soldPlayerRecords.push({
           player,
           sellingPriceCr: battle.finalPriceCr,
-          buyingTeamId: winningTeam.id
+          buyingTeamId: winningTeam.id,
+          biddingHistory: battle.bidHistory
         });
       }
     } else {
@@ -863,3 +1462,22 @@ export function simulateCurrentSetInAuction(
   };
 }
 
+// -------------------------------------------------------------
+// 14. TELEMETRY & DEBUG HELPER
+// -------------------------------------------------------------
+
+export function getAIDecisionTelemetry(decisionCtx: AIDecisionContext): string {
+  return `
+[AI DECISION TELEMETRY]
+Franchise: ${decisionCtx.teamShortName} (${decisionCtx.teamId})
+Target Player: ${decisionCtx.playerName} (ID: ${decisionCtx.playerId})
+Base Market Valuation: ₹${decisionCtx.baseValuationCr.toFixed(2)} Cr
+Squad Need Multiplier: ${decisionCtx.squadNeedMultiplier}x
+Scarcity Multiplier: ${decisionCtx.scarcityMultiplier}x
+Effective Ceiling: ₹${decisionCtx.effectiveCeilingCr.toFixed(2)} Cr
+Current Lot Bid: ₹${decisionCtx.currentBidCr.toFixed(2)} Cr -> Next Required Bid: ₹${decisionCtx.nextBidAmountCr.toFixed(2)} Cr
+Decision: ${decisionCtx.decision} (Willingness: ${decisionCtx.willingnessScore.toFixed(1)}, Confidence: ${decisionCtx.confidencePercent}%)
+Reasoning: ${decisionCtx.reasoning}
+${decisionCtx.isBluffOrPressure ? '>> STRATEGIC PRESSURE BLUFF ACTIVE <<' : ''}
+`.trim();
+}

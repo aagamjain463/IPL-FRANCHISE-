@@ -383,18 +383,23 @@ export const PlayCenterView: React.FC = () => {
             </div>
           </div>
 
-          <div className="p-4 bg-[#05070a] rounded-xl border border-[#1e293b] flex items-center justify-between">
+          <div className="p-4 bg-[#05070a] rounded-xl border border-[#1e293b] flex items-center justify-between flex-wrap gap-2">
             <span className="text-xs text-[#94a3b8] font-bold uppercase">Format Length:</span>
-            <div className="flex gap-2">
-              {[5, 10, 20].map(ov => (
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { ov: 1, label: 'Super Over (1 Ov)' },
+                { ov: 5, label: '5 Overs Blitz' },
+                { ov: 10, label: '10 Overs Clash' },
+                { ov: 20, label: 'Full T20 (20 Ov)' }
+              ].map(item => (
                 <button
-                  key={ov}
-                  onClick={() => setQuickOvers(ov)}
-                  className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition ${
-                    quickOvers === ov ? 'bg-[#D4AF37] text-black' : 'bg-[#1e293b] text-white hover:bg-[#334155]'
+                  key={item.ov}
+                  onClick={() => setQuickOvers(item.ov)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
+                    quickOvers === item.ov ? 'bg-[#D4AF37] text-black shadow-md' : 'bg-[#1e293b] text-white hover:bg-[#334155]'
                   }`}
                 >
-                  {ov} Overs
+                  {item.label}
                 </button>
               ))}
             </div>

@@ -31,6 +31,10 @@ export interface Team {
     analyticsPreference: number; // 0 - 100
     riskTolerance: number; // 0 - 100
     loyaltyToCurrentSquad: number; // 0 - 100
+    biddingPersistence?: number; // 0 - 100
+    scarcitySensitivity?: number; // 0 - 100
+    rivalryTendency?: number; // 0 - 100
+    patience?: number; // 0 - 100
   };
 
   // Franchise Metrics

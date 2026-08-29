@@ -292,9 +292,128 @@ export function simulateNextBall(
   // Tactical influence
   let aggressionMult = 1.0;
   let boundaryBoost = 1.0;
+  let sixBoost = 1.0;
   let singleBoost = 1.0;
   let dotBallWeight = 1.0;
   let wicketRiskMult = 1.0;
+
+  // --- PLAYSTYLES & TRAITS CALCULATION (CRICKET SIMULATION CORE) ---
+  const bStyle = striker?.battingPlaystyle;
+  const bowlStyle = bowler?.bowlingPlaystyle;
+  const bTraits = striker?.traits || [];
+  const bowlTraits = bowler?.traits || [];
+
+  // Striker PlayStyles
+  if (bStyle === 'Power Hitter') {
+    boundaryBoost *= 1.22;
+    sixBoost *= 1.35;
+    dotBallWeight *= 0.92;
+  } else if (bStyle === 'Chase Master') {
+    if (isChasing) {
+      singleBoost *= 1.25;
+      wicketRiskMult *= 0.7; // Ice-cold composure during chases
+      if (reqRunRate > 9.5) boundaryBoost *= 1.2;
+    }
+  } else if (bStyle === 'Anchor') {
+    wicketRiskMult *= 0.6;
+    singleBoost *= 1.3;
+    boundaryBoost *= 0.85;
+    dotBallWeight *= 0.8;
+  } else if (bStyle === 'Death Specialist') {
+    if (isDeath) {
+      boundaryBoost *= 1.35;
+      sixBoost *= 1.45;
+      singleBoost *= 1.15;
+    }
+  } else if (bStyle === 'Spin Destroyer') {
+    if (isSpinner) {
+      boundaryBoost *= 1.4;
+      sixBoost *= 1.45;
+      wicketRiskMult *= 0.7;
+    }
+  } else if (bStyle === 'Pace Dominator') {
+    if (!isSpinner) {
+      boundaryBoost *= 1.3;
+      sixBoost *= 1.3;
+      wicketRiskMult *= 0.75;
+    }
+  } else if (bStyle === '360 Batter') {
+    boundaryBoost *= 1.25;
+    dotBallWeight *= 0.85;
+  } else if (bStyle === 'Big Match Player') {
+    if (match.matchType === 'Qualifier 1' || match.matchType === 'Qualifier 2' || match.matchType === 'Eliminator' || match.matchType === 'Final') {
+      boundaryBoost *= 1.25;
+      wicketRiskMult *= 0.8;
+    }
+  }
+
+  // Striker Traits
+  if (bTraits.includes('Clutch Finisher') && isChasing && runsNeeded <= 36 && ballsRemaining <= 24) {
+    boundaryBoost *= 1.3;
+    sixBoost *= 1.4;
+    wicketRiskMult *= 0.75;
+  }
+  if (bTraits.includes('Pressure Absorber') && currentInnings.wickets >= 3 && overNum < 10) {
+    wicketRiskMult *= 0.65;
+    singleBoost *= 1.2;
+  }
+  if (bTraits.includes('Wankhede Six Hitter') && (match.venue.toLowerCase().includes('wankhede') || match.venue.toLowerCase().includes('chinnaswamy'))) {
+    sixBoost *= 1.35;
+  }
+  if (bTraits.includes('Chepauk Spin Master') && match.venue.toLowerCase().includes('chepauk')) {
+    if (isSpinner) boundaryBoost *= 1.3;
+  }
+
+  // Bowler PlayStyles
+  let planWicketBonus = 1.0;
+  let planEconomyBonus = 1.0;
+  let yorkerDotBonus = 1.0;
+
+  if (bowlStyle === 'Yorker Specialist') {
+    if (isDeath) {
+      planEconomyBonus *= 1.32;
+      planWicketBonus *= 1.35;
+      yorkerDotBonus *= 1.4;
+    }
+  } else if (bowlStyle === 'Express Pace') {
+    dotBallWeight *= 1.25;
+    if (isPowerplay) planWicketBonus *= 1.3;
+  } else if (bowlStyle === 'Swing Master') {
+    if (isPowerplay || match.weather === 'Overcast & Breezy') {
+      planWicketBonus *= 1.4;
+      planEconomyBonus *= 1.2;
+    }
+  } else if (bowlStyle === 'Mystery Spinner') {
+    if (isSpinner) {
+      dotBallWeight *= 1.3;
+      planWicketBonus *= 1.35;
+    }
+  } else if (bowlStyle === 'Powerplay Specialist') {
+    if (isPowerplay) {
+      planEconomyBonus *= 1.35;
+      planWicketBonus *= 1.3;
+    }
+  } else if (bowlStyle === 'Economy Monster') {
+    planEconomyBonus *= 1.35;
+    boundaryBoost *= 0.8;
+    sixBoost *= 0.75;
+    dotBallWeight *= 1.3;
+  } else if (bowlStyle === 'Variation Expert') {
+    if (isDeath || overNum >= 12) {
+      planEconomyBonus *= 1.25;
+      planWicketBonus *= 1.25;
+    }
+  }
+
+  // Bowler Traits
+  if (bowlTraits.includes('Clutch Finisher') && isChasing && runsNeeded <= 20) {
+    planEconomyBonus *= 1.3;
+    planWicketBonus *= 1.3;
+  }
+  if (bowlTraits.includes('Chepauk Spin Master') && match.venue.toLowerCase().includes('chepauk') && isSpinner) {
+    planWicketBonus *= 1.4;
+    planEconomyBonus *= 1.3;
+  }
 
   // Batting approach mapping
   switch (battingTactics.batterApproach) {
@@ -345,16 +464,12 @@ export function simulateNextBall(
   }
 
   // Bowling Plan tactical impact
-  let planWicketBonus = 1.0;
-  let planEconomyBonus = 1.0;
-  let yorkerDotBonus = 1.0;
-
   switch (bowlingTactics.bowlingPlan) {
     case 'Pinpoint Yorkers':
     case 'Yorker Plan':
-      planEconomyBonus = isDeath ? 1.35 : 1.1;
-      planWicketBonus = 1.2;
-      yorkerDotBonus = 1.3;
+      planEconomyBonus *= isDeath ? 1.35 : 1.1;
+      planWicketBonus *= 1.2;
+      yorkerDotBonus *= 1.3;
       break;
     case 'Short-Pitch & Bouncers':
     case 'Short-ball Plan':
@@ -446,10 +561,10 @@ export function simulateNextBall(
   // Base odds
   const diff = (batterSkill * aggressionMult - bowlerSkill * planEconomyBonus) / 100;
   let pWicket = Math.max(0.015, (0.042 - diff * 0.02) * pitchWicketMod * wicketRiskMult * planWicketBonus * catchOpportunityMult);
-  let pSix = Math.max(0.008, (0.045 + diff * 0.05) * pitchBoundaryMod * boundaryBoost * (aggressionMult > 1.1 ? 1.4 : 0.6) * (bowlingTactics.fieldSetting?.includes('Deep') ? 0.7 : 1.0));
+  let pSix = Math.max(0.008, (0.045 + diff * 0.05) * pitchBoundaryMod * boundaryBoost * sixBoost * (aggressionMult > 1.1 ? 1.4 : 0.6) * (bowlingTactics.fieldSetting?.includes('Deep') ? 0.7 : 1.0));
   let pFour = Math.max(0.04, (0.12 + diff * 0.08) * pitchBoundaryMod * boundaryBoost * boundarySavingMult * (isPowerplay ? 1.3 : 1.0));
   let pTwo = 0.07 * (battingTactics.runningRisk === 'Aggressive Twos' ? 1.5 : 1.0);
-  let pSingle = (0.34 + (bAttr.strikeRotation / 220)) * singleBoost;
+  let pSingle = (0.34 + (bAttr.strikeRotation / 220)) * singleBoost * (1 / yorkerDotBonus);
   let pWide = (0.032 * (100 - bowlAttr.accuracy) / 100) * (bowlingTactics.bowlingPlan === 'Wide Outside Off Channel' ? 1.3 : 1.0);
   let pNoBall = 0.007;
 

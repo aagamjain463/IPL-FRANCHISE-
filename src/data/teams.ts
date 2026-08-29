@@ -27,7 +27,11 @@ export const INITIAL_TEAMS: Record<string, Team> = {
       battingPriority: 60,
       analyticsPreference: 65,
       riskTolerance: 40,
-      loyaltyToCurrentSquad: 95
+      loyaltyToCurrentSquad: 95,
+      biddingPersistence: 60,
+      scarcitySensitivity: 75,
+      rivalryTendency: 80,
+      patience: 90
     },
     fanSentiment: 94,
     boardConfidence: 96,
@@ -66,7 +70,11 @@ export const INITIAL_TEAMS: Record<string, Team> = {
       battingPriority: 80,
       analyticsPreference: 85,
       riskTolerance: 80,
-      loyaltyToCurrentSquad: 85
+      loyaltyToCurrentSquad: 85,
+      biddingPersistence: 90,
+      scarcitySensitivity: 85,
+      rivalryTendency: 90,
+      patience: 45
     },
     fanSentiment: 88,
     boardConfidence: 90,
@@ -105,7 +113,11 @@ export const INITIAL_TEAMS: Record<string, Team> = {
       battingPriority: 90,
       analyticsPreference: 75,
       riskTolerance: 85,
-      loyaltyToCurrentSquad: 70
+      loyaltyToCurrentSquad: 70,
+      biddingPersistence: 92,
+      scarcitySensitivity: 80,
+      rivalryTendency: 85,
+      patience: 35
     },
     fanSentiment: 96,
     boardConfidence: 82,
@@ -144,7 +156,11 @@ export const INITIAL_TEAMS: Record<string, Team> = {
       battingPriority: 75,
       analyticsPreference: 90,
       riskTolerance: 85,
-      loyaltyToCurrentSquad: 80
+      loyaltyToCurrentSquad: 80,
+      biddingPersistence: 85,
+      scarcitySensitivity: 90,
+      rivalryTendency: 75,
+      patience: 55
     },
     fanSentiment: 92,
     boardConfidence: 95,
@@ -183,7 +199,11 @@ export const INITIAL_TEAMS: Record<string, Team> = {
       battingPriority: 95,
       analyticsPreference: 80,
       riskTolerance: 95,
-      loyaltyToCurrentSquad: 75
+      loyaltyToCurrentSquad: 75,
+      biddingPersistence: 88,
+      scarcitySensitivity: 80,
+      rivalryTendency: 70,
+      patience: 40
     },
     fanSentiment: 90,
     boardConfidence: 91,
@@ -222,7 +242,11 @@ export const INITIAL_TEAMS: Record<string, Team> = {
       battingPriority: 70,
       analyticsPreference: 95,
       riskTolerance: 65,
-      loyaltyToCurrentSquad: 80
+      loyaltyToCurrentSquad: 80,
+      biddingPersistence: 55,
+      scarcitySensitivity: 95,
+      rivalryTendency: 60,
+      patience: 85
     },
     fanSentiment: 87,
     boardConfidence: 89,
@@ -261,7 +285,11 @@ export const INITIAL_TEAMS: Record<string, Team> = {
       battingPriority: 75,
       analyticsPreference: 75,
       riskTolerance: 75,
-      loyaltyToCurrentSquad: 70
+      loyaltyToCurrentSquad: 70,
+      biddingPersistence: 75,
+      scarcitySensitivity: 85,
+      rivalryTendency: 70,
+      patience: 60
     },
     fanSentiment: 84,
     boardConfidence: 82,
@@ -300,7 +328,11 @@ export const INITIAL_TEAMS: Record<string, Team> = {
       battingPriority: 65,
       analyticsPreference: 70,
       riskTolerance: 60,
-      loyaltyToCurrentSquad: 85
+      loyaltyToCurrentSquad: 85,
+      biddingPersistence: 65,
+      scarcitySensitivity: 85,
+      rivalryTendency: 65,
+      patience: 80
     },
     fanSentiment: 89,
     boardConfidence: 94,
@@ -339,7 +371,11 @@ export const INITIAL_TEAMS: Record<string, Team> = {
       battingPriority: 70,
       analyticsPreference: 85,
       riskTolerance: 70,
-      loyaltyToCurrentSquad: 75
+      loyaltyToCurrentSquad: 75,
+      biddingPersistence: 70,
+      scarcitySensitivity: 80,
+      rivalryTendency: 75,
+      patience: 65
     },
     fanSentiment: 82,
     boardConfidence: 85,
@@ -378,7 +414,11 @@ export const INITIAL_TEAMS: Record<string, Team> = {
       battingPriority: 80,
       analyticsPreference: 70,
       riskTolerance: 90,
-      loyaltyToCurrentSquad: 50
+      loyaltyToCurrentSquad: 50,
+      biddingPersistence: 95,
+      scarcitySensitivity: 75,
+      rivalryTendency: 85,
+      patience: 30
     },
     fanSentiment: 80,
     boardConfidence: 78,
