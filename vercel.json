@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/ipl-auction-game",
+      "destination": "/"
+    },
+    {
+      "source": "/ipl-auction-simulator",
+      "destination": "/"
+    }
+  ]
+}

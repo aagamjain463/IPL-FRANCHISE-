@@ -1,0 +1,6 @@
+{
+  "name": "FRANCHISE XI",
+  "description": "Build. Bid. Dominate. Comprehensive IPL franchise management simulation with realistic Mega Auction, tactical ball-by-ball match engine, multiplayer custom auctions, and dynamic dynasty mode.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
