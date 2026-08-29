@@ -3,10 +3,8 @@ import { useGame } from '../context/GameContext';
 import { AppTab } from '../types/game';
 import { Team } from '../types/team';
 import { 
-  Trophy, Users, Calendar, BarChart3, RefreshCw, 
-  Award, Zap, Volume2, VolumeX, Flame, Target, 
-  ShieldCheck, ShoppingBag, Shuffle, RotateCcw, X, Check, Shield,
-  Building2, Crown, Gift, Sparkles, MoreHorizontal, ChevronRight
+  Home, Zap, Users, ShoppingBag, Building2, 
+  Volume2, VolumeX, Crown, Gift, Shuffle, X, RotateCcw, Trophy
 } from 'lucide-react';
 import { getFranchiseLevelInfo } from '../engine/progressionEngine';
 import { getRouteForState } from '../utils/router';
@@ -40,54 +38,51 @@ export const Navbar: React.FC = () => {
     label: string; 
     icon: React.ReactNode; 
     badge?: number;
-    sublabel?: string;
   }[] = [
-    { id: 'Dashboard', label: 'HOME', icon: <BarChart3 className="w-4 h-4 md:w-5 md:h-5" />, sublabel: 'Hub' },
-    { id: 'Play', label: 'PLAY', icon: <Zap className="w-4 h-4 md:w-5 md:h-5 fill-current" />, sublabel: 'Matchday' },
-    { id: 'AuctionLive', label: 'AUCTION', icon: <ShoppingBag className="w-4 h-4 md:w-5 md:h-5" />, sublabel: 'Arena' },
-    { id: 'PlayingXI', label: 'SQUAD', icon: <Users className="w-4 h-4 md:w-5 md:h-5" />, sublabel: 'Tactics' },
-    { id: 'Club', label: 'CLUB', icon: <Building2 className="w-4 h-4 md:w-5 md:h-5" />, sublabel: 'Scout & Facilities' }
+    { id: 'Home', label: 'HOME', icon: <Home className="w-4 h-4 md:w-5 md:h-5" /> },
+    { id: 'Play', label: 'PLAY', icon: <Zap className="w-4 h-4 md:w-5 md:h-5 fill-current" /> },
+    { id: 'Squad', label: 'SQUAD', icon: <Users className="w-4 h-4 md:w-5 md:h-5" /> },
+    { id: 'Auction', label: 'AUCTION', icon: <ShoppingBag className="w-4 h-4 md:w-5 md:h-5" /> },
+    { id: 'Club', label: 'CLUB', icon: <Building2 className="w-4 h-4 md:w-5 md:h-5" /> }
   ];
 
   const handleTabClick = (tabId: AppTab) => {
     setActiveTab(tabId);
-    if (tabId === 'AuctionLive') {
-      setCurrentScreen('Auction');
-      window.history.pushState({}, '', '/auction');
-    } else if (tabId === 'MatchLive') {
-      setCurrentScreen('MatchLive');
-      window.history.pushState({}, '', '/play/live');
-    } else if (tabId === 'Play') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/play');
-    } else if (tabId === 'PlayingXI') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/tactics');
-    } else if (tabId === 'Squad') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/squad');
-    } else if (tabId === 'Club') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/club');
-    } else if (tabId === 'Rewards') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/rewards');
-    } else if (tabId === 'Dashboard') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/');
-    } else {
-      setCurrentScreen('Dashboard');
-      const route = getRouteForState('Dashboard', tabId);
-      window.history.pushState({}, '', route);
+    
+    switch (tabId) {
+      case 'Home':
+        setCurrentScreen('Dashboard');
+        window.history.pushState({}, '', '/');
+        break;
+      case 'Play':
+        setCurrentScreen('Dashboard');
+        window.history.pushState({}, '', '/play');
+        break;
+      case 'Squad':
+        setCurrentScreen('Dashboard');
+        window.history.pushState({}, '', '/squad');
+        break;
+      case 'Auction':
+        setCurrentScreen('Auction');
+        window.history.pushState({}, '', '/auction');
+        break;
+      case 'Club':
+        setCurrentScreen('Dashboard');
+        window.history.pushState({}, '', '/club');
+        break;
+      default:
+        setCurrentScreen('Dashboard');
+        const route = getRouteForState('Dashboard', tabId);
+        window.history.pushState({}, '', route);
     }
   };
 
   // Determine which primary group is active
-  const isHomeActive = activeTab === 'Dashboard';
-  const isPlayActive = activeTab === 'Play' || activeTab === 'Schedule' || activeTab === 'Challenges' || activeTab === 'WhatIfSimulator';
-  const isAuctionActive = activeTab === 'AuctionLive';
-  const isSquadActive = activeTab === 'PlayingXI' || activeTab === 'Squad';
-  const isClubActive = activeTab === 'Club' || activeTab === 'YouthAcademy' || activeTab === 'TradeCenter' || activeTab === 'Scout' || activeTab === 'Market';
+  const isHomeActive = activeTab === 'Home';
+  const isPlayActive = activeTab === 'Play';
+  const isAuctionActive = activeTab === 'Auction';
+  const isSquadActive = activeTab === 'Squad';
+  const isClubActive = activeTab === 'Club';
 
   return (
     <>
@@ -151,14 +146,14 @@ export const Navbar: React.FC = () => {
             </div>
           </div>
 
-          {/* Center: Desktop Navigation Tabs (FC-Inspired 5-Core Sections) */}
+          {/* Center: Desktop Navigation Tabs (5-Core Sports Game Sections) */}
           <nav className="hidden md:flex items-center space-x-1 lg:space-x-2 bg-[#05070a] p-1 rounded-2xl border border-[#1e293b]">
             {primaryNavTabs.map(tab => {
               let isTabSelected = false;
-              if (tab.id === 'Dashboard') isTabSelected = isHomeActive;
+              if (tab.id === 'Home') isTabSelected = isHomeActive;
               else if (tab.id === 'Play') isTabSelected = isPlayActive;
-              else if (tab.id === 'AuctionLive') isTabSelected = isAuctionActive;
-              else if (tab.id === 'PlayingXI') isTabSelected = isSquadActive;
+              else if (tab.id === 'Auction') isTabSelected = isAuctionActive;
+              else if (tab.id === 'Squad') isTabSelected = isSquadActive;
               else if (tab.id === 'Club') isTabSelected = isClubActive;
 
               return (
@@ -166,7 +161,7 @@ export const Navbar: React.FC = () => {
                   key={tab.id}
                   id={`nav-tab-${tab.id.toLowerCase()}`}
                   onClick={() => handleTabClick(tab.id)}
-                  className={`relative px-3.5 py-1.5 lg:px-4 lg:py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+                  className={`relative px-4 py-2 lg:px-5 lg:py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
                     isTabSelected
                       ? 'bg-gradient-to-b from-[#1e293b] to-[#0f172a] text-[#D4AF37] border border-[#D4AF37]/50 shadow-md shadow-[#D4AF37]/10'
                       : 'text-[#94a3b8] hover:text-white hover:bg-[#0f172a]'
@@ -197,7 +192,7 @@ export const Navbar: React.FC = () => {
             {/* Claimable Rewards Badge */}
             <button
               id="btn-rewards-nav"
-              onClick={() => handleTabClick('Rewards')}
+              onClick={() => handleTabClick('Club')}
               className={`p-1.5 sm:p-2 rounded-xl border transition cursor-pointer relative ${
                 unclaimedRewards > 0 
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse' 
@@ -237,29 +232,29 @@ export const Navbar: React.FC = () => {
       </header>
 
       {/* MOBILE PERSISTENT BOTTOM NAVIGATION BAR */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#070b14]/95 backdrop-blur-xl border-t border-[#1e293b] px-2 py-1.5 shadow-2xl flex items-center justify-around">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#070b14]/95 backdrop-blur-xl border-t border-[#1e293b] px-2 py-2 shadow-2xl flex items-center justify-around">
         {primaryNavTabs.map(tab => {
           let isTabSelected = false;
-          if (tab.id === 'Dashboard') isTabSelected = isHomeActive;
+          if (tab.id === 'Home') isTabSelected = isHomeActive;
           else if (tab.id === 'Play') isTabSelected = isPlayActive;
-          else if (tab.id === 'AuctionLive') isTabSelected = isAuctionActive;
-          else if (tab.id === 'PlayingXI') isTabSelected = isSquadActive;
+          else if (tab.id === 'Auction') isTabSelected = isAuctionActive;
+          else if (tab.id === 'Squad') isTabSelected = isSquadActive;
           else if (tab.id === 'Club') isTabSelected = isClubActive;
 
           return (
             <button
               key={tab.id}
               onClick={() => handleTabClick(tab.id)}
-              className={`relative flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer ${
+              className={`relative flex flex-col items-center justify-center py-2 px-4 rounded-xl transition-all cursor-pointer ${
                 isTabSelected 
                   ? 'text-[#D4AF37] font-black scale-105' 
                   : 'text-[#64748b] hover:text-[#94a3b8]'
               }`}
             >
-              <div className={`p-1 rounded-lg ${isTabSelected ? 'bg-[#D4AF37]/15' : ''}`}>
+              <div className={`p-1.5 rounded-lg ${isTabSelected ? 'bg-[#D4AF37]/15' : ''}`}>
                 {tab.icon}
               </div>
-              <span className="text-[9px] uppercase font-bold tracking-wider mt-0.5">{tab.label}</span>
+              <span className="text-[9px] uppercase font-bold tracking-wider mt-1">{tab.label}</span>
               {tab.badge && tab.badge > 0 ? (
                 <span className="absolute top-0 right-2 w-3.5 h-3.5 rounded-full bg-red-500 text-white font-mono text-[8px] font-black flex items-center justify-center">
                   {tab.badge}

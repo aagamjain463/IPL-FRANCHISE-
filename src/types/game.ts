@@ -7,25 +7,57 @@ import { FranchiseProgressionState } from './franchise';
 
 export type GameMode = 'Authentic IPL' | 'Mega Auction Mode' | 'Full Season' | 'Dynasty Career' | 'Quick Match' | 'What-If Simulator' | 'Scenario Challenge';
 
+// === PRIMARY NAVIGATION SECTIONS ===
+// Consolidated to 5 main sections for premium sports game navigation
 export type AppTab = 
-  | 'Dashboard' // Home
-  | 'Play' // Dedicated Play center (Matchday, Quick Match, Moments, Schedule)
+  | 'Home'        // Franchise hub, dashboard, overview
+  | 'Play'        // Matchday, moments, schedule, quick match, challenges
+  | 'Squad'       // Playing XI, squad management, player development
+  | 'Auction'     // Auction arena, scouting, market
+  | 'Club';       // Franchise, trophy room, stadium, rivalries, legacy
+
+// === LEGACY TAB SUPPORT ===
+// These are mapped to primary sections for backward compatibility
+export type LegacyAppTab = 
+  | 'Dashboard'
   | 'PlayingXI'
-  | 'Squad' // Dedicated Squad & Development
-  | 'AuctionLive' // Dedicated Auction
-  | 'Scout' // Dedicated Scout department
+  | 'Squad'
+  | 'AuctionLive'
+  | 'Scout'
   | 'YouthAcademy'
-  | 'TradeCenter' // Market & Transfers
+  | 'TradeCenter'
   | 'Market'
-  | 'Club' // Facilities & Staff & Finances
-  | 'Standings' // League & Table
+  | 'Standings'
   | 'League'
-  | 'Schedule' // Fixtures
-  | 'Profile' // Legacy & Trophies & Records
-  | 'Rewards' // Objectives & Reward Center
+  | 'Schedule'
+  | 'Profile'
+  | 'Rewards'
   | 'Challenges'
   | 'WhatIfSimulator'
   | 'MatchLive';
+
+// === TAB MAPPING FOR BACKWARD COMPATIBILITY ===
+export function mapLegacyTabToPrimary(legacyTab: LegacyAppTab): AppTab {
+  const mapping: Record<LegacyAppTab, AppTab> = {
+    'Dashboard': 'Home',
+    'PlayingXI': 'Squad',
+    'Squad': 'Squad',
+    'AuctionLive': 'Auction',
+    'Scout': 'Auction',
+    'YouthAcademy': 'Squad',
+    'TradeCenter': 'Auction',
+    'Market': 'Auction',
+    'Standings': 'Club',
+    'League': 'Club',
+    'Schedule': 'Play',
+    'Profile': 'Club',
+    'Rewards': 'Club',
+    'Challenges': 'Play',
+    'WhatIfSimulator': 'Play',
+    'MatchLive': 'Play'
+  };
+  return mapping[legacyTab] || 'Home';
+}
 
 export type ScreenView = 'MainMenu' | 'Dashboard' | 'Auction' | 'MatchLive' | 'PressConference' | 'PostMatchPresentation';
 export type GameScreen = ScreenView;

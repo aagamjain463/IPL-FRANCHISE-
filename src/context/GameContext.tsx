@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { GameSave, GameScreen, AppTab } from '../types/game';
+import { GameSave, GameScreen, AppTab, mapLegacyTabToPrimary, LegacyAppTab } from '../types/game';
 import { Player } from '../types/cricket';
 import { Team } from '../types/team';
 import { AuctionState, AuctionBid } from '../types/auction';
@@ -79,7 +79,7 @@ const STORAGE_KEY = 'ipl_franchise_sim_save_v1';
 export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [gameState, setGameState] = useState<GameSave | null>(null);
   const [currentScreen, setCurrentScreen] = useState<GameScreen>('MainMenu');
-  const [activeTab, setActiveTab] = useState<AppTab>('Dashboard');
+  const [activeTab, setActiveTab] = useState<AppTab>('Home');
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [selectedPlayerForModal, setSelectedPlayerForModal] = useState<Player | null>(null);
   const [activeChallenge, setActiveChallenge] = useState<ChallengeScenario | null>(null);
@@ -158,7 +158,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
 
           setGameState(parsed);
+          // Convert legacy tabs to primary navigation sections
+          const primaryTab = mapLegacyTabToPrimary((parsed.currentScreen as any) || 'Dashboard');
           setCurrentScreen(parsed.currentScreen || 'Dashboard');
+          setActiveTab(primaryTab);
         }
       }
     } catch {
@@ -227,7 +230,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     let seasonStage: GameSave['seasonStage'] = 'Auction';
     let currentScreenVal: GameScreen = 'Auction';
-    let activeTabVal: AppTab = 'AuctionLive';
+    let activeTabVal: AppTab = 'Auction';
 
     if (autoSimulateAuction) {
       const simResult = simulateFullAuctionPool(auction, teamsMap, playersMap, teamId, {
@@ -239,7 +242,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       Object.assign(playersMap, simResult.updatedPlayers);
       seasonStage = 'LeagueStage';
       currentScreenVal = 'Dashboard';
-      activeTabVal = 'Dashboard';
+      activeTabVal = 'Home';
     }
 
     const initialSave: GameSave = {
@@ -354,7 +357,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const parsed = JSON.parse(saved) as GameSave;
         if (parsed && parsed.userTeamId) {
           setGameState(parsed);
+          // Convert legacy tabs to primary navigation sections
+          const primaryTab = mapLegacyTabToPrimary((parsed.currentScreen as any) || 'Dashboard');
           setCurrentScreen(parsed.currentScreen || 'Dashboard');
+          setActiveTab(primaryTab);
           return true;
         }
       }
@@ -376,7 +382,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     setGameState(newState);
     setCurrentScreen('Auction');
-    setActiveTab('AuctionLive');
+    setActiveTab('Auction');
     window.history.pushState({}, '', '/auction');
     saveCurrentGame();
   };
@@ -563,7 +569,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     setGameState(newState);
     setCurrentScreen('Dashboard');
-    setActiveTab('Dashboard');
+    setActiveTab('Home');
     soundFx.playCheer();
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
@@ -591,7 +597,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       newState.seasonStage = 'LeagueStage';
       newState.currentScreen = 'Dashboard';
       setCurrentScreen('Dashboard');
-      setActiveTab('Dashboard');
+      setActiveTab('Home');
     }
 
     setGameState(newState);

@@ -39,7 +39,7 @@ export const AuctionLayout: React.FC<AuctionLayoutProps> = ({ children }) => {
   const handleExitAuction = () => {
     // Navigate safely back to main home dashboard
     setCurrentScreen('Dashboard');
-    setActiveTab('Dashboard');
+    setActiveTab('Home');
     window.history.pushState({}, '', '/');
   };
 

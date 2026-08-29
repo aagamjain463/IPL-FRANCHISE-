@@ -18,7 +18,241 @@
   }
 }
 
-/* Sophisticated Dark Custom Utilities */
+/* === PREMIUM SPORTS GAME UTILITIES === */
+
+/* Background System */
+.bg-premium-canvas {
+  background-color: #030712;
+}
+
+.bg-premium-surface {
+  background: linear-gradient(135deg, #0a0c12 0%, #030712 100%);
+}
+
+.bg-premium-card {
+  background: linear-gradient(180deg, #0f172a 0%, #090e1a 100%);
+}
+
+.bg-premium-glass {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+}
+
+.bg-premium-hero {
+  background: linear-gradient(135deg, rgba(10, 12, 18, 0.95) 0%, rgba(3, 7, 18, 0.98) 100%);
+}
+
+/* Border System */
+.border-premium-subtle {
+  border-color: #1e293b;
+}
+
+.border-premium-medium {
+  border-color: #334155;
+}
+
+.border-premium-gold {
+  border-color: #D4AF37;
+}
+
+.border-premium-gold-subtle {
+  border-color: rgba(212, 175, 55, 0.35);
+}
+
+/* Text System */
+.text-premium-gold {
+  color: #D4AF37;
+}
+
+.text-premium-gold-light {
+  color: #F3E5AB;
+}
+
+.text-premium-secondary {
+  color: #94a3b8;
+}
+
+.text-premium-muted {
+  color: #64748b;
+}
+
+/* === PREMIUM CARD VARIANTS === */
+.card-premium-compact {
+  background: linear-gradient(180deg, #0f172a 0%, #090e1a 100%);
+  border: 1px solid #1e293b;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  padding: 0.75rem;
+}
+
+.card-premium-standard {
+  background: linear-gradient(180deg, #0f172a 0%, #090e1a 100%);
+  border: 1px solid #1e293b;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  padding: 1rem;
+}
+
+.card-premium-featured {
+  background: linear-gradient(180deg, #0f172a 0%, #090e1a 100%);
+  border: 1px solid #1e293b;
+  border-radius: 1rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+}
+
+.card-premium-hero {
+  background: linear-gradient(135deg, rgba(10, 12, 18, 0.95) 0%, rgba(3, 7, 18, 0.98) 100%);
+  border: 1px solid #1e293b;
+  border-radius: 1.5rem;
+  box-shadow: 0 0 40px -10px rgba(212, 175, 55, 0.3);
+  padding: 2rem;
+}
+
+/* === PREMIUM BUTTON VARIANTS === */
+.btn-premium-primary {
+  background: linear-gradient(135deg, #D4AF37 0%, #F3E5AB 100%);
+  color: #000000;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-radius: 0.75rem;
+  box-shadow: 0 0 30px -5px rgba(212, 175, 55, 0.4);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-premium-primary:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 40px -5px rgba(212, 175, 55, 0.5);
+}
+
+.btn-premium-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-premium-secondary {
+  background: #0f172a;
+  color: #D4AF37;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 0.75rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-premium-secondary:hover {
+  background: #1e293b;
+  border-color: rgba(212, 175, 55, 0.5);
+}
+
+.btn-premium-tertiary {
+  background: transparent;
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 0.75rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-premium-tertiary:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-premium-action {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-radius: 0.75rem;
+  box-shadow: 0 0 30px -5px rgba(16, 185, 129, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-premium-action:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 40px -5px rgba(16, 185, 129, 0.4);
+}
+
+/* === MOTION & ANIMATION UTILITIES === */
+@keyframes scale-up {
+  0% { transform: scale(0.95); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes slide-up {
+  0% { transform: translateY(20px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulse-gold {
+  0%, 100% { box-shadow: 0 0 20px -5px rgba(212, 175, 55, 0.3); }
+  50% { box-shadow: 0 0 40px -5px rgba(212, 175, 55, 0.5); }
+}
+
+@keyframes glow-text {
+  0%, 100% { text-shadow: 0 0 10px rgba(212, 175, 55, 0.3); }
+  50% { text-shadow: 0 0 20px rgba(212, 175, 55, 0.5); }
+}
+
+.animate-scale-up {
+  animation: scale-up 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.animate-slide-up {
+  animation: slide-up 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.animate-pulse-gold {
+  animation: pulse-gold 2s ease-in-out infinite;
+}
+
+.animate-glow-text {
+  animation: glow-text 2s ease-in-out infinite;
+}
+
+/* === SPORTS GAME SPECIFIC UTILITIES === */
+.stadium-glow {
+  box-shadow: 0 0 60px -15px rgba(212, 175, 55, 0.2);
+}
+
+.team-identity-gradient {
+  background: linear-gradient(135deg, var(--team-primary) 0%, var(--team-secondary) 100%);
+}
+
+.rarity-glow-legend {
+  box-shadow: 0 0 30px -5px rgba(212, 175, 55, 0.4);
+  border-color: #D4AF37;
+}
+
+.rarity-glow-elite {
+  box-shadow: 0 0 25px -5px rgba(245, 158, 11, 0.3);
+  border-color: #f59e0b;
+}
+
+.rarity-glow-breakout {
+  box-shadow: 0 0 20px -5px rgba(59, 130, 246, 0.3);
+  border-color: #3b82f6;
+}
+
+.rarity-glow-inform {
+  box-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.3);
+  border-color: #10b981;
+}
+
+/* === LEGACY UTILITIES (for backward compatibility) === */
 .bg-dark-canvas {
   background-color: #05070a;
 }
@@ -51,7 +285,6 @@
   border-color: #D4AF37;
 }
 
-/* Custom Sports Glass & Stadium glow */
 .sports-card {
   background-color: #0f172a;
   border: 1px solid #1e293b;
@@ -72,7 +305,6 @@
   background: linear-gradient(180deg, #d97706 0%, #b45309 50%, #d97706 100%);
 }
 
-/* Score highlight animations */
 @keyframes pulse-subtle {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.85; transform: scale(1.03); }
@@ -82,7 +314,7 @@
   animation: pulse-subtle 0.6s ease-in-out 2;
 }
 
-/* Custom scrollbars */
+/* === CUSTOM SCROLLBARS === */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -99,5 +331,18 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
+}
+
+/* === RESPONSIVE UTILITIES === */
+@media (max-width: 768px) {
+  .hide-mobile {
+    display: none;
+  }
+}
+
+@media (min-width: 769px) {
+  .hide-desktop {
+    display: none;
+  }
 }
 
