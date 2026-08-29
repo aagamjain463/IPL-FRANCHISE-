@@ -84,12 +84,12 @@ const GameContent: React.FC = () => {
   }
 
   // 3. PRESS CONFERENCE & POST-MATCH PRESENTATION MODES
-  if (currentScreen === 'PressConference') {
-    return <PressConferenceView />;
-  }
-
-  if (currentScreen === 'PostMatchPresentation') {
-    return <PostMatchPresentationView />;
+  if (currentScreen === 'PressConference' || currentScreen === 'PostMatchPresentation') {
+    return (
+      <MainAppLayout>
+        <PostMatchPresentationView />
+      </MainAppLayout>
+    );
   }
 
   // 4. STANDARD FRANCHISE HOME SHELL (MainAppLayout with Navbar & Global Tabs)

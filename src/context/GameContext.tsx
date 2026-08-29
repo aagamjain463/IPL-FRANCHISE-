@@ -61,6 +61,7 @@ interface GameContextType {
   signYouthProspect: (prospect: Player) => void;
   advanceToNextSeason: () => void;
   submitPressAnswer: (option: { text: string; moraleChange: number; ownerTrustChange: number }) => void;
+  answerPressQuestion: (optionIndex: number) => void;
   // Scouting Department
   upgradeScoutLevel: () => { success: boolean; message: string };
   addToWatchlist: (playerId: string, priority?: PriorityLevel, notes?: string) => void;
@@ -911,7 +912,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setGameState({ ...gameState, currentMatchState: match });
   };
 
-  const completeCurrentMatch = () => {
+  const completeCurrentMatch = (skipToDashboard?: boolean) => {
     if (!gameState || !gameState.currentMatchState) return;
     const match = gameState.currentMatchState;
     const standings = updateStandingsWithMatch(
@@ -933,7 +934,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           isPlayed: true,
           winnerTeamId: match.winnerTeamId,
           resultText: match.resultMarginText,
-          scoreSummary: `${gameState.teams[match.innings1.battingTeamId]?.shortName} ${match.innings1.totalRuns}/${match.innings1.wickets} vs ${gameState.teams[match.innings2.battingTeamId]?.shortName} ${match.innings2.totalRuns}/${match.innings2.wickets}`
+          scoreSummary: `${gameState.teams[match.innings1.battingTeamId]?.shortName || 'Team 1'} ${match.innings1.totalRuns}/${match.innings1.wickets} vs ${gameState.teams[match.innings2.battingTeamId]?.shortName || 'Team 2'} ${match.innings2.totalRuns}/${match.innings2.wickets}`
         };
       }
       return f;
@@ -954,18 +955,156 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       teamId: match.winnerTeamId
     });
 
+    // Generate Dynamic Press Conference Questions
+    const isUserWinner = match.winnerTeamId === gameState.userTeamId;
+    const isUserMatch = match.teamAId === gameState.userTeamId || match.teamBId === gameState.userTeamId;
+    const userTeam = gameState.teams[gameState.userTeamId];
+    const oppTeamId = match.teamAId === gameState.userTeamId ? match.teamBId : match.teamAId;
+    const oppTeam = gameState.teams[oppTeamId];
+
+    const pressQuestions = [];
+    if (isUserWinner) {
+      pressQuestions.push({
+        id: `press_q1_${Date.now()}`,
+        journalistName: 'Harsha Bhogle',
+        mediaOutlet: 'Cricbuzz Live',
+        questionText: `Stupendous win for ${userTeam?.name || 'the squad'}! What was the decisive turning point tonight?`,
+        options: [
+          {
+            text: 'Our middle order took calculated risks and executed our tactics with absolute clarity.',
+            ownerTrustChange: 5,
+            playerMoraleChange: 8
+          },
+          {
+            text: 'Credit to our bowling battery for hitting their lengths and choking boundaries at the death.',
+            ownerTrustChange: 4,
+            playerMoraleChange: 9
+          },
+          {
+            text: 'We never lose faith in our game plan, but we stay humble as the tournament progresses.',
+            ownerTrustChange: 6,
+            playerMoraleChange: 5
+          }
+        ]
+      });
+      pressQuestions.push({
+        id: `press_q2_${Date.now()}`,
+        journalistName: 'Ravi Shastri',
+        mediaOutlet: 'Star Sports Broadcast',
+        questionText: 'The team spirit and high intensity were evident throughout the 40 overs. How do you keep this momentum going?',
+        options: [
+          {
+            text: 'Fearless cricket is in our DNA. We empower every player to express themselves freely.',
+            ownerTrustChange: 4,
+            playerMoraleChange: 7
+          },
+          {
+            text: 'Deep preparation and total trust in our 25-man squad. Everyone is ready to deliver when called upon.',
+            ownerTrustChange: 7,
+            playerMoraleChange: 6
+          }
+        ]
+      });
+    } else if (isUserMatch) {
+      pressQuestions.push({
+        id: `press_q1_${Date.now()}`,
+        journalistName: 'Sanjay Manjrekar',
+        mediaOutlet: 'ESPNCricinfo',
+        questionText: `A hard-fought battle against ${oppTeam?.name || 'the opponents'}. Where did the match slip from your grasp?`,
+        options: [
+          {
+            text: 'We fell slightly short with the bat and gave away loose deliveries during the powerplay. We will fix it.',
+            ownerTrustChange: 2,
+            playerMoraleChange: 3
+          },
+          {
+            text: 'I take full tactical responsibility as manager. The squad gave 100% effort on the field.',
+            ownerTrustChange: 3,
+            playerMoraleChange: 8
+          },
+          {
+            text: 'T20 is a game of fine margins. We will analyze the match data and bounce back stronger in our next match.',
+            ownerTrustChange: 5,
+            playerMoraleChange: 5
+          }
+        ]
+      });
+    } else {
+      pressQuestions.push({
+        id: `press_q1_${Date.now()}`,
+        journalistName: 'Aakash Chopra',
+        mediaOutlet: 'JioCinema Studio',
+        questionText: 'A gripping clash in the tournament. How do you view the standings shaping up at this stage?',
+        options: [
+          {
+            text: 'The table is fiercely competitive. Every single fixture and Net Run Rate point is critical.',
+            ownerTrustChange: 4,
+            playerMoraleChange: 4
+          }
+        ]
+      });
+    }
+
+    const pressState = {
+      questions: pressQuestions,
+      currentQuestionIndex: 0,
+      matchId: match.id
+    };
+
+    const targetScreen = skipToDashboard ? 'Dashboard' : 'PostMatchPresentation';
+
     const newState: GameSave = {
       ...gameState,
       standings,
       leagueSchedule: schedule,
       currentFixtureIndex: nextIndex,
       currentMatchState: undefined,
-      currentScreen: 'PressConference',
+      currentScreen: targetScreen,
+      pressConferenceState: pressState,
       newsFeed: updatedNews
     };
 
     setGameState(newState);
-    setCurrentScreen('PressConference');
+    setCurrentScreen(targetScreen);
+    if (skipToDashboard) {
+      setActiveTab('Dashboard');
+    }
+    saveCurrentGame();
+  };
+
+  const answerPressQuestion = (optionIndex: number) => {
+    if (!gameState) return;
+    const press = gameState.pressConferenceState;
+    if (!press || !press.questions) return;
+    const currentQ = press.questions[press.currentQuestionIndex || 0];
+    if (!currentQ || !currentQ.options[optionIndex]) return;
+
+    const opt = currentQ.options[optionIndex];
+    const userTeam = gameState.teams[gameState.userTeamId];
+    if (userTeam) {
+      userTeam.ownerTrust = Math.min(100, Math.max(10, userTeam.ownerTrust + (opt.ownerTrustChange || 0)));
+      userTeam.fanApproval = Math.min(100, Math.max(10, userTeam.fanApproval + (opt.playerMoraleChange > 0 ? 3 : -1)));
+      if (opt.playerMoraleChange) {
+        userTeam.rosterPlayerIds.forEach(pId => {
+          const p = gameState.allPlayers[pId];
+          if (p) {
+            p.morale = Math.min(100, Math.max(20, p.morale + opt.playerMoraleChange));
+          }
+        });
+      }
+    }
+
+    const nextIdx = (press.currentQuestionIndex || 0) + 1;
+    const updatedPress = {
+      ...press,
+      currentQuestionIndex: nextIdx
+    };
+
+    setGameState({
+      ...gameState,
+      pressConferenceState: updatedPress
+    });
+    soundFx.playBatHit();
     saveCurrentGame();
   };
 
@@ -1303,6 +1442,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         signYouthProspect,
         advanceToNextSeason,
         submitPressAnswer,
+        answerPressQuestion,
         upgradeScoutLevel,
         addToWatchlist,
         removeFromWatchlist,

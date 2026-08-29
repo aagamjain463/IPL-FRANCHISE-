@@ -13,7 +13,7 @@ import {
 } from '../types/cricket';
 import { 
   Zap, Play, FastForward, SkipForward, Shield, 
-  Activity, Award, Radio, Trophy, Sliders, CheckCircle2,
+  Activity, Award, Radio, Trophy, Sliders, CheckCircle2, Home,
   Flame, Target, Wind, Compass, ShieldAlert, Sparkles, ChevronRight, Gauge
 } from 'lucide-react';
 
@@ -414,14 +414,25 @@ export const MatchLiveView: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-xs font-bold uppercase tracking-widest text-[#94a3b8]">Simulation Controls</span>
               {match.isMatchCompleted ? (
-                <button
-                  id="btn-finish-match"
-                  onClick={completeCurrentMatch}
-                  className="px-8 py-3 rounded-full bg-[#D4AF37] text-black font-black text-xs uppercase tracking-widest shadow-lg flex items-center gap-2 transition hover:scale-105 active:scale-95 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Proceed to Post-Match Media</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    id="btn-finish-match"
+                    onClick={() => completeCurrentMatch(false)}
+                    className="px-6 py-3 rounded-full bg-[#D4AF37] text-black font-black text-xs uppercase tracking-widest shadow-lg flex items-center gap-2 transition hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                    <Trophy className="w-4 h-4 text-black" />
+                    <span>Post-Match Media & Ceremony</span>
+                  </button>
+
+                  <button
+                    id="btn-skip-to-dashboard"
+                    onClick={() => completeCurrentMatch(true)}
+                    className="px-5 py-3 rounded-full bg-[#1e293b] hover:bg-[#334155] text-[#e2e8f0] font-bold text-xs uppercase tracking-wider transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <Home className="w-4 h-4 text-[#94a3b8]" />
+                    <span>Skip to Franchise Hub</span>
+                  </button>
+                </div>
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
                   <button
