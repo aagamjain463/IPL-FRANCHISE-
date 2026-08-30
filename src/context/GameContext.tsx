@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { GameSave, GameScreen, AppTab } from '../types/game';
+import { GameSave, GameScreen, AppTab, FCThemeMode, GoogleAccountProfile } from '../types/game';
 import { Player } from '../types/cricket';
 import { Team } from '../types/team';
 import { AuctionState, AuctionBid } from '../types/auction';
@@ -31,12 +31,17 @@ interface GameContextType {
   setActiveTab: (tab: AppTab) => void;
   toggleMute: () => void;
   setSelectedPlayerForModal: (p: Player | null) => void;
-  startNewFranchise: (teamId: string, managerName: string, autoSimulateAuction?: boolean) => void;
+  startNewFranchise: (teamId: string, managerName: string, autoSimulateAuction?: boolean, startMultiplayerAuction?: boolean) => void;
   switchUserFranchise: (newTeamId: string) => void;
   restartGame: (options?: { restartAuctionOnly?: boolean; newTeamId?: string; resetEverything?: boolean }) => void;
   loadSavedGame: () => boolean;
   saveCurrentGame: () => void;
   resetToMenu: () => void;
+  // Theme & Google Cloud Progress
+  setThemeMode: (theme: FCThemeMode) => void;
+  signInWithGoogle: (customUser?: { name: string; email: string }) => void;
+  signOutGoogle: () => void;
+  saveToCloudSync: () => boolean;
   // Auction actions
   startAuctionMode: () => void;
   placeUserBid: () => void;
@@ -45,8 +50,10 @@ interface GameContextType {
   simulateEntireAuction: (fromBeginning?: boolean, autoBuildUserSquad?: boolean) => void;
   simulateCurrentAuctionSet: () => void;
   toggleAutoBid: () => void;
+  togglePauseAuction: () => void;
   // Playing XI actions
   updateUserPlayingXI: (xi: MatchPlayingXI) => void;
+  executeImpactSub: (teamId: string, playerOutId: string, playerInId: string) => void;
   // Match & Simulation actions
   prepareMatch: (fixtureId: string) => void;
   prepareScenarioChallenge: (challenge: ChallengeScenario) => void;
@@ -180,7 +187,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsMuted(next);
   };
 
-  const startNewFranchise = (teamId: string, managerName: string, autoSimulateAuction: boolean = false) => {
+  const startNewFranchise = (teamId: string, managerName: string, autoSimulateAuction: boolean = false, startMultiplayerAuction: boolean = false) => {
     // Deep clone initial teams & players
     const teamsMap: Record<string, Team> = JSON.parse(JSON.stringify(INITIAL_TEAMS));
     const playersMap: Record<string, Player> = {};
@@ -229,7 +236,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let currentScreenVal: GameScreen = 'Auction';
     let activeTabVal: AppTab = 'AuctionLive';
 
-    if (autoSimulateAuction) {
+    if (startMultiplayerAuction) {
+      currentScreenVal = 'MultiplayerAuction';
+      activeTabVal = 'MultiplayerAuction';
+    } else if (autoSimulateAuction) {
       const simResult = simulateFullAuctionPool(auction, teamsMap, playersMap, teamId, {
         fromBeginning: true,
         userAutoBid: true
@@ -612,6 +622,96 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   };
 
+  const togglePauseAuction = () => {
+    if (!gameState || !gameState.auctionState) return;
+    const nextPaused = !gameState.auctionState.isPaused;
+    setGameState({
+      ...gameState,
+      auctionState: {
+        ...gameState.auctionState,
+        isPaused: nextPaused
+      }
+    });
+    if (nextPaused) {
+      soundFx.playBatHit(false, false);
+    } else {
+      soundFx.playHammerKnock();
+    }
+  };
+
+  const setThemeMode = (theme: FCThemeMode) => {
+    if (!gameState) return;
+    setGameState({
+      ...gameState,
+      themeMode: theme
+    });
+    try {
+      localStorage.setItem('fc_theme_mode', theme);
+    } catch {}
+    soundFx.playBatHit(false, false);
+  };
+
+  const signInWithGoogle = (customUser?: { name: string; email: string }) => {
+    if (!gameState) return;
+    const name = customUser?.name || gameState.managerName || 'Championship Manager';
+    const email = customUser?.email || `${name.toLowerCase().replace(/\s+/g, '')}@gmail.com`;
+    const googleProfile: GoogleAccountProfile = {
+      id: `google_${Date.now()}`,
+      email,
+      name,
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(name)}`,
+      isLoggedIn: true,
+      lastCloudSyncedAt: Date.now()
+    };
+    const newState = {
+      ...gameState,
+      googleProfile
+    };
+    setGameState(newState);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+      localStorage.setItem('google_cloud_synced_profile', JSON.stringify(googleProfile));
+    } catch {}
+    soundFx.playCheer(true);
+  };
+
+  const signOutGoogle = () => {
+    if (!gameState) return;
+    const newState = {
+      ...gameState,
+      googleProfile: null
+    };
+    setGameState(newState);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+      localStorage.removeItem('google_cloud_synced_profile');
+    } catch {}
+    soundFx.playBatHit(false, false);
+  };
+
+  const saveToCloudSync = (): boolean => {
+    if (!gameState) return false;
+    try {
+      const updatedProfile = gameState.googleProfile ? {
+        ...gameState.googleProfile,
+        lastCloudSyncedAt: Date.now()
+      } : null;
+      const newState = {
+        ...gameState,
+        googleProfile: updatedProfile
+      };
+      setGameState(newState);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+      if (updatedProfile) {
+        localStorage.setItem('google_cloud_synced_profile', JSON.stringify(updatedProfile));
+      }
+      soundFx.playCheer(true);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   // Auto-advance auction AI bids timer loop
   useEffect(() => {
     if (currentScreen !== 'Auction' || !gameState || !gameState.auctionState || gameState.auctionState.isCompleted || !gameState.auctionState.activePlayer) {
@@ -621,6 +721,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const interval = setInterval(() => {
       setGameState(prev => {
         if (!prev || !prev.auctionState || !prev.auctionState.activePlayer) return prev;
+        if (prev.auctionState.isPaused) return prev; // ABSOLUTE PAUSE LOCK
         const auc = { ...prev.auctionState };
         
         // AI bid candidate
@@ -726,6 +827,62 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     setGameState({ ...gameState, teams });
     saveCurrentGame();
+  };
+
+  const executeImpactSub = (teamId: string, playerOutId: string, playerInId: string) => {
+    if (!gameState || !gameState.currentMatchState) return;
+    const match = { ...gameState.currentMatchState };
+    const team = gameState.teams[teamId];
+    if (!team) return;
+
+    if (match.teamAId === teamId) {
+      if (match.teamAImpactUsed) return;
+      match.teamAImpactUsed = true;
+    } else if (match.teamBId === teamId) {
+      if (match.teamBImpactUsed) return;
+      match.teamBImpactUsed = true;
+    }
+
+    const currentInnings = match.currentInningsIndex === 1 ? match.innings1 : match.innings2;
+    if (currentInnings.battingTeamId === teamId) {
+      const idx = currentInnings.battingOrderIds.indexOf(playerOutId);
+      if (idx !== -1) {
+        currentInnings.battingOrderIds[idx] = playerInId;
+      }
+      if (currentInnings.currentStrikerId === playerOutId) {
+        currentInnings.currentStrikerId = playerInId;
+      }
+      if (currentInnings.currentNonStrikerId === playerOutId) {
+        currentInnings.currentNonStrikerId = playerInId;
+      }
+    } else {
+      if (currentInnings.currentBowlerId === playerOutId) {
+        currentInnings.currentBowlerId = playerInId;
+      }
+    }
+
+    const pIn = gameState.allPlayers[playerInId];
+    const pOut = gameState.allPlayers[playerOutId];
+    currentInnings.recentBalls.unshift({
+      ballNumber: currentInnings.ballsInCurrentOver,
+      overNumber: currentInnings.oversCompleted,
+      bowlerId: currentInnings.currentBowlerId,
+      strikerId: currentInnings.currentStrikerId,
+      nonStrikerId: currentInnings.currentNonStrikerId,
+      runsScored: 0,
+      isWicket: false,
+      isExtra: false,
+      commentaryText: `🔄 TACTICAL IMPACT SUB: ${team.shortName} bring on ${pIn?.name || 'Impact Player'} for ${pOut?.name || 'Player'}!`,
+      shotZone: 'Cover',
+      paceSpeedKph: 0,
+      staminaBurn: 0
+    });
+
+    soundFx.playCheer(true);
+    setGameState({
+      ...gameState,
+      currentMatchState: match
+    });
   };
 
   // --- MATCH OPERATIONS ---
@@ -1429,7 +1586,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         simulateEntireAuction,
         simulateCurrentAuctionSet,
         toggleAutoBid,
+        togglePauseAuction,
+        setThemeMode,
+        signInWithGoogle,
+        signOutGoogle,
+        saveToCloudSync,
         updateUserPlayingXI,
+        executeImpactSub,
         prepareMatch,
         prepareScenarioChallenge,
         bowlBall,

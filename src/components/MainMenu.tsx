@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useGame } from '../context/GameContext';
 import { INITIAL_TEAMS } from '../data/teams';
 import { SCENARIO_CHALLENGES } from '../data/challenges';
-import { Trophy, Shield, Zap, Play, RotateCcw, Award, Flame, UserCheck } from 'lucide-react';
+import { Trophy, Shield, Zap, Play, RotateCcw, Award, Flame, UserCheck, Users } from 'lucide-react';
 import { MusicPlayerHud } from './MusicPlayerHud';
 
 export const MainMenu: React.FC = () => {
@@ -167,20 +167,29 @@ export const MainMenu: React.FC = () => {
               <button
                 id="btn-launch-dynasty"
                 onClick={() => startNewFranchise(selectedTeamId, managerName, false)}
-                className="w-full sm:w-auto px-8 py-4 rounded-full bg-[#D4AF37] text-black font-black text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform flex items-center justify-center gap-2 shadow-xl shadow-[#D4AF37]/20"
+                className="w-full sm:w-auto px-7 py-3.5 rounded-full bg-[#D4AF37] text-black font-black text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform flex items-center justify-center gap-2 shadow-xl shadow-[#D4AF37]/20 cursor-pointer"
               >
                 <Play className="w-4 h-4 fill-black" />
-                <span>Live Mega Auction</span>
+                <span>Single Player Auction</span>
+              </button>
+
+              <button
+                id="btn-launch-multiplayer-auction"
+                onClick={() => startNewFranchise(selectedTeamId, managerName, false, true)}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform flex items-center justify-center gap-2 shadow-xl shadow-blue-600/30 cursor-pointer border border-blue-400/30"
+              >
+                <Users className="w-4 h-4" />
+                <span>🌐 Multiplayer Room</span>
               </button>
 
               <button
                 id="btn-launch-dynasty-sim-auction"
                 onClick={() => startNewFranchise(selectedTeamId, managerName, true)}
-                className="w-full sm:w-auto px-6 py-4 rounded-full bg-[#1e293b] hover:bg-[#334155] border border-[#D4AF37]/40 text-[#D4AF37] font-bold text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform flex items-center justify-center gap-2 shadow-lg"
+                className="w-full sm:w-auto px-5 py-3.5 rounded-full bg-[#1e293b] hover:bg-[#334155] border border-[#D4AF37]/40 text-[#D4AF37] font-bold text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform flex items-center justify-center gap-2 shadow-lg cursor-pointer"
                 title="Automatically draft balanced rosters for all 10 franchises and advance directly to the season dashboard"
               >
                 <Zap className="w-4 h-4 fill-[#D4AF37]" />
-                <span>Sim Auction & Play</span>
+                <span>Sim & Play</span>
               </button>
             </div>
           </div>

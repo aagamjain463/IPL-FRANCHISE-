@@ -1,57 +1,59 @@
 @import "tailwindcss";
 
 /* ============================================================
-   IPL FRANCHISE — DESIGN TOKENS
-   Tailwind v4 is CSS-first: every --color-* / --radius-* / --ease-*
-   variable below is automatically turned into real utility classes
-   (bg-canvas, text-gold, border-line, rounded-card, ease-snap, etc).
-   New/updated screens should reach for these instead of raw hex
-   arbitrary values so the whole app shares one visual language.
+   EA SPORTS FC MOBILE — DESIGN SYSTEM & TOKENS
+   Deep Obsidian / Carbon + Volt Neon Green + Champions Gold
+   Holographic Prismatic Card FX, Rank Diamonds, and Turf
    ============================================================ */
 @theme {
-  /* Surfaces */
-  --color-canvas: #05070a;        /* app background */
-  --color-header: #070b14;        /* sticky header / top bars */
-  --color-surface: #0f172a;       /* cards, panels, inputs */
-  --color-surface-elevated: #131d35; /* active/selected surfaces, modals-on-modals */
+  /* FC Mobile Primary Surfaces */
+  --color-canvas: #04060c;           /* pitch black background */
+  --color-header: #070a14;           /* top currency & status bar */
+  --color-surface: #0a0f1d;          /* card container & panels */
+  --color-surface-deep: #060912;     /* nested cards & tile backgrounds */
+  --color-surface-elevated: #10192e;  /* active/highlighted surfaces */
 
-  /* Borders */
-  --color-line: #1e293b;          /* default hairline border */
-  --color-line-strong: #334155;   /* hover / emphasized border */
+  /* Borders & Lines */
+  --color-line: #182238;             /* standard FC Mobile slate line */
+  --color-line-strong: #243454;      /* hovered card border */
 
-  /* Text */
-  --color-ink: #e2e8f0;           /* primary text (on dark) */
-  --color-ink-muted: #94a3b8;     /* secondary text */
-  --color-ink-faint: #64748b;     /* tertiary / label text */
+  /* Text & Inks */
+  --color-ink: #f1f5f9;              /* primary bright white/silver */
+  --color-ink-muted: #94a3b8;        /* secondary stat labels */
+  --color-ink-faint: #64748b;        /* muted info */
 
-  /* Brand accent */
-  --color-gold: #D4AF37;
-  --color-gold-soft: #f5d67a;     /* amber-300 equivalent, for gradients */
+  /* FC Mobile Signature Neon Accents */
+  --color-volt: #00FF87;             /* Iconic FC Mobile Neon Volt Lime */
+  --color-volt-dark: #00B35E;
+  --color-gold: #D4AF37;             /* Champions / Icon Metallic Gold */
+  --color-gold-soft: #FFE27D;
+  --color-cyan: #00E5FF;             /* TOTS Electric Cyan */
+  --color-ruby: #FF1E56;             /* Centurions Ruby Red */
+  --color-violet: #8B5CF6;           /* Promo Violet */
 
-  /* Semantic status */
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
-  --color-info: #3b82f6;
+  /* Status Colors */
+  --color-success: #00FF87;
+  --color-warning: #FFB800;
+  --color-danger: #FF2E4D;
+  --color-info: #00E5FF;
 
-  /* Radius scale (sports-card rounding) */
-  --radius-card: 1rem;      /* 16px, matches rounded-2xl usage */
-  --radius-pill: 999px;
+  /* Card Radii */
+  --radius-card: 1.25rem;            /* 20px sports card curvature */
+  --radius-pill: 9999px;
 
   /* Motion */
   --ease-snap: cubic-bezier(0.16, 1, 0.3, 1);
-  --duration-fast: 150ms;
-  --duration-base: 250ms;
 }
 
 @layer base {
   body {
-    background-color: #05070a;
-    color: #e2e8f0;
+    background-color: #04060c;
+    color: #f1f5f9;
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-x: hidden;
   }
 
-  h1, h2, h3, .font-heading {
+  h1, h2, h3, h4, .font-heading {
     font-family: 'Chakra Petch', 'Rajdhani', sans-serif;
     letter-spacing: -0.02em;
   }
@@ -62,68 +64,154 @@
   }
 }
 
-/* Sophisticated Dark Custom Utilities */
-.bg-dark-canvas {
-  background-color: #05070a;
+/* ============================================================
+   FC MOBILE CARD HOLOGRAPHIC & SHIMMER EFFECTS
+   ============================================================ */
+
+@keyframes fc-shimmer {
+  0% { transform: translateX(-100%) rotate(45deg); }
+  100% { transform: translateX(200%) rotate(45deg); }
 }
 
-.bg-dark-header {
-  background-color: #0a0c12;
+@keyframes fc-glow-pulse {
+  0%, 100% { opacity: 0.8; filter: drop-shadow(0 0 15px rgba(0, 255, 135, 0.4)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 25px rgba(0, 255, 135, 0.7)); }
 }
 
-.bg-dark-card {
-  background-color: #0f172a;
+@keyframes fc-icon-glow {
+  0%, 100% { filter: drop-shadow(0 0 20px rgba(212, 175, 55, 0.5)); }
+  50% { filter: drop-shadow(0 0 35px rgba(255, 226, 125, 0.85)); }
 }
 
-.border-dark-border {
-  border-color: #1e293b;
+@keyframes fc-tots-glow {
+  0%, 100% { filter: drop-shadow(0 0 20px rgba(0, 229, 255, 0.5)); }
+  50% { filter: drop-shadow(0 0 35px rgba(0, 229, 255, 0.85)); }
 }
 
-.border-dark-subtle {
-  border-color: #334155;
+@keyframes fc-walkout-beam {
+  0% { transform: scaleY(0); opacity: 0; }
+  50% { transform: scaleY(1); opacity: 1; }
+  100% { transform: scaleY(1.2); opacity: 0.8; }
 }
 
-.text-gold-accent {
-  color: #D4AF37;
+.fc-card-shimmer {
+  position: relative;
+  overflow: hidden;
 }
 
-.bg-gold-accent {
-  background-color: #D4AF37;
+.fc-card-shimmer::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    60deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.15) 30%,
+    rgba(255, 255, 255, 0.35) 50%,
+    rgba(255, 255, 255, 0.15) 70%,
+    transparent 80%
+  );
+  transform: rotate(25deg);
+  pointer-events: none;
+  animation: fc-shimmer 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-.border-gold-accent {
-  border-color: #D4AF37;
+/* FC Mobile Angular Badges & Shapes */
+.fc-clip-diagonal {
+  clip-path: polygon(0 0, 100% 0, 92% 100%, 0% 100%);
 }
 
-/* Custom Sports Glass & Stadium glow */
+.fc-clip-banner {
+  clip-path: polygon(8% 0%, 92% 0%, 100% 100%, 0% 100%);
+}
+
+.fc-clip-gem {
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+
+/* FC Mobile Turf Pitch Visuals */
+.fc-pitch-turf {
+  background: 
+    repeating-linear-gradient(
+      0deg,
+      #0d3b1e 0px,
+      #0d3b1e 40px,
+      #0b3119 40px,
+      #0b3119 80px
+    );
+  position: relative;
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.8);
+}
+
+.fc-pitch-lines {
+  background-image: 
+    radial-gradient(circle at 50% 50%, transparent 60px, rgba(255,255,255,0.2) 61px, rgba(255,255,255,0.2) 63px, transparent 64px);
+}
+
+/* Custom Sports Glass & Stadium Glow */
 .sports-card {
-  background-color: #0f172a;
-  border: 1px solid #1e293b;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  background-color: #0a0f1d;
+  border: 1px solid #182238;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
 }
 
 .sports-card-active {
-  background-color: #131d35;
-  border: 1px solid rgba(212, 175, 55, 0.4);
-  box-shadow: 0 0 25px -5px rgba(212, 175, 55, 0.18);
+  background-color: #10192e;
+  border: 1px solid rgba(0, 255, 135, 0.5);
+  box-shadow: 0 0 25px -5px rgba(0, 255, 135, 0.25);
 }
 
-.pitch-grass {
-  background: radial-gradient(circle at 50% 50%, #15803d 0%, #166534 60%, #14532d 100%);
+/* ============================================================
+   FC 26 SELECTABLE THEME MODES
+   ============================================================ */
+
+body.theme-royal-gold {
+  --color-canvas: #06080e;
+  --color-header: #0a0d16;
+  --color-surface: #0e1320;
+  --color-surface-elevated: #161e33;
+  --color-line: #2e2612;
+  --color-volt: #D4AF37;
+  --color-gold: #FFE27D;
 }
 
-.pitch-strip {
-  background: linear-gradient(180deg, #d97706 0%, #b45309 50%, #d97706 100%);
+body.theme-emerald-stadium {
+  --color-canvas: #020c06;
+  --color-header: #04140a;
+  --color-surface: #071e10;
+  --color-surface-elevated: #0d2e1a;
+  --color-line: #104222;
+  --color-volt: #10B981;
 }
 
-/* Score highlight animations */
-@keyframes pulse-subtle {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(1.03); }
+body.theme-cyberpunk-crimson {
+  --color-canvas: #0c0408;
+  --color-header: #14070e;
+  --color-surface: #1e0915;
+  --color-surface-elevated: #2e1022;
+  --color-line: #421028;
+  --color-volt: #FF1E56;
 }
 
-.animate-score-pulse {
-  animation: pulse-subtle 0.6s ease-in-out 2;
+body.theme-champions-cyan {
+  --color-canvas: #020914;
+  --color-header: #041022;
+  --color-surface: #081933;
+  --color-surface-elevated: #0f284f;
+  --color-line: #133363;
+  --color-volt: #00E5FF;
+}
+
+body.theme-stealth-carbon {
+  --color-canvas: #050505;
+  --color-header: #0a0a0a;
+  --color-surface: #121212;
+  --color-surface-elevated: #1c1c1c;
+  --color-line: #282828;
+  --color-volt: #E2E8F0;
 }
 
 /* Custom scrollbars */
@@ -133,14 +221,14 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #0a0c12;
+  background: #04060c;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #182238;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #243454;
 }

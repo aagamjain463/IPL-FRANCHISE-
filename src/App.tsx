@@ -6,6 +6,7 @@ import { AuctionLayout } from './layouts/AuctionLayout';
 import { MatchLayout } from './layouts/MatchLayout';
 import { DashboardView } from './components/DashboardView';
 import { AuctionView } from './components/AuctionView';
+import { MultiplayerAuctionHome } from './components/multiplayer/MultiplayerAuctionHome';
 import { PlayCenterView } from './components/PlayCenterView';
 import { PlayingXIView } from './components/PlayingXIView';
 import { SquadManagementView } from './components/SquadManagementView';
@@ -20,6 +21,8 @@ import { RewardsCenterView } from './components/RewardsCenterView';
 import { ChallengesView } from './components/ChallengesView';
 import { WhatIfView } from './components/WhatIfView';
 import { ProfileLegacyView } from './components/ProfileLegacyView';
+import { FCEvolutionView } from './components/fc26/FCEvolutionView';
+import { FCIQTacticsRadar } from './components/fc26/FCIQTacticsRadar';
 import { MatchLiveView } from './components/MatchLiveView';
 import { PressConferenceView } from './components/PressConferenceView';
 import { PostMatchPresentationView } from './components/PostMatchPresentationView';
@@ -75,7 +78,16 @@ const GameContent: React.FC = () => {
     );
   }
 
-  // 2. DEDICATED LIVE MATCH ARENA
+  // 2. DEDICATED LIVE MULTIPLAYER AUCTION WAR ROOM
+  if (currentScreen === 'MultiplayerAuction' || activeTab === 'MultiplayerAuction') {
+    return (
+      <MainAppLayout>
+        <MultiplayerAuctionHome />
+      </MainAppLayout>
+    );
+  }
+
+  // 3. DEDICATED LIVE MATCH ARENA
   if (currentScreen === 'MatchLive' || activeTab === 'MatchLive') {
     return (
       <MatchLayout>
@@ -84,7 +96,7 @@ const GameContent: React.FC = () => {
     );
   }
 
-  // 3. PRESS CONFERENCE & POST-MATCH PRESENTATION MODES
+  // 4. PRESS CONFERENCE & POST-MATCH PRESENTATION MODES
   if (currentScreen === 'PressConference' || currentScreen === 'PostMatchPresentation') {
     return (
       <MainAppLayout>
@@ -93,7 +105,7 @@ const GameContent: React.FC = () => {
     );
   }
 
-  // 4. STANDARD FRANCHISE HOME SHELL (MainAppLayout with Navbar & Global Tabs)
+  // 5. STANDARD FRANCHISE HOME SHELL (MainAppLayout with Navbar & Global Tabs)
   return (
     <MainAppLayout>
       {activeTab === 'Dashboard' && <DashboardView />}
@@ -112,6 +124,9 @@ const GameContent: React.FC = () => {
       {activeTab === 'Challenges' && <ChallengesView />}
       {activeTab === 'WhatIfSimulator' && <WhatIfView />}
       {activeTab === 'Profile' && <ProfileLegacyView />}
+      {activeTab === 'FCEvolutions' && <FCEvolutionView />}
+      {activeTab === 'TacticsRadar' && <FCIQTacticsRadar />}
+      {activeTab === 'MultiplayerAuction' && <MultiplayerAuctionHome />}
     </MainAppLayout>
   );
 };

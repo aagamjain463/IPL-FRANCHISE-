@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useGame } from '../context/GameContext';
+import { FCPlayerCard } from './fc26/FCPlayerCard';
+import { FCPackOpeningModal } from './fc26/FCPackOpeningModal';
+import { getPlayerPlayStylePlus } from '../engine/fc26Engine';
 import { 
-  Trophy, Zap, Shield, TrendingUp, 
-  Flame, Award, ArrowRight, Activity, Newspaper, Target,
-  Calendar, CheckCircle2, Gift, Sparkles, ShoppingBag, Users, Building2, MapPin, Clock
+  Trophy, Zap, Shield, Sparkles, ShoppingBag, Users, MapPin, 
+  Dumbbell, Gift, ArrowRight, Radio
 } from 'lucide-react';
 import { getFranchiseLevelInfo, INITIAL_OBJECTIVES } from '../engine/progressionEngine';
 
@@ -16,6 +18,8 @@ export const DashboardView: React.FC = () => {
     setSelectedPlayerForModal 
   } = useGame();
 
+  const [walkoutPlayer, setWalkoutPlayer] = useState<any | null>(null);
+
   if (!gameState) return null;
 
   const userTeam = gameState.teams[gameState.userTeamId];
@@ -23,30 +27,23 @@ export const DashboardView: React.FC = () => {
   const nextFixture = schedule[gameState.currentFixtureIndex];
   const fixtureTeamA = nextFixture ? gameState.teams[nextFixture.teamAId] : null;
   const fixtureTeamB = nextFixture ? gameState.teams[nextFixture.teamBId] : null;
-  const isUserInNextMatch = nextFixture 
-    ? (nextFixture.teamAId === gameState.userTeamId || nextFixture.teamBId === gameState.userTeamId) 
-    : false;
-  
-  const fixtureOpponentTeam = isUserInNextMatch 
-    ? (fixtureTeamA?.id === gameState.userTeamId ? fixtureTeamB : fixtureTeamA)
-    : (fixtureTeamB || fixtureTeamA);
 
   const rosterIds = userTeam?.rosterPlayerIds || [];
   const userPlayers = rosterIds.map(id => gameState.allPlayers[id]).filter(Boolean);
-  const overseasCount = userPlayers.filter(p => p.isOverseas).length;
 
-  // Squad OVR: average overall rating of the confirmed Playing XI (falls back to full roster)
+  // Squad OVR & Chemistry
   const xiIds = userTeam?.playingXI?.playingXIIds?.length ? userTeam.playingXI.playingXIIds : rosterIds.slice(0, 11);
   const xiPlayers = xiIds.map(id => gameState.allPlayers[id]).filter(Boolean);
   const squadOVR = xiPlayers.length > 0
     ? Math.round(xiPlayers.reduce((sum, p) => sum + p.overall, 0) / xiPlayers.length)
-    : 0;
+    : 88;
+
+  const teamChemistry = Math.min(100, Math.round(88 + (xiPlayers.filter(p => !p.isOverseas).length * 1.5)));
 
   const standingsList = gameState.standings || [];
   const userStanding = standingsList.find(s => s.teamId === gameState.userTeamId);
   const userRank = standingsList.findIndex(s => s.teamId === gameState.userTeamId) + 1;
 
-  // Ordinal Rank Formatting (1st, 2nd, 3rd...)
   const rankOrdinal = (n: number) => {
     const s = ['th', 'st', 'nd', 'rd'];
     const v = n % 100;
@@ -59,144 +56,103 @@ export const DashboardView: React.FC = () => {
   const objectives = progression?.objectives || INITIAL_OBJECTIVES;
   const completedObjs = objectives.filter(o => o.isCompleted).length;
   const totalObjs = objectives.length || 5;
-  const unclaimedRewards = progression?.unclaimedRewardsCount || 0;
 
-  // Top Key Performer
-  const topPerformer = userPlayers.length > 0 
-    ? [...userPlayers].sort((a, b) => (b.stats.runs + b.stats.wickets * 20) - (a.stats.runs + a.stats.wickets * 20))[0]
-    : null;
-
-  // News snippet
+  // Star Captain
+  const captainPlayer = userTeam?.captainId ? gameState.allPlayers[userTeam.captainId] : userPlayers[0];
+  const captainPlayStyle = captainPlayer ? getPlayerPlayStylePlus(captainPlayer) : null;
+  const youthProspects = userPlayers.filter(p => p.isYouthProspect || p.age <= 23);
   const latestNews = gameState.newsFeed && gameState.newsFeed.length > 0 ? gameState.newsFeed[0] : null;
 
   return (
-    <div className="space-y-5 pb-12 animate-fadeIn max-w-6xl mx-auto font-sans">
+    <div className="space-y-5 pb-14 animate-fadeIn max-w-7xl mx-auto font-sans select-none">
       
-      {/* 1. FRANCHISE STATUS HEADER STRIP */}
-      <div className="bg-surface-deep rounded-2xl p-4 sm:p-5 border border-line shadow-xl flex flex-wrap items-center justify-between gap-4">
-        {/* Franchise Identity */}
-        <div className="flex items-center gap-3.5">
+      {/* 1. MINIMALIST FRANCHISE SUMMARY BAR */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-[#090e1a] border border-[#141d2e] shadow-sm flex flex-wrap items-center justify-between gap-4">
+        
+        {/* Franchise Title & Match Tracker */}
+        <div className="flex items-center gap-3">
           <div 
-            className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center font-black text-lg sm:text-xl shadow-lg border border-white/20 select-none shrink-0"
+            className="w-11 h-11 rounded-xl flex items-center justify-center font-bold text-base shadow border border-[#00FF87]/50 select-none shrink-0"
             style={{ 
-              background: `linear-gradient(135deg, ${userTeam?.primaryColor || '#D4AF37'}, ${userTeam?.secondaryColor || '#1e3a8a'})`,
-              color: '#ffffff'
+              backgroundColor: userTeam?.primaryColor || '#0a0f1d',
+              color: userTeam?.secondaryColor || '#ffffff'
             }}
           >
             {userTeam?.shortName}
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase font-black tracking-widest text-gold px-2 py-0.5 rounded-full bg-gold/10 border border-gold/20">
-                SEASON {gameState.currentSeason}
-              </span>
-              <span className="text-[10px] uppercase font-bold text-ink-faint">
-                MATCH {gameState.currentFixtureIndex + 1} OF {schedule.length || 14}
-              </span>
+            <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+              <span>Season {gameState.currentSeason}</span>
+              <span>•</span>
+              <span>Match {gameState.currentFixtureIndex + 1} of {schedule.length || 14}</span>
             </div>
-            <h2 className="text-base sm:text-xl font-black text-white uppercase italic tracking-tight">
+            <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
               {userTeam?.name}
             </h2>
           </div>
         </div>
 
-        {/* Key High-Level Sports Indicators */}
-        <div className="flex items-center gap-3 sm:gap-6 ml-auto flex-wrap">
-          {/* Squad OVR */}
-          <div className="text-center sm:text-right">
-            <p className="text-[9px] uppercase font-bold tracking-widest text-ink-faint">Squad OVR</p>
-            <p className="text-base sm:text-lg font-black font-mono text-gold leading-tight">
-              {squadOVR || '—'}
-            </p>
+        {/* Crisp Metric Chips */}
+        <div className="flex items-center gap-4 sm:gap-6 ml-auto flex-wrap text-right font-mono">
+          <div>
+            <p className="text-[10px] text-slate-400 font-medium uppercase">SQUAD OVR</p>
+            <p className="text-lg font-bold text-[#00FF87]">{squadOVR}</p>
           </div>
 
-          <div className="h-7 w-px bg-line hidden sm:block" />
+          <div className="h-6 w-px bg-[#141d2e] hidden sm:block" />
 
-          {/* League Position */}
-          <div className="text-center sm:text-right">
-            <p className="text-[9px] uppercase font-bold tracking-widest text-ink-faint">Standing</p>
-            <p className="text-base sm:text-lg font-black font-mono text-blue-400 leading-tight">
-              {userStanding ? rankOrdinal(userRank) : '—'}
-            </p>
+          <div>
+            <p className="text-[10px] text-slate-400 font-medium uppercase">CHEMISTRY</p>
+            <p className="text-lg font-bold text-cyan-400">{teamChemistry}%</p>
           </div>
 
-          <div className="h-7 w-px bg-line hidden sm:block" />
+          <div className="h-6 w-px bg-[#141d2e] hidden sm:block" />
 
-          {/* Form Streak */}
-          <div className="text-center sm:text-right">
-            <p className="text-[9px] uppercase font-bold tracking-widest text-ink-faint">Record & Form</p>
-            <div className="flex items-center gap-1.5 justify-end mt-0.5">
-              <span className="text-xs sm:text-sm font-black text-white font-mono">
-                {userStanding?.won || 0}W-{userStanding?.lost || 0}L
-              </span>
-              {userStanding?.recentForm && userStanding.recentForm.length > 0 && (
-                <span className="flex items-center gap-0.5 ml-1">
-                  {userStanding.recentForm.map((result, i) => (
-                    <span
-                      key={i}
-                      title={result === 'W' ? 'Win' : result === 'L' ? 'Loss' : 'Tie'}
-                      className={`w-4 h-4 rounded-[4px] flex items-center justify-center text-[8px] font-black ${
-                        result === 'W'
-                          ? 'bg-success/20 text-success border border-success/40'
-                          : result === 'L'
-                          ? 'bg-danger/20 text-danger border border-danger/40'
-                          : 'bg-ink-faint/20 text-ink-muted border border-ink-faint/40'
-                      }`}
-                    >
-                      {result}
-                    </span>
-                  ))}
-                </span>
-              )}
-            </div>
+          <div>
+            <p className="text-[10px] text-slate-400 font-medium uppercase">LEAGUE RANK</p>
+            <p className="text-lg font-bold text-amber-400">{userStanding ? rankOrdinal(userRank) : '1st'}</p>
           </div>
 
-          <div className="h-7 w-px bg-line hidden sm:block" />
+          <div className="h-6 w-px bg-[#141d2e] hidden sm:block" />
 
-          {/* Purse */}
-          <div className="text-center sm:text-right">
-            <p className="text-[9px] uppercase font-bold tracking-widest text-ink-faint">Purse Available</p>
-            <p className="text-base sm:text-lg font-black font-mono text-gold leading-tight">
-              ₹{userTeam?.purseCr.toFixed(2)} Cr
+          <div>
+            <p className="text-[10px] text-slate-400 font-medium uppercase">RECORD</p>
+            <p className="text-lg font-bold text-white">
+              {userStanding?.won || 0}W - {userStanding?.lost || 0}L
             </p>
           </div>
         </div>
       </div>
 
-      {/* 2. HERO: NEXT MATCH CARD (High-Impact Sports Presentation) */}
-      {nextFixture && fixtureTeamA && fixtureTeamB ? (
-        <div className="relative bg-gradient-to-b from-[#0e1628] via-[#090e1a] to-[#060a12] rounded-3xl border border-line overflow-hidden shadow-2xl p-6 sm:p-8">
-          {/* Subtle Ambient Stadium Backlight */}
-          <div 
-            className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-48 blur-3xl opacity-20 pointer-events-none rounded-full"
-            style={{ backgroundColor: userTeam?.primaryColor || '#D4AF37' }}
-          />
+      {/* 2. MAIN HUB GRID: CLEAN MATCHDAY ARENA + STAR PLAYER */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        
+        {/* MATCHDAY ARENA (8 COLS) */}
+        <div className="lg:col-span-8 p-6 rounded-2xl bg-[#090e1a] border border-[#141d2e] shadow-sm flex flex-col justify-between space-y-6">
+          
+          {/* Top Fixture Info */}
+          <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+            <span className="flex items-center gap-1.5 text-[#00FF87] font-semibold">
+              <Zap className="w-3.5 h-3.5" />
+              MATCHDAY {nextFixture ? nextFixture.matchNumber : 1}
+            </span>
+            <span className="flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-slate-500" />
+              {nextFixture?.venue || 'Stadium'}
+            </span>
+          </div>
 
-          <div className="relative z-10 flex flex-col items-center text-center space-y-5">
-            
-            {/* Top Match Info Badge */}
-            <div className="flex items-center gap-2">
-              <div className="px-3 py-1 rounded-full bg-line/80 border border-white/10 text-[10px] font-black uppercase tracking-widest text-amber-300 flex items-center gap-1.5 shadow-sm">
-                <Calendar className="w-3 h-3 text-gold" />
-                <span>MATCHDAY {nextFixture.matchNumber}</span>
-              </div>
-              <div className="px-3 py-1 rounded-full bg-surface/80 border border-white/10 text-[10px] font-bold uppercase tracking-wider text-ink-muted flex items-center gap-1.5">
-                <MapPin className="w-3 h-3 text-blue-400" />
-                <span>{nextFixture.venue}</span>
-              </div>
-            </div>
-
-            {/* Visual Matchup: Team A vs Team B */}
-            <div className="flex items-center justify-center space-x-6 sm:space-x-12 my-2 w-full max-w-xl">
-              
+          {/* Visual Matchup: Team A vs Team B */}
+          {nextFixture && fixtureTeamA && fixtureTeamB ? (
+            <div className="flex items-center justify-center space-x-6 sm:space-x-12 my-1">
               {/* Home Team */}
               <div 
                 onClick={() => setActiveTab('PlayingXI')}
                 className="flex-1 flex flex-col items-center cursor-pointer group"
               >
                 <div 
-                  className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl flex items-center justify-center font-black text-2xl sm:text-3xl shadow-2xl border-2 transition-transform group-hover:scale-105 ${
-                    fixtureTeamA.id === gameState.userTeamId ? 'border-gold ring-4 ring-gold/20' : 'border-white/20'
+                  className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center font-bold text-xl sm:text-2xl shadow border transition-transform duration-200 group-hover:scale-105 ${
+                    fixtureTeamA.id === gameState.userTeamId ? 'border-[#00FF87]' : 'border-white/10'
                   }`}
                   style={{ 
                     backgroundColor: fixtureTeamA.primaryColor || '#1e40af', 
@@ -205,20 +161,17 @@ export const DashboardView: React.FC = () => {
                 >
                   {fixtureTeamA.shortName}
                 </div>
-                <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-white mt-2.5 group-hover:text-gold transition">
+                <h3 className="text-xs sm:text-sm font-bold text-white mt-2 group-hover:text-[#00FF87] transition truncate max-w-[120px]">
                   {fixtureTeamA.name}
                 </h3>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 mt-0.5">
-                  {fixtureTeamA.id === gameState.userTeamId ? 'YOUR TEAM (HOME)' : 'HOME'}
+                <span className="text-[10px] font-mono text-slate-400">
+                  {fixtureTeamA.id === gameState.userTeamId ? 'Your Club' : 'Home'}
                 </span>
               </div>
 
-              {/* VS Badge */}
-              <div className="flex flex-col items-center">
-                <div className="w-10 h-10 rounded-full bg-line border border-white/10 flex items-center justify-center font-black text-xs italic text-ink-muted shadow-inner">
-                  VS
-                </div>
-                <span className="text-[9px] uppercase font-bold text-ink-faint mt-1 tracking-widest">T20</span>
+              {/* VS Divider */}
+              <div className="text-slate-500 font-mono font-bold text-xs uppercase tracking-wider px-3 py-1 rounded-lg bg-[#0e1624] border border-[#141d2e]">
+                VS
               </div>
 
               {/* Away Team */}
@@ -227,8 +180,8 @@ export const DashboardView: React.FC = () => {
                 className="flex-1 flex flex-col items-center cursor-pointer group"
               >
                 <div 
-                  className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl flex items-center justify-center font-black text-2xl sm:text-3xl shadow-2xl border-2 transition-transform group-hover:scale-105 ${
-                    fixtureTeamB.id === gameState.userTeamId ? 'border-gold ring-4 ring-gold/20' : 'border-white/20'
+                  className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center font-bold text-xl sm:text-2xl shadow border transition-transform duration-200 group-hover:scale-105 ${
+                    fixtureTeamB.id === gameState.userTeamId ? 'border-[#00FF87]' : 'border-white/10'
                   }`}
                   style={{ 
                     backgroundColor: fixtureTeamB.primaryColor || '#dc2626', 
@@ -237,192 +190,221 @@ export const DashboardView: React.FC = () => {
                 >
                   {fixtureTeamB.shortName}
                 </div>
-                <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-white mt-2.5 group-hover:text-gold transition">
+                <h3 className="text-xs sm:text-sm font-bold text-white mt-2 group-hover:text-[#00FF87] transition truncate max-w-[120px]">
                   {fixtureTeamB.name}
                 </h3>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-ink-muted mt-0.5">
-                  {fixtureTeamB.id === gameState.userTeamId ? 'YOUR TEAM (AWAY)' : 'AWAY'}
+                <span className="text-[10px] font-mono text-slate-400">
+                  {fixtureTeamB.id === gameState.userTeamId ? 'Your Club' : 'Away'}
                 </span>
               </div>
             </div>
+          ) : null}
 
-            {/* Tactical Pitch Summary Preview */}
-            <p className="text-xs text-ink-muted max-w-md italic">
-              {fixtureOpponentTeam 
-                ? `Opposition Danger: Captain ${gameState.allPlayers[fixtureOpponentTeam.captainId]?.name || 'Top Lineup'}. Optimize bowling matchups for powerplay.`
-                : 'Review team combinations and confirm your Playing XI before kickoff.'}
-            </p>
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+            <button
+              id="btn-adjust-squad-hero"
+              onClick={() => setActiveTab('PlayingXI')}
+              className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-[#0e1624] hover:bg-[#162136] text-white font-semibold text-xs border border-[#141d2e] transition cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Users className="w-4 h-4 text-slate-400" />
+              <span>Squad Tactics</span>
+            </button>
 
-            {/* Primary Action Button (Large & Dominant) */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-md pt-2">
-              {isUserInNextMatch && (
-                <button
-                  id="btn-adjust-squad-hero"
-                  onClick={() => setActiveTab('PlayingXI')}
-                  className="w-full sm:flex-1 py-3 px-5 rounded-2xl bg-line hover:bg-[#2b3a4f] text-white font-black text-xs uppercase tracking-wider border border-white/10 transition cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <Users className="w-4 h-4 text-gold" />
-                  <span>Adjust Playing XI</span>
-                </button>
-              )}
+            <button
+              id="btn-play-match-hero"
+              onClick={() => prepareMatch(nextFixture?.id || 'm_1')}
+              className="w-full sm:flex-1 py-2.5 px-5 rounded-xl bg-[#00FF87] hover:bg-[#00e57a] text-black font-bold text-xs uppercase tracking-wider transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-95"
+            >
+              <Zap className="w-4 h-4 fill-black" />
+              <span>Play Matchday</span>
+            </button>
+          </div>
 
+        </div>
+
+        {/* STAR PLAYER SHOWCASE (4 COLS) */}
+        <div className="lg:col-span-4 p-5 rounded-2xl bg-[#090e1a] border border-[#141d2e] shadow-sm flex flex-col items-center justify-between text-center space-y-4">
+          
+          <div className="w-full flex items-center justify-between text-xs">
+            <span className="text-slate-400 font-medium flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              Star Player
+            </span>
+            {captainPlayer && (
               <button
-                id="btn-play-match-hero"
-                onClick={() => prepareMatch(nextFixture.id)}
-                className="w-full sm:flex-1 py-3.5 px-6 rounded-2xl bg-gradient-to-r from-gold via-amber-400 to-amber-300 text-black font-black text-xs sm:text-sm uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform flex items-center justify-center gap-2 shadow-xl shadow-gold/20 cursor-pointer"
+                onClick={() => setWalkoutPlayer(captainPlayer)}
+                className="text-[11px] text-amber-400 hover:text-amber-300 font-mono transition cursor-pointer"
               >
-                <Zap className="w-4 h-4 fill-black" />
-                <span>{isUserInNextMatch ? 'PLAY MATCH' : 'SIMULATE MATCH'}</span>
+                Walkout ✨
               </button>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-[#0e1628] rounded-3xl border border-line p-8 text-center shadow-2xl">
-          <Trophy className="w-12 h-12 text-gold mx-auto mb-3" />
-          <h3 className="text-lg font-black text-white uppercase tracking-tight">League Fixtures Concluded</h3>
-          <p className="text-xs text-ink-muted mt-1">Review the final standings or initiate the next season campaign.</p>
-        </div>
-      )}
-
-      {/* 3. DYNAMIC HUB CARDS (Minimalist, High Usability, No Clutter) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* CARD 1: DAILY OBJECTIVES */}
-        <div className="bg-surface-deep rounded-2xl p-4 sm:p-5 border border-line shadow-lg flex flex-col justify-between space-y-4 hover:border-gold/30 transition group">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-black tracking-widest text-ink-faint flex items-center gap-1.5">
-                <Target className="w-3.5 h-3.5 text-blue-400" />
-                OBJECTIVES
-              </span>
-              <span className="text-xs font-mono font-bold text-blue-400">{completedObjs}/{totalObjs}</span>
-            </div>
-            <h4 className="text-sm font-black text-white uppercase tracking-tight mt-2">Daily Missions</h4>
-            <p className="text-xs text-ink-muted mt-1">
-              {completedObjs === totalObjs 
-                ? 'All objectives finished! Claim your XP bonuses.' 
-                : 'Win matches, scout talent, and hit match targets.'}
-            </p>
+            )}
           </div>
 
-          <div>
-            <div className="w-full bg-canvas rounded-full h-2 overflow-hidden mb-3 border border-line">
-              <div 
-                className="bg-blue-500 h-2 rounded-full transition-all duration-500" 
-                style={{ width: `${Math.min(100, (completedObjs / Math.max(1, totalObjs)) * 100)}%` }} 
-              />
-            </div>
-            <button
-              onClick={() => setActiveTab('Rewards')}
-              className="w-full py-2.5 rounded-xl bg-line group-hover:bg-blue-600 group-hover:text-white text-xs font-black uppercase tracking-wider text-blue-300 transition cursor-pointer flex items-center justify-center gap-1.5"
+          {captainPlayer ? (
+            <div 
+              className="cursor-pointer transition-transform duration-200 hover:scale-102"
+              onClick={() => setSelectedPlayerForModal(captainPlayer)}
+              title="Inspect Player Stats"
             >
-              <span>View Missions</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-
-        {/* CARD 2: REWARDS & CLAIM */}
-        <div className="bg-surface-deep rounded-2xl p-4 sm:p-5 border border-line shadow-lg flex flex-col justify-between space-y-4 hover:border-amber-500/30 transition group">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-black tracking-widest text-ink-faint flex items-center gap-1.5">
-                <Gift className="w-3.5 h-3.5 text-amber-400" />
-                REWARDS
-              </span>
-              {unclaimedRewards > 0 ? (
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-black text-[10px] border border-amber-500/30 animate-pulse">
-                  {unclaimedRewards} READY
-                </span>
-              ) : (
-                <span className="text-[10px] font-bold text-ink-faint">CLAIMED</span>
-              )}
+              <FCPlayerCard player={captainPlayer} size="md" />
             </div>
-            <h4 className="text-sm font-black text-white uppercase tracking-tight mt-2">Dynasty Unlocks</h4>
-            <p className="text-xs text-ink-muted mt-1">
-              {unclaimedRewards > 0 
-                ? `${unclaimedRewards} unlocked rewards waiting in the vault.` 
-                : `Level up to LV ${levelInfo.level + 1} to unlock elite scout perks.`}
-            </p>
-          </div>
+          ) : (
+            <div className="p-8 text-xs text-slate-500 font-mono">No captain assigned</div>
+          )}
 
-          <div>
-            <button
-              onClick={() => setActiveTab('Rewards')}
-              className={`w-full py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-1.5 ${
-                unclaimedRewards > 0 
-                  ? 'bg-gradient-to-r from-amber-500 to-gold text-black shadow-lg shadow-amber-500/20 hover:scale-102' 
-                  : 'bg-line group-hover:bg-line-strong text-amber-300'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{unclaimedRewards > 0 ? 'Claim Rewards' : 'Open Vault'}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* CARD 3: SCOUTING RADAR */}
-        <div className="bg-surface-deep rounded-2xl p-4 sm:p-5 border border-line shadow-lg flex flex-col justify-between space-y-4 hover:border-purple-500/30 transition group">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-black tracking-widest text-ink-faint flex items-center gap-1.5">
-                <Award className="w-3.5 h-3.5 text-purple-400" />
-                SCOUTING
-              </span>
-              <span className="text-[10px] font-bold text-purple-400 font-mono">POOL ACTIVE</span>
+          <div className="w-full pt-2 border-t border-[#141d2e] flex items-center justify-between text-left">
+            <div>
+              <span className="text-[10px] text-slate-500 uppercase font-mono">Signature Trait</span>
+              <p className="text-xs font-bold text-amber-300">
+                {captainPlayStyle ? captainPlayStyle.name : 'Master Finisher'}
+              </p>
             </div>
-            <h4 className="text-sm font-black text-white uppercase tracking-tight mt-2">Talent Radar</h4>
-            <p className="text-xs text-ink-muted mt-1">
-              Scout top wonderkids and shortlist marquee targets for upcoming auction.
-            </p>
-          </div>
-
-          <div>
             <button
               onClick={() => setActiveTab('YouthAcademy')}
-              className="w-full py-2.5 rounded-xl bg-line group-hover:bg-purple-600 group-hover:text-white text-xs font-black uppercase tracking-wider text-purple-300 transition cursor-pointer flex items-center justify-center gap-1.5"
+              className="px-2.5 py-1 rounded-lg bg-[#0e1624] hover:bg-[#162136] border border-[#141d2e] text-[#00FF87] text-xs font-medium transition cursor-pointer flex items-center gap-1"
             >
-              <span>Explore Scouts</span>
-              <ArrowRight className="w-3 h-3" />
+              <Dumbbell className="w-3 h-3" />
+              <span>Evo</span>
             </button>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* 3. FOUR MINIMALIST FEATURE CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        
+        {/* CARD 1: LIVE AUCTION */}
+        <div 
+          onClick={() => {
+            setCurrentScreen('Auction');
+            setActiveTab('AuctionLive');
+          }}
+          className="p-4 rounded-xl bg-[#090e1a] border border-[#141d2e] hover:border-slate-600 hover:bg-[#0e1624] transition cursor-pointer flex flex-col justify-between space-y-3 group"
+        >
+          <div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
+                Live Auction
+              </span>
+              <span className="text-[11px] font-mono text-amber-400 font-bold">
+                ₹{userTeam?.purseCr.toFixed(1)} Cr
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+              Scout marquee players, place competitive bids, and build your championship squad.
+            </p>
+          </div>
+          <div className="flex items-center justify-between text-xs font-semibold text-amber-400 group-hover:text-amber-300">
+            <span>Enter Auction</span>
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </div>
 
-        {/* CARD 4: FRANCHISE WIRE / NEWS */}
-        <div className="bg-surface-deep rounded-2xl p-4 sm:p-5 border border-line shadow-lg flex flex-col justify-between space-y-4 hover:border-emerald-500/30 transition group">
+        {/* CARD 2: EVOLUTIONS LAB */}
+        <div 
+          onClick={() => setActiveTab('YouthAcademy')}
+          className="p-4 rounded-xl bg-[#090e1a] border border-[#141d2e] hover:border-slate-600 hover:bg-[#0e1624] transition cursor-pointer flex flex-col justify-between space-y-3 group"
+        >
           <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-black tracking-widest text-ink-faint flex items-center gap-1.5">
-                <Newspaper className="w-3.5 h-3.5 text-emerald-400" />
-                IPL NEWS
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <Dumbbell className="w-3.5 h-3.5 text-[#00FF87]" />
+                Evolution Lab
               </span>
-              <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> LIVE
+              <span className="text-[11px] font-mono text-[#00FF87] font-bold">
+                {youthProspects.length} Youth
               </span>
             </div>
-            <h4 className="text-sm font-black text-white uppercase tracking-tight mt-2 truncate">
-              {latestNews ? latestNews.title : 'Trade Window Open'}
-            </h4>
-            <p className="text-xs text-ink-muted mt-1 line-clamp-2">
-              {latestNews ? latestNews.summary : 'Franchises finalizing player retention lists and auction purse allocations.'}
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+              Upgrade prodigies through targeted training drills and unlock PlayStyles+.
             </p>
           </div>
+          <div className="flex items-center justify-between text-xs font-semibold text-[#00FF87] group-hover:text-emerald-300">
+            <span>Evolve Squad</span>
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </div>
 
+        {/* CARD 3: LEAGUE STANDINGS */}
+        <div 
+          onClick={() => setActiveTab('Standings')}
+          className="p-4 rounded-xl bg-[#090e1a] border border-[#141d2e] hover:border-slate-600 hover:bg-[#0e1624] transition cursor-pointer flex flex-col justify-between space-y-3 group"
+        >
           <div>
-            <button
-              onClick={() => setActiveTab('TradeCenter')}
-              className="w-full py-2.5 rounded-xl bg-line group-hover:bg-emerald-600 group-hover:text-white text-xs font-black uppercase tracking-wider text-emerald-300 transition cursor-pointer flex items-center justify-center gap-1.5"
-            >
-              <span>Trade Wire</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <Trophy className="w-3.5 h-3.5 text-cyan-400" />
+                Standings
+              </span>
+              <span className="text-[11px] font-mono text-cyan-400 font-bold">
+                Rank {userRank}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+              {userStanding?.points || 0} Points • Net Run Rate {(userStanding?.nrr || 0) >= 0 ? `+${userStanding?.nrr.toFixed(2)}` : userStanding?.nrr.toFixed(2)}
+            </p>
+          </div>
+          <div className="flex items-center justify-between text-xs font-semibold text-cyan-400 group-hover:text-cyan-300">
+            <span>View Table</span>
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </div>
+
+        {/* CARD 4: OBJECTIVES & REWARDS */}
+        <div 
+          onClick={() => setActiveTab('Rewards')}
+          className="p-4 rounded-xl bg-[#090e1a] border border-[#141d2e] hover:border-slate-600 hover:bg-[#0e1624] transition cursor-pointer flex flex-col justify-between space-y-3 group"
+        >
+          <div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <Gift className="w-3.5 h-3.5 text-purple-400" />
+                Objectives
+              </span>
+              <span className="text-[11px] font-mono text-purple-400 font-bold">
+                {completedObjs}/{totalObjs}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+              Manager LV {levelInfo.level} • Complete daily franchise milestones.
+            </p>
+          </div>
+          <div className="flex items-center justify-between text-xs font-semibold text-purple-400 group-hover:text-purple-300">
+            <span>Claim Rewards</span>
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </div>
 
       </div>
 
+      {/* 4. NEWS BANNER */}
+      {latestNews && (
+        <div className="p-3 rounded-xl bg-[#090e1a] border border-[#141d2e] flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] font-bold uppercase tracking-wider shrink-0">
+              News
+            </span>
+            <p className="text-slate-300 truncate">
+              <strong className="text-white">{latestNews.headline}:</strong> {latestNews.content}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* WALKOUT MODAL */}
+      {walkoutPlayer && (
+        <FCPackOpeningModal
+          player={walkoutPlayer}
+          onClose={() => setWalkoutPlayer(null)}
+        />
+      )}
+
     </div>
   );
 };
+
 

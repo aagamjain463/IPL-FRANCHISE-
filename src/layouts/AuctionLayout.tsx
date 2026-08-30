@@ -105,6 +105,19 @@ export const AuctionLayout: React.FC<AuctionLayoutProps> = ({ children }) => {
           {/* Quick Action Navigation Modals */}
           <div className="flex items-center space-x-1.5">
             <button
+              id="btn-switch-multiplayer-auction"
+              onClick={() => {
+                setCurrentScreen('MultiplayerAuction');
+                setActiveTab('MultiplayerAuction');
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-[#D4AF37]/20 to-amber-500/20 hover:from-[#D4AF37]/30 hover:to-amber-500/30 text-[#D4AF37] hover:text-white border border-[#D4AF37]/40 text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Enter Real-Time Live Multiplayer Auction War Rooms"
+            >
+              <Users className="w-3.5 h-3.5 text-[#D4AF37]" />
+              <span className="hidden lg:inline">Multiplayer Room</span>
+            </button>
+
+            <button
               id="btn-auction-history-modal"
               onClick={() => setShowHistoryModal(true)}
               className="px-2.5 py-1.5 rounded-lg bg-[#0f172a] hover:bg-[#1e293b] text-[#94a3b8] hover:text-white border border-[#1e293b] text-xs font-semibold uppercase tracking-wider transition flex items-center gap-1.5 cursor-pointer"

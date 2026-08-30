@@ -12,7 +12,10 @@ export type AppTab =
   | 'Play' // Dedicated Play center (Matchday, Quick Match, Moments, Schedule)
   | 'PlayingXI'
   | 'Squad' // Dedicated Squad & Development
+  | 'FCEvolutions' // FC 26 Wonderkid Evolutions Academy
+  | 'TacticsRadar' // FC IQ 3D Tactical Field & Pitch Radar
   | 'AuctionLive' // Dedicated Auction
+  | 'MultiplayerAuction' // Real-time live multiplayer auction war rooms
   | 'Scout' // Dedicated Scout department
   | 'YouthAcademy'
   | 'TradeCenter' // Market & Transfers
@@ -27,7 +30,7 @@ export type AppTab =
   | 'WhatIfSimulator'
   | 'MatchLive';
 
-export type ScreenView = 'MainMenu' | 'Dashboard' | 'Auction' | 'MatchLive' | 'PressConference' | 'PostMatchPresentation';
+export type ScreenView = 'MainMenu' | 'Dashboard' | 'Auction' | 'MultiplayerAuction' | 'MatchLive' | 'PressConference' | 'PostMatchPresentation';
 export type GameScreen = ScreenView;
 
 export interface NewsArticle {
@@ -102,6 +105,23 @@ export interface SeasonHistoryRecord {
   userRecord: string;
 }
 
+export type FCThemeMode = 
+  | 'fc_neon_dark' 
+  | 'royal_gold' 
+  | 'emerald_stadium' 
+  | 'cyberpunk_crimson' 
+  | 'champions_cyan' 
+  | 'stealth_carbon';
+
+export interface GoogleAccountProfile {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl: string;
+  isLoggedIn: boolean;
+  lastCloudSyncedAt: number;
+}
+
 export interface GameSave {
   id?: string;
   saveId?: string;
@@ -113,6 +133,8 @@ export interface GameSave {
   managerName: string;
   userTeamId: string;
   userRole?: string;
+  themeMode?: FCThemeMode;
+  googleProfile?: GoogleAccountProfile | null;
   teams: Record<string, Team>;
   allPlayers: Record<string, Player>;
   standings: StandingsRow[];

@@ -26,11 +26,11 @@ export const AuctionView: React.FC = () => {
   const { 
     gameState, 
     placeUserBid, 
-    passUserBid, 
     fastForwardAuctionPlayer,
     simulateEntireAuction,
     simulateCurrentAuctionSet,
     toggleAutoBid,
+    togglePauseAuction,
     switchUserFranchise,
     restartGame,
     setSelectedPlayerForModal,
@@ -47,7 +47,6 @@ export const AuctionView: React.FC = () => {
   const [showSimConfirmModal, setShowSimConfirmModal] = useState<boolean>(false);
   const [showFranchiseModal, setShowFranchiseModal] = useState<boolean>(false);
   const [simFromBeginningOption, setSimFromBeginningOption] = useState<boolean>(false);
-  const [isAuctionPaused, setIsAuctionPaused] = useState<boolean>(false);
   const [showQuitModal, setShowQuitModal] = useState<boolean>(false);
   
   // Squads view state
@@ -246,22 +245,35 @@ export const AuctionView: React.FC = () => {
                 10
               </span>
             </button>
+
+            <button
+              id="btn-switch-multiplayer-from-auction-view"
+              onClick={() => {
+                setCurrentScreen('MultiplayerAuction');
+                setActiveTab('MultiplayerAuction');
+              }}
+              className="px-3.5 py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5 bg-gradient-to-r from-blue-600/30 to-indigo-600/30 hover:from-blue-600/50 hover:to-indigo-600/50 text-blue-300 border border-blue-400/30 cursor-pointer shadow"
+              title="Switch to Real-Time Live Multiplayer Auction War Room"
+            >
+              <Users className="w-4 h-4 text-blue-400" />
+              <span>🌐 Live Multiplayer</span>
+            </button>
           </div>
 
           {/* Auction Control Actions */}
           <div className="flex items-center gap-2">
             <button
               id="btn-pause-auction"
-              onClick={() => setIsAuctionPaused(!isAuctionPaused)}
+              onClick={togglePauseAuction}
               className={`px-3.5 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition border flex items-center gap-1.5 cursor-pointer ${
-                isAuctionPaused
-                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 animate-pulse'
+                gameState.auctionState?.isPaused
+                  ? 'bg-amber-500/25 text-amber-300 border-amber-500/60 ring-2 ring-amber-500/40 animate-pulse'
                   : 'bg-[#05070a] hover:bg-[#1e293b] text-[#e2e8f0] border-[#1e293b]'
               }`}
-              title={isAuctionPaused ? 'Resume Auction' : 'Pause Auction'}
+              title={gameState.auctionState?.isPaused ? 'Resume Live Auction' : 'Pause Live Auction'}
             >
-              {isAuctionPaused ? <Play className="w-3.5 h-3.5 text-amber-400" /> : <Clock className="w-3.5 h-3.5 text-[#D4AF37]" />}
-              <span>{isAuctionPaused ? 'Resume Auction' : 'Pause Auction'}</span>
+              {gameState.auctionState?.isPaused ? <Play className="w-3.5 h-3.5 text-amber-400" /> : <Clock className="w-3.5 h-3.5 text-[#D4AF37]" />}
+              <span>{gameState.auctionState?.isPaused ? 'Resume Auction' : 'Pause Auction'}</span>
             </button>
 
             <button
@@ -534,7 +546,7 @@ export const AuctionView: React.FC = () => {
                   </div>
 
                   {/* Bidding Interaction Buttons / Paddles */}
-                  <div className="pt-4 border-t border-[#1e293b] grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="pt-4 border-t border-[#1e293b] grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       id="btn-raise-bid"
                       onClick={placeUserBid}
@@ -556,20 +568,12 @@ export const AuctionView: React.FC = () => {
                     </button>
 
                     <button
-                      id="btn-pass-bid"
-                      onClick={passUserBid}
-                      className="py-4 px-6 rounded-2xl bg-[#05070a] hover:bg-[#1e293b] text-slate-200 font-bold text-xs uppercase tracking-widest transition border border-[#1e293b] flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <span>Pass / Concede</span>
-                    </button>
-
-                    <button
                       id="btn-fast-sim-player"
                       onClick={fastForwardAuctionPlayer}
-                      className="py-4 px-6 rounded-2xl bg-[#05070a] hover:bg-[#1e293b] text-slate-300 font-bold text-xs uppercase tracking-widest transition border border-[#1e293b] flex items-center justify-center gap-2 cursor-pointer"
+                      className="py-4 px-6 rounded-2xl bg-[#05070a] hover:bg-[#1e293b] text-slate-300 font-bold text-xs uppercase tracking-widest transition border border-[#1e293b] flex items-center justify-center gap-2 cursor-pointer hover:border-blue-500/40"
                     >
                       <Play className="w-4 h-4 text-blue-400" />
-                      <span>Fast Resolve</span>
+                      <span>Fast Resolve Lot</span>
                     </button>
                   </div>
                 </div>
@@ -1454,7 +1458,9 @@ export const AuctionView: React.FC = () => {
                 id="btn-resume-from-quit"
                 onClick={() => {
                   setShowQuitModal(false);
-                  setIsAuctionPaused(false);
+                  if (auc.isPaused) {
+                    togglePauseAuction();
+                  }
                 }}
                 className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black text-xs uppercase tracking-wider shadow hover:scale-[1.02] transition cursor-pointer"
               >
