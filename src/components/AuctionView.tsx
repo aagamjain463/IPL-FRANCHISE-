@@ -5,7 +5,8 @@ import {
   getBidIncrement, 
   AUCTION_SETS_INFO, 
   SET_ORDER,
-  assignPlayerAuctionSets
+  assignPlayerAuctionSets,
+  classifyAIPersonality
 } from '../engine/auctionEngine';
 import { Player } from '../types/cricket';
 import { Team } from '../types/team';
@@ -172,7 +173,7 @@ export const AuctionView: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn pb-12 font-sans">
       {/* Top Header Banner & Multi-View Navigation */}
-      <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+      <div className="glass-panel p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37]">
             <Gavel className="w-6 h-6" />
@@ -580,7 +581,7 @@ export const AuctionView: React.FC = () => {
 
                 {/* AI Assistant Scouting Analysis Card */}
                 {aiAdvice && (
-                  <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-3 shadow-xl">
+                  <div className="glass-panel p-5 rounded-2xl space-y-3 shadow-xl">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold uppercase tracking-widest text-[#D4AF37] flex items-center gap-1.5">
                         <Sparkles className="w-4 h-4 text-[#D4AF37]" /> AI Chief Scout Assessment
@@ -614,7 +615,7 @@ export const AuctionView: React.FC = () => {
 
                 {/* Next 3 Upcoming Lots Preview Carousel */}
                 {nextUpcomingQueue.length > 0 && (
-                  <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-3 shadow-xl">
+                  <div className="glass-panel p-5 rounded-2xl space-y-3 shadow-xl">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold uppercase tracking-widest text-[#e2e8f0] flex items-center gap-1.5">
                         <Clock className="w-4 h-4 text-[#D4AF37]" /> On Deck: Next 3 Upcoming Lots
@@ -665,7 +666,7 @@ export const AuctionView: React.FC = () => {
                 )}
 
                 {/* Recent Bids Feed */}
-                <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-3 shadow-xl">
+                <div className="glass-panel p-5 rounded-2xl space-y-3 shadow-xl">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold uppercase tracking-widest text-[#94a3b8]">Live Paddle Bids Log</h4>
                     <span className="text-[10px] text-[#64748b] font-mono">{auc.bidHistory.length} Bids Logged</span>
@@ -703,7 +704,7 @@ export const AuctionView: React.FC = () => {
               </div>
 
               {/* Right Col: All 10 Franchise Purses Tracker & Quick Squad Inspection */}
-              <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-4 shadow-xl">
+              <div className="glass-panel p-5 rounded-2xl space-y-4 shadow-xl">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold uppercase tracking-widest text-[#D4AF37] flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4" /> Franchise Purses & Rosters
@@ -716,12 +717,14 @@ export const AuctionView: React.FC = () => {
                     const isUser = t.id === gameState.userTeamId;
                     const overseasInSquad = (t.rosterPlayerIds || []).map(id => gameState.allPlayers[id]).filter(p => p?.isOverseas).length;
 
+                    const persona = classifyAIPersonality(t);
                     return (
                       <div 
                         key={t.id} 
                         className={`p-3 rounded-xl border flex items-center justify-between transition group ${
                           isUser ? 'bg-[#1e293b]/70 border-[#D4AF37] text-white font-bold' : 'bg-[#05070a] border-[#1e293b] text-[#94a3b8] hover:border-[#1e293b]/80'
                         }`}
+                        title={isUser ? 'Your franchise' : `${persona.name} — ${persona.bidBehavior}`}
                       >
                         <div className="flex items-center gap-2.5">
                           <div 
@@ -740,6 +743,9 @@ export const AuctionView: React.FC = () => {
                             <span className="text-[10px] text-[#64748b] font-normal">
                               {t.rosterPlayerIds.length}/25 squad • {overseasInSquad}/8 OS
                             </span>
+                            {!isUser && (
+                              <span className="block text-[9px] font-mono text-amber-500/80">{persona.icon} {persona.name}</span>
+                            )}
                           </div>
                         </div>
 
@@ -817,7 +823,7 @@ export const AuctionView: React.FC = () => {
           </div>
 
           {/* Filtering and Search Controls */}
-          <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-4 shadow-xl">
+          <div className="glass-panel p-5 rounded-2xl space-y-4 shadow-xl">
             {/* Search Input and Top Quick Filters */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-3">
               <div className="relative w-full md:w-80">

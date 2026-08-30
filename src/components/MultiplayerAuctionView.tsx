@@ -242,7 +242,7 @@ export const MultiplayerAuctionView: React.FC = () => {
     return (
       <div className="max-w-5xl mx-auto space-y-6 pb-12 animate-fadeIn font-sans">
         {/* Header */}
-        <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="glass-panel p-6 rounded-2xl shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[10px] uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-[#D4AF37]/15 text-[#D4AF37] font-bold border border-[#D4AF37]/30 flex items-center gap-1">
@@ -277,7 +277,7 @@ export const MultiplayerAuctionView: React.FC = () => {
         {/* Grid: Franchise Picker + Custom Settings */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Franchise Picker (7 Cols) */}
-          <div className="lg:col-span-7 bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] shadow-xl space-y-4">
+          <div className="lg:col-span-7 glass-panel p-6 rounded-2xl shadow-xl space-y-4">
             <h3 className="text-xs font-bold uppercase tracking-widest text-white flex items-center gap-2">
               <Shield className="w-4 h-4 text-[#D4AF37]" /> Pick Your Franchise Table
             </h3>
@@ -313,7 +313,7 @@ export const MultiplayerAuctionView: React.FC = () => {
           </div>
 
           {/* Custom Room Settings (5 Cols) */}
-          <div className="lg:col-span-5 bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] shadow-xl space-y-5">
+          <div className="lg:col-span-5 glass-panel p-6 rounded-2xl shadow-xl space-y-5">
             <h3 className="text-xs font-bold uppercase tracking-widest text-[#D4AF37] flex items-center gap-2">
               <Settings className="w-4 h-4" /> Custom Auction Rules
             </h3>

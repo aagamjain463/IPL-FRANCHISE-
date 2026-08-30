@@ -30,7 +30,7 @@ export const PressConferenceView: React.FC = () => {
   return (
     <div className="max-w-3xl mx-auto space-y-6 animate-fadeIn py-6 font-sans">
       {/* Header */}
-      <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] shadow-2xl flex items-center justify-between">
+      <div className="glass-panel p-6 rounded-2xl shadow-2xl flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37]">
             <Mic className="w-6 h-6" />
@@ -51,7 +51,7 @@ export const PressConferenceView: React.FC = () => {
 
       {/* Question Card */}
       {currentQuestion ? (
-        <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] shadow-xl space-y-6">
+        <div className="glass-panel p-6 rounded-2xl shadow-xl space-y-6">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-bold text-[#D4AF37] uppercase tracking-widest">

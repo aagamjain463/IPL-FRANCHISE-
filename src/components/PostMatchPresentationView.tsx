@@ -97,9 +97,11 @@ export const PostMatchPresentationView: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-12 animate-fadeIn font-sans">
       {/* Broadcast Header Banner */}
-      <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37] shadow-inner">
+      <div className="glass-panel fc-glow-gold p-6 rounded-3xl relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-[#D4AF37]/15 blur-[90px] pointer-events-none" />
+        <div className="absolute bottom-0 left-1/3 w-72 h-24 rounded-full bg-[#00FF87]/10 blur-[70px] pointer-events-none" />
+        <div className="flex items-center gap-4 relative">
+          <div className="w-14 h-14 rounded-2xl bg-[#D4AF37]/20 border-2 border-[#D4AF37] flex items-center justify-center text-[#D4AF37] shadow-lg fc-icon-glow-simple">
             <Trophy className="w-7 h-7" />
           </div>
           <div>
@@ -263,7 +265,7 @@ export const PostMatchPresentationView: React.FC = () => {
       {/* 2. PRESS CONFERENCE / MEDIA ROOM TAB */}
       {activeTab === 'Press' && (
         <div className="space-y-6">
-          <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] shadow-xl space-y-6">
+          <div className="glass-panel p-6 rounded-2xl shadow-xl space-y-6">
             {/* Header info */}
             <div className="flex items-center justify-between border-b border-[#1e293b] pb-4">
               <div className="flex items-center gap-2">
@@ -366,7 +368,7 @@ export const PostMatchPresentationView: React.FC = () => {
       {/* 3. STANDINGS / TABLE TAB */}
       {activeTab === 'Standings' && (
         <div className="space-y-6">
-          <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] shadow-xl space-y-4">
+          <div className="glass-panel p-6 rounded-2xl shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-[#1e293b] pb-3">
               <div>
                 <h3 className="font-bold text-white text-base uppercase tracking-tight">League Standings Update</h3>

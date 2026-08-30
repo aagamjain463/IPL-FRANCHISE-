@@ -28,6 +28,10 @@ import { PressConferenceView } from './components/PressConferenceView';
 import { PostMatchPresentationView } from './components/PostMatchPresentationView';
 import { SEOLandingPage } from './components/SEOLandingPage';
 import { IPLAuctionSimulatorPage } from './components/IPLAuctionSimulatorPage';
+import { GlobalToast } from './components/GlobalToast';
+import { SeasonRecapView } from './components/SeasonRecapView';
+import { OffSeasonView } from './components/OffSeasonView';
+import { NewsRoomView } from './components/NewsRoomView';
 import { parseCurrentPath } from './utils/router';
 
 const GameContent: React.FC = () => {
@@ -127,6 +131,9 @@ const GameContent: React.FC = () => {
       {activeTab === 'FCEvolutions' && <FCEvolutionView />}
       {activeTab === 'TacticsRadar' && <FCIQTacticsRadar />}
       {activeTab === 'MultiplayerAuction' && <MultiplayerAuctionHome />}
+      {activeTab === 'SeasonRecap' && <SeasonRecapView />}
+      {activeTab === 'OffSeason' && <OffSeasonView />}
+      {activeTab === 'News' && <NewsRoomView />}
     </MainAppLayout>
   );
 };
@@ -145,6 +152,7 @@ export default function App() {
   return (
     <GameProvider>
       <GameContent />
+      <GlobalToast />
     </GameProvider>
   );
 }

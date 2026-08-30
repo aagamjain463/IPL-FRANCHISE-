@@ -112,6 +112,118 @@ export const SET_ORDER: AuctionSetCode[] = [
   'UBA1', 'UAL1', 'UWK1', 'UFA1', 'USP1', 'ACC1'
 ];
 
+// ------------------------------------------------------------------
+// 9 DISTINCT AI BIDDER PERSONALITIES
+// Every franchise is classified into exactly one archetype from its
+// aiPersonality traits; the archetype drives visible behavior in the
+// auction room and augments the numeric bidding math below.
+// ------------------------------------------------------------------
+export type AIPersonalityId =
+  | 'GALACTICO'
+  | 'MONEYBALL'
+  | 'AGGRESSOR'
+  | 'PATIENT_BUILDER'
+  | 'BOWLING_FIRST'
+  | 'BATTING_BARRAGE'
+  | 'RIVAL_HUNTER'
+  | 'SCARCITY_HAWK'
+  | 'FRUGAL_PUNTER';
+
+export interface AIPersonalityProfile {
+  id: AIPersonalityId;
+  name: string;
+  tagline: string;
+  bidBehavior: string;
+  icon: string;
+  confidence: number; // 0..1 how strongly the traits match
+}
+
+export const AI_PERSONALITY_PROFILES: Record<AIPersonalityId, Omit<AIPersonalityProfile, 'id' | 'confidence'>> = {
+  GALACTICO: {
+    name: 'The Galactico',
+    tagline: 'Stars over statistics',
+    bidBehavior: 'Chases marquee names, overspends on the biggest brands, then stumbles on depth picks.',
+    icon: '⭐'
+  },
+  MONEYBALL: {
+    name: 'The Moneyball Analyst',
+    tagline: 'Value per crore only',
+    bidBehavior: 'Deep analytics: waits for market inefficiency, refuses emotional overpays, pounces on hidden gems.',
+    icon: '📊'
+  },
+  AGGRESSOR: {
+    name: 'The Aggressor',
+    tagline: 'First paddle, last man out',
+    bidBehavior: 'Opens strong and keeps bidding wars alive; loves early dominance and big-ticket names.',
+    icon: '🔥'
+  },
+  PATIENT_BUILDER: {
+    name: 'The Patient Builder',
+    tagline: 'Dynasty over one day',
+    bidBehavior: 'Low aggression, high youth preference; builds a 3-year core and rarely overpays.',
+    icon: '🌱'
+  },
+  BOWLING_FIRST: {
+    name: 'The Bowling Barracks',
+    tagline: 'Wickets win trophies',
+    bidBehavior: 'Prioritizes pace, spin and death-bowling assets; willingly pays premium for bowlers.',
+    icon: '🎯'
+  },
+  BATTING_BARRAGE: {
+    name: 'The Batting Barrage',
+    tagline: 'Boundary count aesthetics',
+    bidBehavior: 'Invests in explosive top orders and finishers; leaves bowling depth till late rounds.',
+    icon: '💥'
+  },
+  RIVAL_HUNTER: {
+    name: 'The Rival Hunter',
+    tagline: 'Block your enemy',
+    bidBehavior: 'Inflates prices on players their rivals need the most, even at a small financial loss.',
+    icon: '⚔️'
+  },
+  SCARCITY_HAWK: {
+    name: 'The Scarcity Hawk',
+    tagline: 'Last good player left',
+    bidBehavior: 'Senses thinning pools, escalates hard when elite options run out, stores budget early.',
+    icon: '🦅'
+  },
+  FRUGAL_PUNTER: {
+    name: 'The Frugal Punter',
+    tagline: 'Bargain-bin specialist',
+    bidBehavior: 'Bids late and low, waits for the accelerated round, and fills squads with value picks.',
+    icon: '🪙'
+  }
+};
+
+export function classifyAIPersonality(team: Team): AIPersonalityProfile {
+  const p = team.aiPersonality || {} as Team['aiPersonality'];
+  const g = (v?: number) => v ?? 50;
+
+  const archetypes: { id: AIPersonalityId; score: number }[] = [
+    { id: 'GALACTICO', score: g(p.starPreference) * 0.6 + (100 - g(p.budgetDiscipline)) * 0.3 + g(p.riskTolerance) * 0.1 },
+    { id: 'MONEYBALL', score: g(p.analyticsPreference) * 0.55 + g(p.budgetDiscipline) * 0.35 + (100 - g(p.starPreference)) * 0.1 },
+    { id: 'AGGRESSOR', score: g(p.aggression) * 0.55 + g(p.riskTolerance) * 0.3 + (100 - g(p.patience)) * 0.15 },
+    { id: 'PATIENT_BUILDER', score: g(p.youthPreference) * 0.5 + g(p.patience) * 0.3 + (100 - g(p.aggression)) * 0.2 },
+    { id: 'BOWLING_FIRST', score: g(p.bowlingPriority) * 0.85 + g(p.analyticsPreference) * 0.15 },
+    { id: 'BATTING_BARRAGE', score: g(p.battingPriority) * 0.85 + g(p.aggression) * 0.15 },
+    { id: 'RIVAL_HUNTER', score: g(p.rivalryTendency) * 0.7 + g(p.scarcitySensitivity) * 0.3 },
+    { id: 'SCARCITY_HAWK', score: g(p.scarcitySensitivity) * 0.55 + g(p.biddingPersistence) * 0.3 + g(p.analyticsPreference) * 0.15 },
+    { id: 'FRUGAL_PUNTER', score: g(p.budgetDiscipline) * 0.55 + (100 - g(p.scarcitySensitivity)) * 0.3 + (100 - g(p.aggression)) * 0.15 }
+  ];
+
+  archetypes.sort((a, b) => b.score - a.score);
+  const top = archetypes[0];
+  const second = archetypes[1] || top;
+  const spread = Math.abs(top.score - second.score);
+  const confidence = Math.min(1, 0.42 + spread / 90);
+
+  return {
+    id: top.id,
+    confidence: Number(confidence.toFixed(2)),
+    ...AI_PERSONALITY_PROFILES[top.id]
+  };
+}
+
 export function assignPlayerAuctionSets(players: Player[]): Player[] {
   const setMapping: Record<string, { set: AuctionSetCode; capped: boolean }> = {
     // M1
@@ -755,7 +867,8 @@ export function evaluateAIDecisionForTeam(
   teamPlayers: Player[],
   auctionState: AuctionState,
   allTeams: Record<string, Team>,
-  allPlayers: Record<string, Player>
+  allPlayers: Record<string, Player>,
+  userTeamId?: string
 ): AIDecisionContext {
   const currentBid = auctionState.currentBidCr;
   const nextBidAmount = Number((currentBid + getBidIncrement(currentBid)).toFixed(2));
@@ -849,13 +962,58 @@ export function evaluateAIDecisionForTeam(
   const aggressionFactor = ((p?.aggression ?? 50) - 50) / 100;
   const aggressionStretch = 1.0 + Math.max(-0.05, Math.min(0.10, aggressionFactor * 0.08));
 
+  // RIVAL-SPOILER: franchises with high rivalry tendency inflate the price for
+  // whatever the user is chasing (they know their rival's needs hurt them).
+  let rivalryStretch = 1.0;
+  let isRivalSpoil = false;
+  if (
+    userTeamId &&
+    currentLeaderId === userTeamId &&
+    (p?.rivalryTendency ?? 50) >= 70 &&
+    (needFit.primaryUrgency === 'CRITICAL' || needFit.primaryUrgency === 'HIGH')
+  ) {
+    const rivalBias = Math.min(1, ((p?.rivalryTendency ?? 70) - 50) / 50);
+    rivalryStretch = 1.0 + rivalBias * 0.12; // up to +12% price pain against the user
+    isRivalSpoil = true;
+  }
+
+  // Archetype behavior modifiers (the 9 personalities adjust the same math differently)
+  const archetype = classifyAIPersonality(team).id;
+  let archetypeStretch = 1.0;
+  if (archetype === 'GALACTICO' && player.overall >= 90) archetypeStretch *= 1.05;
+  if (archetype === 'MONEYBALL' && nextBidAmount > baseValuation * 1.25) archetypeStretch *= 0.82;
+  if (archetype === 'AGGRESSOR') archetypeStretch *= 1.04;
+  if (archetype === 'PATIENT_BUILDER' && player.age >= 31 && player.overall < 90) archetypeStretch *= 0.88;
+  if (archetype === 'BOWLING_FIRST' && player.role.includes('Bowler')) archetypeStretch *= 1.05;
+  if (archetype === 'BATTING_BARRAGE' && player.role.includes('Batter')) archetypeStretch *= 1.05;
+  if (archetype === 'SCARCITY_HAWK' && scarcity.isFinalEliteOption) archetypeStretch *= 1.08;
+  if (archetype === 'FRUGAL_PUNTER') {
+    if (player.overall >= 92) archetypeStretch *= 0.88;
+    if (!player.isCapped) archetypeStretch *= 1.05;
+  }
+
   // Effective ceiling for this team in this auction state
-  let effectiveCeiling = Number((baseCeiling * momentumStretch * aggressionStretch).toFixed(2));
+  let effectiveCeiling = Number((baseCeiling * momentumStretch * aggressionStretch * rivalryStretch * archetypeStretch).toFixed(2));
   effectiveCeiling = Math.min(effectiveCeiling, availablePurseCr, team.purseCr);
 
   // Controlled Randomness / Realistic Variance (±3%)
   const randomVariance = (Math.random() - 0.5) * 0.06;
   const randomizedCeiling = Number((effectiveCeiling * (1 + randomVariance)).toFixed(2));
+
+  // Value-hunting archetypes wait out bidding wars rather than feed them
+  if (
+    isBiddingWar &&
+    (archetype === 'MONEYBALL' || archetype === 'FRUGAL_PUNTER') &&
+    nextBidAmount > baseValuation * 1.12 &&
+    Math.random() < 0.55
+  ) {
+    return makeDecision(
+      'WAIT',
+      `${archetype === 'MONEYBALL' ? 'Analytics say overpriced' : 'Punter is patient'} — letting the war burn out before re-entering`,
+      effectiveCeiling,
+      2.5
+    );
+  }
 
   // Check if current bid exceeds team's willingness
   if (nextBidAmount > randomizedCeiling) {
@@ -867,6 +1025,16 @@ export function evaluateAIDecisionForTeam(
       const leaderFit = calculatePlayerNeedFit(player, leaderNeeds);
       return leaderFit.primaryUrgency === 'CRITICAL' || leaderFit.primaryUrgency === 'HIGH';
     })();
+
+    if (isRivalSpoil) {
+      return makeDecision(
+        'PRESSURE_BID',
+        `RIVAL SPOILER: ${team.shortName} inflating the price against ${allTeams[userTeamId!]?.shortName || 'your franchise'} for a player they want`,
+        nextBidAmount,
+        6.0,
+        true
+      );
+    }
 
     const canAffordPressure = availablePurseCr >= nextBidAmount * 1.5;
     const isPriceFarBelowMarket = nextBidAmount <= baseValuation * 0.88;
@@ -965,7 +1133,8 @@ export function getNextAIBid(
       teamPlayers,
       auctionState,
       teams,
-      allPlayers
+      allPlayers,
+      userTeamId
     );
 
     if (
@@ -1000,7 +1169,8 @@ export function simulateAuctionBattle(
   teams: Record<string, Team>,
   allPlayers: Record<string, Player>,
   userTeamId?: string,
-  userMaxBidCr?: number
+  userMaxBidCr?: number,
+  rivalTargetIds?: string[]
 ): { winningTeamId: string; finalPriceCr: number; bidHistory?: AuctionBid[] } | null {
   // Collect all interested teams and compute their contextual ceilings
   interface TeamCompetitor {
@@ -1031,7 +1201,12 @@ export function simulateAuctionBattle(
       const p = team.aiPersonality;
       const persistenceBonus = (p?.biddingPersistence ?? 70) > 75 ? 1.05 : 1.01;
       const randomVar = (Math.random() - 0.5) * 0.05;
-      ceiling = Number((val * persistenceBonus * (1 + randomVar)).toFixed(2));
+      // Rival spoiler: a high-rivalry AI inflates its ceiling when the user targets this exact player
+      let spoiler = 1.0;
+      if (userTeamId && rivalTargetIds?.includes(player.id) && (p?.rivalryTendency ?? 50) >= 70) {
+        spoiler = 1.0 + Math.min(1, ((p?.rivalryTendency ?? 70) - 50) / 50) * 0.10;
+      }
+      ceiling = Number((val * persistenceBonus * spoiler * (1 + randomVar)).toFixed(2));
     }
 
     const { availablePurseCr } = calculateReservedPurse(team, 18);
@@ -1270,7 +1445,8 @@ export function simulateFullAuctionPool(
       teamsCopy,
       playersCopy,
       userTeamId,
-      userMaxBid
+      userMaxBid,
+      Array.from(prioritySet)
     );
 
     if (battle) {
@@ -1384,7 +1560,8 @@ export function simulateCurrentSetInAuction(
   auctionState: AuctionState,
   teams: Record<string, Team>,
   allPlayers: Record<string, Player>,
-  userTeamId: string
+  userTeamId: string,
+  userPriorityTargetIds?: string[]
 ): {
   updatedAuction: AuctionState;
   updatedTeams: Record<string, Team>;
@@ -1413,7 +1590,7 @@ export function simulateCurrentSetInAuction(
     const userSquad = userTeam?.rosterPlayerIds.map(id => playersCopy[id]).filter(Boolean) || [];
     const userMaxBid = auc.autoBidUser ? evaluatePlayerValueForTeam(player, userTeam, userSquad) : undefined;
 
-    const battle = simulateAuctionBattle(player, teamsCopy, playersCopy, userTeamId, userMaxBid);
+    const battle = simulateAuctionBattle(player, teamsCopy, playersCopy, userTeamId, userMaxBid, userPriorityTargetIds);
     if (battle) {
       const winningTeam = teamsCopy[battle.winningTeamId];
       if (winningTeam) {

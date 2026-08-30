@@ -50,7 +50,7 @@ export const WhatIfView: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn pb-12 font-sans">
       {/* Header */}
-      <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+      <div className="glass-panel p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37]">
             <Target className="w-6 h-6" />
@@ -75,7 +75,7 @@ export const WhatIfView: React.FC = () => {
       {/* Setup Form */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Scenario A */}
-        <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-3 shadow-xl">
+        <div className="glass-panel p-5 rounded-2xl space-y-3 shadow-xl">
           <h3 className="text-xs font-bold uppercase tracking-widest text-[#D4AF37] flex items-center gap-1.5">
             <Sliders className="w-4 h-4 text-[#D4AF37]" /> Hypothesis Strategy A
           </h3>
@@ -95,7 +95,7 @@ export const WhatIfView: React.FC = () => {
         </div>
 
         {/* Scenario B */}
-        <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-3 shadow-xl">
+        <div className="glass-panel p-5 rounded-2xl space-y-3 shadow-xl">
           <h3 className="text-xs font-bold uppercase tracking-widest text-[#94a3b8] flex items-center gap-1.5">
             <Sliders className="w-4 h-4 text-[#94a3b8]" /> Hypothesis Strategy B
           </h3>
@@ -117,7 +117,7 @@ export const WhatIfView: React.FC = () => {
 
       {/* Comparison Results */}
       {comparisonResult && (
-        <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] shadow-2xl space-y-6 animate-fadeIn">
+        <div className="glass-panel p-6 rounded-2xl shadow-2xl space-y-6 animate-fadeIn">
           <div className="flex items-center justify-between pb-4 border-b border-[#1e293b]">
             <div>
               <h3 className="text-base font-black text-white uppercase tracking-tight italic">Monte Carlo Simulation Results</h3>

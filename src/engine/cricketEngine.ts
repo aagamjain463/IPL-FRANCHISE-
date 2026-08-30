@@ -7,14 +7,61 @@ import {
   DismissalType, 
   ShotZone,
   TacticalInstructions,
-  MatchPlayingXI
+  MatchPlayingXI,
+  MatchHighlight,
+  PitchCondition
 } from '../types/cricket';
 import { getDeterministicCommentary } from '../data/commentaryTemplates';
+import { computeTeamChemistry, getChemistryMultiplier } from './chemistryEngine';
 
 const SHOT_ZONES: ShotZone[] = [
   'Fine Leg', 'Square Leg', 'Mid Wicket', 'Long On', 'Straight',
   'Long Off', 'Extra Cover', 'Cover', 'Point', 'Third Man'
 ];
+
+export const PITCH_PROFILES: Record<string, Omit<PitchCondition, 'type'>> = {
+  'Balanced': { bounce: 65, turn: 55, paceAssistance: 60, dewFactor: 40, parScore: 170 },
+  'Flat (High Scoring)': { bounce: 70, turn: 30, paceAssistance: 70, dewFactor: 50, parScore: 182 },
+  'Green (Pace & Swing)': { bounce: 80, turn: 35, paceAssistance: 85, dewFactor: 30, parScore: 158 },
+  'Dusty (Spin & Turn)': { bounce: 55, turn: 85, paceAssistance: 40, dewFactor: 35, parScore: 162 },
+  'Slow & Sticky (Gripping)': { bounce: 45, turn: 70, paceAssistance: 30, dewFactor: 60, parScore: 160 }
+};
+
+/** Map a surface pick (home pitch or fixture) to a full PitchCondition. */
+export function buildPitchCondition(type?: string): PitchCondition {
+  const safeType = (type && PITCH_PROFILES[type]) ? type : 'Balanced';
+  return { type: safeType as PitchCondition['type'], ...PITCH_PROFILES[safeType] };
+}
+
+/** Current teamA win probability estimate used by engine + UI (smooth, non-random). */
+export function estimateWinProbability(match: MatchState): number {
+  if (match.isMatchCompleted) return match.winnerTeamId === match.teamAId ? 100 : 0;
+  const inn = match.currentInningsIndex === 1 ? match.innings1 : match.innings2;
+  const isChasing = match.currentInningsIndex === 2;
+  const target = inn.target || 0;
+  const runsNeeded = Math.max(0, target - inn.totalRuns);
+  const ballsRemaining = Math.max(0, (20 - inn.oversCompleted) * 6 - inn.ballsInCurrentOver);
+  const wickets = inn.wickets;
+
+  if (!isChasing) {
+    // 1st innings: parity at ~170/8, scale with score & wickets lost (rough but smooth)
+    const raw = 50 + (inn.totalRuns - 170) * 0.35 - (inn.wickets - 4) * 4;
+    // account for the chasing team's batting strength later — keep neutral here
+    return Math.min(78, Math.max(22, Math.round(raw)));
+  }
+
+  // 2nd innings chasing: implied rate edge + wickets in hand
+  const reqRate = ballsRemaining > 0 ? (runsNeeded / ballsRemaining) * 6 : 99;
+  const parity = 170; // modern T20 par on the match's pitch
+  const t1Score = match.innings1.totalRuns;
+  const firstInningsEdge = (t1Score - parity) * 0.15; // bigger 1st innings = chasing harder
+  const rateEdge = (8.6 - reqRate) * 1.6;
+  const wicketEdge = (9 - wickets) * 2.2;
+  const raw = 50 + rateEdge * 0.5 + wicketEdge + firstInningsEdge;
+  const isTeamABatting = inn.battingTeamId === match.teamAId;
+  const chasingProb = Math.min(95, Math.max(5, Math.round(raw)));
+  return isTeamABatting ? chasingProb : 100 - chasingProb;
+}
 
 export function createEmptyInnings(battingTeamId: string, bowlingTeamId: string, target?: number): InningsState {
   return {
@@ -65,6 +112,12 @@ export function initMatchState(
     firstBattingTeamId = tossDecision === 'Bat' ? teamBId : teamAId;
     firstBowlingTeamId = tossDecision === 'Bat' ? teamAId : teamBId;
   }
+
+  // Squad chemistry (kept in match snapshot so sim is deterministic per match)
+  const aSquad = (teamAXI.playingXIIds || []).map(id => allPlayers[id]).filter(Boolean);
+  const bSquad = (teamBXI.playingXIIds || []).map(id => allPlayers[id]).filter(Boolean);
+  const aChem = computeTeamChemistry(aSquad).score;
+  const bChem = computeTeamChemistry(bSquad).score;
 
   const innings1 = createEmptyInnings(firstBattingTeamId, firstBowlingTeamId);
   const innings2 = createEmptyInnings(firstBowlingTeamId, firstBattingTeamId);
@@ -127,14 +180,7 @@ export function initMatchState(
     teamBId,
     venue,
     city,
-    pitch: {
-      type: (customPitchType as any) || 'Balanced',
-      bounce: 65,
-      turn: 55,
-      paceAssistance: 60,
-      dewFactor: 40,
-      parScore: 175
-    },
+    pitch: buildPitchCondition((customPitchType as string) || undefined),
     weather: 'Clear Night',
     tossWinnerId,
     tossDecision,
@@ -147,8 +193,22 @@ export function initMatchState(
     tactics: {
       teamATactics: { ...defaultTactics },
       teamBTactics: { ...defaultTactics }
-    }
+    },
+    matchSeed: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`,
+    probHistory: [],
+    highlights: [],
+    teamAChemistry: aChem,
+    teamBChemistry: bChem,
+    momentum: 50
   };
+}
+
+/** Total overs bowled (as a float) in an innings for NRR purposes. */
+export function getInningsOvers(innings: InningsState): number {
+  let overs = innings.oversCompleted + innings.ballsInCurrentOver / 6;
+  // A side bowled out is charged the full quota for NRR purposes
+  if (innings.wickets >= 10) overs = 20;
+  return Math.min(20, Number(overs.toFixed(2)));
 }
 
 export function selectNextBowler(
@@ -161,16 +221,17 @@ export function selectNextBowler(
   const isDeath = overNumber >= 15;
   const lastBowlerId = innings.currentBowlerId;
 
+  const isFit = (p?: Player) => !p || p.injuryStatus === 'Fit' || p.injuryStatus === undefined;
   const validBowlers = bowlingXI.playingXIIds.filter(id => {
     if (id === lastBowlerId) return false;
     const card = innings.bowlerScorecards[id];
     if (card && card.overs >= 4.0) return false; // Max 4 overs in T20
     const p = allPlayers[id];
-    return p && p.bowlingRating > 40;
+    return p && p.bowlingRating > 40 && isFit(p);
   });
 
   if (validBowlers.length === 0) {
-    const fallback = bowlingXI.playingXIIds.filter(id => id !== lastBowlerId && (innings.bowlerScorecards[id]?.overs || 0) < 4.0);
+    const fallback = bowlingXI.playingXIIds.filter(id => id !== lastBowlerId && (innings.bowlerScorecards[id]?.overs || 0) < 4.0 && isFit(allPlayers[id]));
     return fallback[0] || bowlingXI.playingXIIds[0];
   }
 
@@ -194,6 +255,83 @@ export function selectNextBowler(
   return validBowlers[0];
 }
 
+/**
+ * IPL Impact Player substitution: one player per team, once per match.
+ * Replaces the player everywhere they appear in the match XI (batting order,
+ * bowling pool, in-crease positions) and records a highlight.
+ */
+export function applyImpactSubstitution(
+  match: MatchState,
+  teamId: string,
+  playerOutId: string,
+  playerInId: string,
+  allPlayers: Record<string, Player>
+): { ok: boolean; message: string } {
+  const isTeamA = match.teamAId === teamId;
+  const xi = isTeamA ? match.teamAXI : match.teamBXI;
+
+  if (xi.impactPlayerUsed) {
+    return { ok: false, message: 'Impact Player already used by this team this match.' };
+  }
+  if (match.isMatchCompleted) {
+    return { ok: false, message: 'Match has already finished.' };
+  }
+  const outIdx = xi.playingXIIds.indexOf(playerOutId);
+  if (outIdx === -1) return { ok: false, message: 'Player to replace is not in the playing XI.' };
+  if (!playerInId || xi.playingXIIds.includes(playerInId)) {
+    return { ok: false, message: 'Impact player must come from outside the current XI.' };
+  }
+
+  xi.impactPlayerUsed = true;
+  xi.impactPlayerId = playerInId;
+  const outName = allPlayers[playerOutId]?.name || playerOutId;
+  const inName = allPlayers[playerInId]?.name || playerInId;
+
+  // Replace within XI + batting order (impact sub takes the batting slot of the replaced player)
+  xi.playingXIIds = xi.playingXIIds.map(id => (id === playerOutId ? playerInId : id));
+  xi.battingOrder = (xi.battingOrder || []).map(id => (id === playerOutId ? playerInId : id));
+
+  // Captain/WK overrides if they left
+  if (xi.captainId === playerOutId) xi.captainId = playerInId;
+  if (xi.wicketkeeperId === playerOutId) xi.wicketkeeperId = playerInId;
+
+  const inn = match.currentInningsIndex === 1 ? match.innings1 : match.innings2;
+
+  // Mid-innings replacement of batters/bowler
+  if (inn.currentStrikerId === playerOutId) inn.currentStrikerId = playerInId;
+  if (inn.currentNonStrikerId === playerOutId) inn.currentNonStrikerId = playerInId;
+  if (inn.currentBowlerId === playerOutId) inn.currentBowlerId = playerInId;
+
+  // Seed fresh scorecard if the replacement hasn't batted
+  const pIn = allPlayers[playerInId];
+  if (pIn && !inn.batterScorecards[playerInId]) {
+    inn.batterScorecards[playerInId] = {
+      playerId: playerInId,
+      playerName: pIn.name,
+      runs: 0,
+      balls: 0,
+      fours: 0,
+      sixes: 0,
+      strikeRate: 0,
+      isOut: false,
+      dismissalText: 'not out',
+      battingPosition: Object.keys(inn.batterScorecards).length + 1
+    };
+  }
+
+  match.highlights = match.highlights || [];
+  match.highlights.unshift({
+    id: `hl_sub_${Date.now()}`,
+    type: 'IMPACT_SUB',
+    overLabel: `${inn.oversCompleted}.${inn.ballsInCurrentOver}`,
+    playerName: inName,
+    teamShortName: '',
+    text: `🔄 Impact Player activated: ${inName} replaces ${outName}.`
+  });
+
+  return { ok: true, message: `${inName} replaces ${outName} as the Impact Player.` };
+}
+
 export function simulateNextBall(
   match: MatchState,
   allPlayers: Record<string, Player>
@@ -203,6 +341,12 @@ export function simulateNextBall(
   const bowlingXI = currentInnings.bowlingTeamId === match.teamAId ? match.teamAXI : match.teamBXI;
   const battingTactics = currentInnings.battingTeamId === match.teamAId ? match.tactics.teamATactics : match.tactics.teamBTactics;
   const bowlingTactics = currentInnings.bowlingTeamId === match.teamAId ? match.tactics.teamATactics : match.tactics.teamBTactics;
+
+  // Chemistry: small spice (up to ±6% on skill), never decisive alone
+  const battingChemScore = currentInnings.battingTeamId === match.teamAId ? (match.teamAChemistry ?? 50) : (match.teamBChemistry ?? 50);
+  const bowlingChemScore = currentInnings.bowlingTeamId === match.teamAId ? (match.teamAChemistry ?? 50) : (match.teamBChemistry ?? 50);
+  const battingChemMult = getChemistryMultiplier(battingChemScore);
+  const bowlingChemMult = getChemistryMultiplier(bowlingChemScore);
 
   // Check striker
   if (!currentInnings.currentStrikerId) {
@@ -251,6 +395,7 @@ export function simulateNextBall(
   const ballInOver = currentInnings.ballsInCurrentOver + 1;
   const isPowerplay = overNum < 6;
   const isDeath = overNum >= 15;
+  const ovr18plus = overNum >= 17;
   const isChasing = match.currentInningsIndex === 2;
   const target = currentInnings.target || 0;
   const runsNeeded = isChasing ? Math.max(0, target - currentInnings.totalRuns) : 0;
@@ -278,8 +423,10 @@ export function simulateNextBall(
   } else {
     batterSkill = (batterSkill + bAttr.paceAbility) / 2;
   }
+  batterSkill *= battingChemMult;
 
   let bowlerSkill = (bowlAttr.accuracy + bowlAttr.wicketTaking + bowlAttr.economy) / 3;
+  bowlerSkill *= bowlingChemMult;
 
   if (isPowerplay) {
     batterSkill = (batterSkill + bAttr.powerplayBatting) / 2;
@@ -589,7 +736,7 @@ export function simulateNextBall(
   let runsScored = 0;
   let extras = 0;
   let isLegalBall = true;
-  let dismissal: { type: DismissalType; dismissedPlayerId: string; dismissedPlayerName: string; description: string } | undefined = undefined;
+  let dismissal: { type: DismissalType; dismissedPlayerId: string; dismissedPlayerName: string; description: string; fielderId?: string; fielderName?: string } | undefined = undefined;
 
   if (rand < pWide) {
     eventType = 'WIDE';
@@ -612,11 +759,26 @@ export function simulateNextBall(
     else if (dRand < 0.96) dType = 'Run Out';
     else dType = 'Stumped';
 
+    // Assign the fielder so stats can credit catches/stumpings/run-outs
+    const bowlingPool = bowlingXI.playingXIIds.map(id => allPlayers[id]).filter(Boolean);
+    let fielder: Player | undefined;
+    if (dType === 'Stumped') {
+      fielder = allPlayers[bowlingXI.wicketkeeperId] || bowlingPool[0];
+    } else if (dType === 'Caught') {
+      fielder = bowlingPool[Math.floor(Math.random() * bowlingPool.length)];
+    } else if (dType === 'Run Out') {
+      fielder = bowlingPool[Math.floor(Math.random() * bowlingPool.length)];
+    }
+
     dismissal = {
       type: dType,
       dismissedPlayerId: striker ? striker.id : 'striker',
       dismissedPlayerName: striker ? striker.name : 'Striker',
-      description: `${dType} by ${bowler?.name || 'Bowler'}`
+      fielderId: fielder?.id,
+      fielderName: fielder?.name,
+      description: dType === 'Stumped' && fielder
+        ? `${dType} by ${fielder.name} off ${bowler?.name || 'Bowler'}`
+        : `${dType}${fielder ? ` by ${fielder.name}` : ` by ${bowler?.name || 'Bowler'}`}`
     };
   } else if (rand < pWide + pNoBall + pWicket + pSix) {
     eventType = '6';
@@ -708,6 +870,12 @@ export function simulateNextBall(
     currentInnings.currentNonStrikerId = temp;
   }
 
+  // Record run-conceded baseline at the start of each over (for maidens)
+  if (ballInOver === 1 && bowler && currentInnings.bowlerScorecards[bowler.id]) {
+    currentInnings.runsAtOverStart = currentInnings.runsAtOverStart || {};
+    currentInnings.runsAtOverStart[bowler.id] = currentInnings.bowlerScorecards[bowler.id].runsConceded;
+  }
+
   // Over completion check
   if (currentInnings.ballsInCurrentOver >= 6) {
     currentInnings.oversCompleted += 1;
@@ -718,9 +886,22 @@ export function simulateNextBall(
     currentInnings.currentStrikerId = currentInnings.currentNonStrikerId;
     currentInnings.currentNonStrikerId = temp;
 
-    // Update bowler overs
+    // Update bowler overs + maiden detection
     if (bowler && currentInnings.bowlerScorecards[bowler.id]) {
       const bCard = currentInnings.bowlerScorecards[bowler.id];
+      const overStartRuns = currentInnings.runsAtOverStart?.[bowler.id] ?? bCard.runsConceded;
+      if (bCard.runsConceded - overStartRuns === 0) {
+        bCard.maidens += 1;
+        match.highlights = match.highlights || [];
+        match.highlights.unshift({
+          id: `hl_maiden_${Date.now()}`,
+          type: 'DEATH_BOWLING',
+          overLabel: `${currentInnings.oversCompleted}.0`,
+          playerName: bowler.name,
+          teamShortName: '',
+          text: `🧊 Maiden over from ${bowler.name}.`
+        });
+      }
       bCard.overs += 1;
       bCard.economy = Number((bCard.runsConceded / bCard.overs).toFixed(2));
     }
@@ -782,6 +963,69 @@ export function simulateNextBall(
           };
         }
       });
+    }
+  }
+
+  // ---- Broadcast state: momentum, win probability, highlights ----
+  const battingTeamTag = battingXI.teamId || (currentInnings.battingTeamId === match.teamAId ? match.teamAXI.teamId : match.teamBXI.teamId);
+  const highlightTouch = (type: MatchHighlight['type'], overLabel: string, playerName: string, text: string) => {
+    match.highlights = match.highlights || [];
+    match.highlights.unshift({ id: `hl_${Date.now()}_${match.highlights.length}`, type, overLabel, playerName, teamShortName: battingTeamTag, text });
+    if (match.highlights.length > 40) match.highlights.pop();
+  };
+
+  // Momentum meter: batting team gains with boundaries & wickets in hand, bowling with dots/wickets
+  if (match.momentum === undefined) match.momentum = 50;
+  let momentumDelta = 0;
+  if (eventType === '6') momentumDelta += 8;
+  else if (eventType === '4') momentumDelta += 5;
+  else if (eventType === '1' || eventType === '2') momentumDelta += 1.5;
+  else if (eventType === 'WICKET') momentumDelta -= 14;
+  else if (eventType === '0' && !isPowerplay) momentumDelta += 0.5;
+  if (isDeath && eventType === '0') momentumDelta += 0.5;
+  match.momentum = Math.max(4, Math.min(96, Number((match.momentum + momentumDelta).toFixed(1))));
+
+  match.probHistory = match.probHistory || [];
+  match.probHistory.push(estimateWinProbability(match));
+  if (match.probHistory.length > 140) match.probHistory.shift();
+
+  // Milestone highlights (50s / 100s)
+  if (striker && currentInnings.batterScorecards[striker.id]) {
+    const sCard = currentInnings.batterScorecards[striker.id];
+    currentInnings.fiftiesNoted = currentInnings.fiftiesNoted || [];
+    currentInnings.hundredsNoted = currentInnings.hundredsNoted || [];
+    if (sCard.runs >= 100 && !currentInnings.hundredsNoted.includes(striker.id)) {
+      currentInnings.hundredsNoted.push(striker.id);
+      highlightTouch('HUNDRED', `${overNum}.${currentInnings.ballsInCurrentOver}`, striker.name, `💯 CENTURY! ${striker.name} brings up a magnificent hundred!`);
+    } else if (sCard.runs >= 50 && !currentInnings.fiftiesNoted.includes(striker.id)) {
+      currentInnings.fiftiesNoted.push(striker.id);
+      highlightTouch('FIFTY', `${overNum}.${currentInnings.ballsInCurrentOver}`, striker.name, `🎉 FIFTY! ${striker.name} races to a superb fifty!`);
+    }
+  }
+
+  // Boundary / wicket highlights
+  if ((eventType === '6' || eventType === '4') && (isDeath || ovr18plus)) {
+    highlightTouch(
+      eventType === '6' ? 'SIX' : 'FOUR',
+      `${overNum}.${currentInnings.ballsInCurrentOver}`,
+      striker?.name || 'Batter',
+      eventType === '6'
+        ? `💥 MASSIVE SIX in the death overs! ${striker?.name || 'The batter'} clears the ropes.`
+        : `🎯 CRUCIAL BOUNDARY in the death overs from ${striker?.name || 'the batter'}.`
+    );
+  } else if (eventType === '6' && isPowerplay) {
+    highlightTouch('SIX', `${overNum}.${currentInnings.ballsInCurrentOver}`, striker?.name || 'Batter', `⚡ Powerplay SIX! ${striker?.name || 'The batter'} goes downtown early.`);
+  }
+  if (eventType === 'WICKET') {
+    highlightTouch('WICKET', `${overNum}.${currentInnings.ballsInCurrentOver}`, bowler?.name || 'Bowler', `🔥 WICKET! ${dismissal?.description || `${bowler?.name || 'Bowler'} strikes`} — ${striker?.name || 'The batter'} departs.`);
+  }
+
+  // Hat-trick probe: 3 consecutive legal balls by the same bowler all wickets
+  if (bowler && eventType === 'WICKET' && isLegalBall) {
+    const recentLegal = currentInnings.timeline.slice(-3);
+    const hatTrick = recentLegal.length === 3 && recentLegal.every(e => e.bowlerId === bowler.id && e.eventType === 'WICKET');
+    if (hatTrick) {
+      highlightTouch('HAT_TRICK', `${overNum}.${currentInnings.ballsInCurrentOver}`, bowler.name, `🎩 HAT-TRICK! ${bowler.name} sends three batters back in three balls — historic moment!`);
     }
   }
 

@@ -376,7 +376,7 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
           )}
 
           {/* Live Paddle Bids Feed */}
-          <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-3 shadow-xl">
+          <div className="glass-panel p-5 rounded-2xl space-y-3 shadow-xl">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-widest text-[#94a3b8] flex items-center gap-2">
                 <Gavel className="w-4 h-4 text-[#D4AF37]" /> Live Room Bids Ticker
@@ -411,7 +411,7 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
         </div>
 
         {/* Right Column: All Franchise Desks Table & Real-Time Purses */}
-        <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-4 shadow-xl">
+        <div className="glass-panel p-5 rounded-2xl space-y-4 shadow-xl">
           <div className="flex items-center justify-between border-b border-[#1e293b] pb-3">
             <h4 className="text-xs font-bold uppercase tracking-widest text-[#D4AF37] flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4" /> Franchise Desks & Purses

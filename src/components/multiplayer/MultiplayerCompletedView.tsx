@@ -81,7 +81,7 @@ export const MultiplayerCompletedView: React.FC<MultiplayerCompletedViewProps> =
             {awards.map((award, idx) => (
               <div 
                 key={idx}
-                className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] flex flex-col justify-between space-y-3 shadow-xl hover:border-[#D4AF37]/40 transition"
+                className="glass-panel p-5 rounded-2xl flex flex-col justify-between space-y-3 shadow-xl hover:border-[#D4AF37]/40 transition"
               >
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -107,7 +107,7 @@ export const MultiplayerCompletedView: React.FC<MultiplayerCompletedViewProps> =
       )}
 
       {/* Final Franchise Standings Table */}
-      <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] space-y-4 shadow-xl">
+      <div className="glass-panel p-6 rounded-2xl space-y-4 shadow-xl">
         <div className="flex items-center justify-between border-b border-[#1e293b] pb-3">
           <h3 className="text-base font-black text-white uppercase tracking-tight flex items-center gap-2">
             <Trophy className="w-5 h-5 text-[#D4AF37]" /> Final League Standings & Squad Ratings

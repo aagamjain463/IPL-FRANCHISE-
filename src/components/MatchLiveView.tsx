@@ -33,10 +33,14 @@ export const MatchLiveView: React.FC = () => {
     completeCurrentMatch,
     setSelectedPlayerForModal,
     activeChallenge,
-    executeImpactSub
+    executeImpactSub,
+    showToast
   } = useGame();
 
   const [activeScorecardTab, setActiveScorecardTab] = useState<'LiveFeed' | 'Scorecard1' | 'Scorecard2' | 'Tactics'>('LiveFeed');
+  const [screenMode, setScreenMode] = useState<'broadcast' | 'split'>(() => {
+    try { return localStorage.getItem('fc_match_screen') === 'split' ? 'split' : 'broadcast'; } catch { return 'broadcast'; }
+  });
   const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(false);
   const [activeDRSReview, setActiveDRSReview] = useState<HawkEyeDRSReview | null>(null);
   const [showTacticsRadarModal, setShowTacticsRadarModal] = useState<boolean>(false);
@@ -178,7 +182,9 @@ export const MatchLiveView: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn pb-12 font-sans select-none">
       {/* Stadium Broadcast Scoreboard Header */}
-      <div className="bg-[#0c1220] p-6 rounded-3xl border border-[#1e293b] shadow-2xl relative overflow-hidden">
+      <div className="glass-panel fc-glow-volt p-6 rounded-3xl relative overflow-hidden">
+        <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-[#00FF87]/10 blur-[80px] pointer-events-none" />
+        <div className="absolute -bottom-24 -left-16 w-72 h-72 rounded-full bg-[#00E5FF]/10 blur-[80px] pointer-events-none" />
         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
           <Radio className="w-32 h-32 text-[#D4AF37]" />
         </div>
@@ -227,11 +233,11 @@ export const MatchLiveView: React.FC = () => {
               <div>
                 <h3 className="text-lg font-bold text-[#e2e8f0]">{battingTeam?.name}</h3>
                 <div className="flex items-baseline gap-3">
-                  <span className="text-4xl md:text-5xl font-black font-mono-sport text-white tracking-tight">
-                    {currentInnings.totalRuns}/{currentInnings.wickets}
+                  <span className="fc-display text-5xl md:text-6xl text-white tracking-tight">
+                    {currentInnings.totalRuns}<span className="text-white/40">/</span>{currentInnings.wickets}
                   </span>
-                  <span className="text-xl font-bold font-mono-sport text-[#D4AF37]">
-                    ({currentOverFormatted} / 20 ov)
+                  <span className="fc-display text-xl text-[#D4AF37]">
+                    ({currentOverFormatted} / 20)
                   </span>
                 </div>
               </div>
@@ -277,10 +283,36 @@ export const MatchLiveView: React.FC = () => {
         </div>
       </div>
 
+      {/* Multi-Screen mode toggle (FC TV broadcast vs side-by-side split) */}
+      <div className="flex items-center justify-between gap-3 glass-panel rounded-2xl px-4 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <span className="px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/30 text-red-400 text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5">
+            <Radio className="w-3 h-3 animate-pulse" /> BROADCAST {screenMode === 'split' ? 'SPLIT' : '4K'}
+          </span>
+          <span className="text-[10px] font-mono text-slate-400 hidden sm:inline">
+            MULTI-SCREEN MODE — {screenMode === 'broadcast' ? 'Scoreboard focus' : 'Scoreboard + commentary + stats'}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 bg-black/30 rounded-xl border border-white/10 p-1">
+          <button
+            onClick={() => { setScreenMode('broadcast'); try { localStorage.setItem('fc_match_screen', 'broadcast'); } catch {} }}
+            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition cursor-pointer ${screenMode === 'broadcast' ? 'bg-[#00FF87] text-black' : 'text-slate-400 hover:text-white'}`}
+          >
+            TV
+          </button>
+          <button
+            onClick={() => { setScreenMode('split'); try { localStorage.setItem('fc_match_screen', 'split'); } catch {} }}
+            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition cursor-pointer ${screenMode === 'split' ? 'bg-[#00E5FF] text-black' : 'text-slate-400 hover:text-white'}`}
+          >
+            SPLIT
+          </button>
+        </div>
+      </div>
+
       {/* Main Split: Pitch 2D + Live Batsmen / Bowler Box */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className={`grid grid-cols-1 gap-6 ${screenMode === 'split' ? 'lg:grid-cols-2 2xl:grid-cols-3' : 'lg:grid-cols-3'}`}>
         {/* Left 2 Cols: In-crease Players & Pitch Visual */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className={`${screenMode === 'split' ? '' : 'lg:col-span-2'} space-y-6`}>
           {/* Batters & Active Bowler Cards with PlayStyles+ */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             
@@ -598,7 +630,7 @@ export const MatchLiveView: React.FC = () => {
                 currentInnings.recentBalls.map((b, idx) => (
                   <div key={idx} className="p-2.5 rounded-xl bg-[#0c1220] border border-[#1e293b] text-xs space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="font-mono font-bold text-amber-300">{b.overNumber}.{b.ballNumber}</span>
+                      <span className="font-mono font-bold text-amber-300">{b.overNumber + 1}.{b.ballInOver}</span>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
                         b.isWicket ? 'bg-rose-500 text-white' : b.runsScored === 6 ? 'bg-amber-400 text-black' : b.runsScored === 4 ? 'bg-blue-400 text-black' : 'bg-[#1e293b] text-slate-300'
                       }`}>
@@ -725,7 +757,31 @@ export const MatchLiveView: React.FC = () => {
             >
               <X className="w-5 h-5" />
             </button>
-            <FCIQTacticsRadar />
+            <FCIQTacticsRadar
+              onApplyTactics={(preset) => {
+                if (!isUserMatch) return;
+                // Translate FC IQ preset → live TacticalInstructions (real engine impact)
+                const battApproach = preset.mentality === 'Ultra Attacking' ? 'Maximum Attack'
+                  : preset.mentality === 'High Press' ? 'Aggressive'
+                  : preset.mentality === 'Cautious' ? 'Rotate Strike'
+                  : preset.mentality === 'Ultra Defensive' ? 'Anchor / Conserve'
+                  : 'Balanced';
+                const field = preset.boundaryProtection === 'Heavy Off-side' ? 'Off-Side Trap'
+                  : preset.boundaryProtection === 'Heavy Leg-side' ? 'Leg-Side Trap'
+                  : preset.boundaryProtection === 'Ring Lockdown' ? 'Inner Ring Choke (Cut-off 1s)'
+                  : 'Balanced';
+                const plan = preset.aggression >= 8 ? 'Attack Stumps'
+                  : preset.aggression >= 5 ? 'Test Match Hard Length'
+                  : 'Contain Runs';
+                updateMatchTactics(userTeamId, {
+                  batterApproach: battApproach,
+                  bowlingPlan: plan,
+                  fieldSetting: field,
+                  protectWicket: preset.mentality === 'Ultra Defensive' || preset.mentality === 'Cautious'
+                });
+                showToast(`FC IQ "${preset.name}" applied — ${preset.mentality} mindset live.`, 'success');
+              }}
+            />
           </div>
         </div>
       )}

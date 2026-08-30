@@ -48,9 +48,11 @@ export const AuctionLayout: React.FC<AuctionLayoutProps> = ({ children }) => {
     .filter(Boolean) as Player[];
 
   return (
-    <div className="min-h-screen w-full bg-[#030712] text-[#e2e8f0] flex flex-col font-sans selection:bg-[#D4AF37] selection:text-black relative">
+    <div className="fc-scanlines min-h-screen w-full bg-[#030712] text-[#e2e8f0] flex flex-col font-sans selection:bg-[#D4AF37] selection:text-black relative">
+      {/* Stadium atmosphere */}
+      <div className="fc-atmosphere"><div className="fc-atmosphere-grid" /></div>
       {/* EXCLUSIVE AUCTION TOP BAR (NO MAIN NAVBAR) */}
-      <header className="sticky top-0 z-40 bg-[#070b14]/95 backdrop-blur-md border-b border-[#1e293b] shadow-2xl px-4 md:px-6 py-3 flex items-center justify-between gap-3">
+      <header className="fc-header sticky top-0 z-40 px-4 md:px-6 py-3 flex items-center justify-between gap-3">
         {/* Left: Exit Auction and Mode Title */}
         <div className="flex items-center space-x-3 sm:space-x-4">
           <button
@@ -168,7 +170,7 @@ export const AuctionLayout: React.FC<AuctionLayoutProps> = ({ children }) => {
       </header>
 
       {/* FULL VIEWPORT AUCTION ARENA */}
-      <main className="flex-1 w-full p-3 sm:p-5 md:p-8 max-w-[1700px] mx-auto">
+      <main className="relative z-10 flex-1 w-full p-3 sm:p-5 md:p-8 max-w-[1700px] mx-auto">
         {children}
       </main>
 

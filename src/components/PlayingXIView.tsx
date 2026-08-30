@@ -8,9 +8,10 @@ import {
 } from 'lucide-react';
 import { FCPlayerCard } from './fc26/FCPlayerCard';
 import { getFCCardTier, getFCPlayerRatings } from '../engine/fc26Engine';
+import { computeTeamChemistry } from '../engine/chemistryEngine';
 
 export const PlayingXIView: React.FC = () => {
-  const { gameState, updateUserPlayingXI, setSelectedPlayerForModal } = useGame();
+  const { gameState, updateUserPlayingXI, buildValidXIForTeam, setSelectedPlayerForModal } = useGame();
   const [selectedForSwap, setSelectedForSwap] = useState<string | null>(null);
 
   if (!gameState) return null;
@@ -38,7 +39,11 @@ export const PlayingXIView: React.FC = () => {
   const overseasCountInXI = starters.filter(p => p.isOverseas).length;
   const hasWK = starters.some(p => p.role.includes('Wicketkeeper'));
   const teamOvr = starters.length > 0 ? Math.round(starters.reduce((acc, p) => acc + p.overall, 0) / starters.length) : 0;
-  const teamChemistry = Math.min(100, Math.round(90 + (starters.filter(p => !p.isOverseas).length * 1.5)));
+  const chemistryResult = computeTeamChemistry(starters);
+  const teamChemistry = chemistryResult.score;
+  const chemMultiplier = chemistryResult.multiplier;
+  const injCount = starters.filter(p => (p.injuryStatus || 'Fit') !== 'Fit').length;
+  const playersNeeded = Math.max(0, 11 - starters.length);
 
   // Swap starter with bench or change batting order
   const handlePlayerClick = (playerId: string) => {
@@ -89,6 +94,11 @@ export const PlayingXIView: React.FC = () => {
   };
 
   const autoSelectBestXI = () => {
+    const best = buildValidXIForTeam();
+    if (best) {
+      updateUserPlayingXI(best);
+      return;
+    }
     const sorted = [...allSquadPlayers].sort((a, b) => b.overall - a.overall);
     const selected: Player[] = [];
     let osCount = 0;
@@ -177,7 +187,8 @@ export const PlayingXIView: React.FC = () => {
 
           <div className="bg-[#04060c] px-4 py-2.5 rounded-2xl border border-[#182238] text-center shadow-lg">
             <span className="text-[9px] uppercase font-black text-slate-400 block tracking-widest font-mono">CHEMISTRY</span>
-            <span className="text-2xl font-mono-sport font-black text-[#00E5FF] leading-tight">{teamChemistry}/100</span>
+            <span className="text-2xl font-mono-sport font-black text-[#00E5FF] leading-tight">{teamChemistry}<span className="text-xs text-slate-500">/100</span></span>
+            <span className="text-[9px] font-mono text-[#00FF87] block">x{chemMultiplier.toFixed(3)} match bonus</span>
           </div>
 
           <button
@@ -410,6 +421,65 @@ export const PlayingXIView: React.FC = () => {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+
+          {/* Chemistry Room */}
+          <div className="bg-[#0a0f1d] p-4 sm:p-5 rounded-3xl border border-[#182238] shadow-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-1.5 font-heading">
+                <Flame className="w-4 h-4 text-[#00E5FF]" /> CHEMISTRY ROOM
+              </h3>
+              <span className={`text-sm font-black font-mono ${teamChemistry >= 80 ? 'text-[#00FF87]' : teamChemistry >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                {teamChemistry}/100
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-[#04060c] overflow-hidden border border-[#182238]">
+              <div
+                className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-[#00E5FF] to-[#00FF87]"
+                style={{ width: `${teamChemistry}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+              Chemistry applies a match-day skill multiplier of <strong className="text-[#00FF87]">x{chemMultiplier.toFixed(3)}</strong> — same-nationality bonds, Indian core, role synergy and captain leadership all count.
+            </p>
+            <div className="space-y-2">
+              {chemistryResult.breakdown.map(item => (
+                <div key={item.label} className="flex items-center justify-between text-[10px]">
+                  <span className="text-slate-400">{item.label}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-20 h-1.5 rounded-full bg-[#04060c] overflow-hidden">
+                      <div className="h-full bg-[#00E5FF]" style={{ width: `${(item.value / item.max) * 100}%` }} />
+                    </div>
+                    <span className="font-mono text-slate-500 w-10 text-right">{item.value}/{item.max}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Matchday Readiness */}
+          <div className="bg-[#0a0f1d] p-4 sm:p-5 rounded-3xl border border-[#182238] shadow-2xl space-y-3">
+            <h3 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-1.5 font-heading">
+              <ShieldCheck className="w-4 h-4 text-[#00FF87]" /> MATCHDAY READINESS
+            </h3>
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <div className={`p-3 rounded-xl border ${playersNeeded > 0 ? 'border-red-500/40 bg-red-950/20' : 'border-[#182238] bg-[#04060c]'}`}>
+                <p className="text-[9px] uppercase font-black text-slate-500">XI Slots</p>
+                <p className={`text-lg font-black font-mono ${playersNeeded > 0 ? 'text-red-400' : 'text-[#00FF87]'}`}>{starters.length}/11</p>
+              </div>
+              <div className={`p-3 rounded-xl border ${injCount > 0 ? 'border-amber-500/40 bg-amber-950/20' : 'border-[#182238] bg-[#04060c]'}`}>
+                <p className="text-[9px] uppercase font-black text-slate-500">Injured in XI</p>
+                <p className={`text-lg font-black font-mono ${injCount > 0 ? 'text-amber-400' : 'text-[#00FF87]'}`}>{injCount}</p>
+              </div>
+              <div className="p-3 rounded-xl border border-[#182238] bg-[#04060c]">
+                <p className="text-[9px] uppercase font-black text-slate-500">Overseas</p>
+                <p className={`text-lg font-black font-mono ${overseasCountInXI > 4 ? 'text-red-400' : 'text-blue-400'}`}>{overseasCountInXI}/4</p>
+              </div>
+              <div className="p-3 rounded-xl border border-[#182238] bg-[#04060c]">
+                <p className="text-[9px] uppercase font-black text-slate-500">Keeper</p>
+                <p className={`text-lg font-black font-mono ${hasWK ? 'text-[#00FF87]' : 'text-red-400'}`}>{hasWK ? '✓' : '✗'}</p>
+              </div>
             </div>
           </div>
         </div>

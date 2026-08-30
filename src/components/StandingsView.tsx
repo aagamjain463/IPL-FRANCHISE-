@@ -10,7 +10,7 @@ export const StandingsView: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn pb-12 font-sans">
       {/* Top Header */}
-      <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+      <div className="glass-panel p-5 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37]">
             <Trophy className="w-6 h-6" />
@@ -116,7 +116,7 @@ export const StandingsView: React.FC = () => {
       </div>
 
       {/* Playoff Format Overview */}
-      <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-4 shadow-xl">
+      <div className="glass-panel p-5 rounded-2xl space-y-4 shadow-xl">
         <h3 className="text-xs font-bold uppercase tracking-widest text-[#D4AF37] flex items-center gap-1.5">
           <Award className="w-4 h-4 text-[#D4AF37]" /> IPL Championship Playoff Pathway
         </h3>

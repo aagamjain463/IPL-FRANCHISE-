@@ -128,7 +128,7 @@ export const ClubFranchiseView: React.FC = () => {
   return (
     <div className="space-y-6 pb-12 animate-fadeIn font-sans">
       {/* Header & Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0a0c12] p-4 rounded-xl border border-[#1e293b]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel p-4 rounded-xl">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-[#D4AF37]/15 text-[#D4AF37] font-bold border border-[#D4AF37]/30">
@@ -292,7 +292,7 @@ export const ClubFranchiseView: React.FC = () => {
             </div>
           </div>
 
-          <div className="lg:col-span-4 bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] shadow-xl space-y-4">
+          <div className="lg:col-span-4 glass-panel p-6 rounded-2xl shadow-xl space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-widest text-white flex items-center gap-2">
               <Target className="w-4 h-4 text-[#D4AF37]" /> Identity Perks
             </h4>
@@ -322,7 +322,7 @@ export const ClubFranchiseView: React.FC = () => {
               { title: 'Orange Caps (Top Run-Scorers)', count: 3, desc: 'League Batting Supremacy', color: 'from-orange-500 to-amber-500' },
               { title: 'Purple Caps (Top Wicket-Takers)', count: 4, desc: 'Deadly Bowling Mastery', color: 'from-purple-500 to-pink-600' }
             ].map((trophy, i) => (
-              <div key={i} className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] shadow-xl text-center space-y-3">
+              <div key={i} className="glass-panel p-5 rounded-2xl shadow-xl text-center space-y-3">
                 <div className={`w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br ${trophy.color} flex items-center justify-center text-black shadow-lg`}>
                   <Trophy className="w-7 h-7 text-black" />
                 </div>
@@ -341,7 +341,7 @@ export const ClubFranchiseView: React.FC = () => {
       {activeTab === 'Rivalries' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Object.values(INITIAL_TEAMS).filter(t => t.id !== gameState.userTeamId).map(opp => (
-            <div key={opp.id} className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] shadow-xl space-y-3">
+            <div key={opp.id} className="glass-panel p-5 rounded-2xl shadow-xl space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
                   MARQUEE CLASH

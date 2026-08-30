@@ -44,7 +44,7 @@ export const FixturesScheduleView: React.FC = () => {
   return (
     <div className="space-y-6 pb-12 animate-fadeIn font-sans">
       {/* Header & Sub-Navigation */}
-      <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="glass-panel p-6 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-[#D4AF37]/15 text-[#D4AF37] font-bold border border-[#D4AF37]/30 flex items-center gap-1">
