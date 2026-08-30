@@ -199,9 +199,11 @@ class GlobalAudioManager {
   }
 
   private notify() {
-    this.listeners.forEach(cb => {
-      try { cb(); } catch {}
-    });
+    setTimeout(() => {
+      this.listeners.forEach(cb => {
+        try { cb(); } catch {}
+      });
+    }, 0);
   }
 
   public getSettings(): AudioSettings {

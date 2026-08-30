@@ -14,6 +14,7 @@ import { YouthAcademyView } from './components/YouthAcademyView';
 import { ScoutDepartmentView } from './components/ScoutDepartmentView';
 import { TradeCenterView } from './components/TradeCenterView';
 import { StandingsView } from './components/StandingsView';
+import { LeagueCenterView } from './components/LeagueCenterView';
 import { FixturesScheduleView } from './components/FixturesScheduleView';
 import { RewardsCenterView } from './components/RewardsCenterView';
 import { ChallengesView } from './components/ChallengesView';
@@ -104,7 +105,8 @@ const GameContent: React.FC = () => {
       {activeTab === 'Scout' && <ScoutDepartmentView />}
       {activeTab === 'TradeCenter' && <TradeCenterView />}
       {activeTab === 'Market' && <TradeCenterView />}
-      {activeTab === 'Standings' && <StandingsView />}
+      {activeTab === 'Standings' && <LeagueCenterView />}
+      {activeTab === 'League' && <LeagueCenterView />}
       {activeTab === 'Schedule' && <FixturesScheduleView />}
       {activeTab === 'Rewards' && <RewardsCenterView />}
       {activeTab === 'Challenges' && <ChallengesView />}
