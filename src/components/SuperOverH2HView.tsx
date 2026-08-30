@@ -423,7 +423,7 @@ export const SuperOverH2HView: React.FC<{ onBackToPlay?: () => void }> = ({ onBa
           </div>
 
           {/* Division Ladder Sidebar */}
-          <div className="lg:col-span-4 bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] shadow-xl space-y-4">
+          <div className="lg:col-span-4 glass-panel p-5 rounded-2xl shadow-xl space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-widest text-white flex items-center gap-2">
               <Award className="w-4 h-4 text-[#D4AF37]" /> Ranked Division Ladder
             </h4>
@@ -595,7 +595,7 @@ export const SuperOverH2HView: React.FC<{ onBackToPlay?: () => void }> = ({ onBa
           </div>
 
           {/* Commentary & Tactical Action Center */}
-          <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] shadow-xl space-y-5">
+          <div className="glass-panel p-6 rounded-2xl shadow-xl space-y-5">
             {/* Live Tension Commentary */}
             <div className="bg-[#05070a] p-3.5 rounded-xl border border-white/10 text-xs font-semibold text-[#e2e8f0]">
               <span className="text-[#D4AF37] font-black uppercase mr-2">🎙️ Commentary:</span>

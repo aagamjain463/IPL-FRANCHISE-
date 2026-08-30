@@ -77,7 +77,7 @@ export const MultiplayerLobbyView: React.FC<MultiplayerLobbyViewProps> = ({
   return (
     <div className="space-y-6 max-w-6xl mx-auto animate-fadeIn font-sans pb-12">
       {/* Top Banner: Room Code & Lobby Info */}
-      <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] flex flex-col md:flex-row items-start md:items-center justify-between gap-5 shadow-2xl">
+      <div className="glass-panel p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-5 shadow-2xl">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-[#D4AF37]/15 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] shadow-lg">
             <Users className="w-7 h-7" />
@@ -159,7 +159,7 @@ export const MultiplayerLobbyView: React.FC<MultiplayerLobbyViewProps> = ({
       )}
 
       {/* Step 1: Select IPL Franchise (Duplicate Prevention Enforced) */}
-      <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] space-y-4 shadow-xl">
+      <div className="glass-panel p-6 rounded-2xl space-y-4 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#1e293b] pb-3">
           <div>
             <h3 className="text-base font-black text-white uppercase tracking-tight flex items-center gap-2">
@@ -244,7 +244,7 @@ export const MultiplayerLobbyView: React.FC<MultiplayerLobbyViewProps> = ({
 
       {/* Step 2: Connected Managers Roster Table & Ready Status */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] space-y-4 shadow-xl">
+        <div className="lg:col-span-2 glass-panel p-6 rounded-2xl space-y-4 shadow-xl">
           <div className="flex items-center justify-between border-b border-[#1e293b] pb-3">
             <h3 className="text-base font-black text-white uppercase tracking-tight flex items-center gap-2">
               <UserCheck className="w-5 h-5 text-emerald-400" /> Connected Managers ({roomState.participants.length})
@@ -332,7 +332,7 @@ export const MultiplayerLobbyView: React.FC<MultiplayerLobbyViewProps> = ({
         </div>
 
         {/* Step 3: Player Action Bar & Ready/Start Buttons */}
-        <div className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] flex flex-col justify-between space-y-6 shadow-xl">
+        <div className="glass-panel p-6 rounded-2xl flex flex-col justify-between space-y-6 shadow-xl">
           <div className="space-y-3">
             <h3 className="text-base font-black text-white uppercase tracking-tight flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-[#D4AF37]" /> War Room Status

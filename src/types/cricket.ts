@@ -103,6 +103,14 @@ export interface Player {
   salaryCr: number;
   contractYearsRemaining: number;
 
+  // Dynasty / career extension fields (backward compatible — old saves get defaults)
+  injuryProneness?: number; // 0 - 100 (higher = more likely to get injured)
+  energy?: number; // 0 (exhausted) - 100 (fresh)
+  formerTeamIds?: string[]; // IPL franchise history for chemistry links
+  matchRating?: number; // rating from most recent match 1 - 10
+  seasonRating?: number; // rolling season performance 1 - 10
+  careerStats?: Partial<Player['stats']>;
+
   // Ratings
   overall: number; // 50 - 99
   battingRating: number;
@@ -226,6 +234,15 @@ export interface PitchCondition {
   parScore: number; // e.g. 175
 }
 
+export interface MatchHighlight {
+  id: string;
+  type: 'WICKET' | 'SIX' | 'FOUR' | 'FIFTY' | 'HUNDRED' | 'HAT_TRICK' | 'LAST_OVER_FINISH' | 'IMPACT_SUB' | 'DEATH_BOWLING' | 'POWERPLAY';
+  overLabel: string;
+  playerName: string;
+  teamShortName: string;
+  text: string;
+}
+
 export type BallEventType = '0' | '1' | '2' | '3' | '4' | '6' | 'WICKET' | 'WIDE' | 'NO_BALL' | 'BYE' | 'LEG_BYE';
 export type DismissalType = 'Bowled' | 'Caught' | 'LBW' | 'Run Out' | 'Stumped' | 'Hit Wicket' | 'None';
 
@@ -314,6 +331,10 @@ export interface InningsState {
   timeline: BallByBallEvent[];
   isCompleted: boolean;
   target?: number; // for 2nd innings
+  // Live milestone tracking (avoid double-noting 50s/100s)
+  fiftiesNoted?: string[];
+  hundredsNoted?: string[];
+  runsAtOverStart?: Record<string, number>; // bowlerId -> runs conceded at over start (maiden detection)
 }
 
 export interface MatchTacticsState {
@@ -366,6 +387,14 @@ export interface MatchState {
   manOfTheMatchDescription?: string;
 
   tactics: MatchTacticsState;
+
+  // Broadcast / sim extensions
+  matchSeed?: string;
+  probHistory?: number[]; // teamA win probability after each legal ball
+  highlights?: MatchHighlight[];
+  teamAChemistry?: number; // 0 - 100
+  teamBChemistry?: number; // 0 - 100
+  momentum?: number; // 0 (bowling side) - 100 (batting side)
 }
 
 export type { LeagueFixture } from './tournament';

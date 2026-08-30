@@ -5,6 +5,22 @@ import { StandingsRow, TournamentFixture, SeasonAwards } from './tournament';
 import { ScoutingDepartmentData } from './scout';
 import { FranchiseProgressionState } from './franchise';
 
+export const SAVE_VERSION = 2;
+
+export interface SeasonSummary {
+  seasonYear: number;
+  championTeamId: string;
+  runnerUpTeamId: string;
+  userTeamFinish: string; // 'Champions' | 'Runners-Up' | 'Qualifier 1' | 'Eliminator' | 'League Stage'
+  userRecord: string;
+  orangeCap: { playerId: string; playerName: string; teamShortName: string; runs: number };
+  purpleCap: { playerId: string; playerName: string; teamShortName: string; wickets: number };
+  mvp: { playerId: string; playerName: string; teamShortName: string; pts: number };
+  emergingPlayer: { playerId: string; playerName: string; teamShortName: string; reason: string };
+  playoffResults: Array<{ stage: string; resultText: string }>;
+  awardWinners: Array<{ playerId: string; playerName: string; teamShortName: string; award: string }>;
+}
+
 export type GameMode = 'Authentic IPL' | 'Mega Auction Mode' | 'Full Season' | 'Dynasty Career' | 'Quick Match' | 'What-If Simulator' | 'Scenario Challenge';
 
 export type AppTab = 
@@ -28,7 +44,10 @@ export type AppTab =
   | 'Rewards' // Objectives & Reward Center
   | 'Challenges'
   | 'WhatIfSimulator'
-  | 'MatchLive';
+  | 'MatchLive'
+  | 'News' // Newsroom & ticker
+  | 'SeasonRecap' // End-of-season awards & recap
+  | 'OffSeason'; // Retain / release / pre-season prep
 
 export type ScreenView = 'MainMenu' | 'Dashboard' | 'Auction' | 'MultiplayerAuction' | 'MatchLive' | 'PressConference' | 'PostMatchPresentation';
 export type GameScreen = ScreenView;
@@ -123,6 +142,7 @@ export interface GoogleAccountProfile {
 }
 
 export interface GameSave {
+  saveVersion?: number;
   id?: string;
   saveId?: string;
   saveName: string;
@@ -148,6 +168,8 @@ export interface GameSave {
   progression?: FranchiseProgressionState;
   retiredPlayers?: Player[];
   seasonHistory?: SeasonHistoryRecord[];
+  seasonSummary?: SeasonSummary | null;
+  rivalTeamIds?: string[];
   auctionState?: AuctionState | null;
   currentMatchState?: MatchState | null;
   pressConferenceState?: PressConferenceState | null;

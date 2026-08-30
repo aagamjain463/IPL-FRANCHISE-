@@ -9,7 +9,7 @@ export const ChallengesView: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn pb-12 font-sans">
       {/* Header */}
-      <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+      <div className="glass-panel p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37]">
             <Flame className="w-6 h-6" />
@@ -32,7 +32,7 @@ export const ChallengesView: React.FC = () => {
           return (
             <div
               key={ch.id}
-              className="bg-[#0f172a] p-6 rounded-2xl border border-[#1e293b] hover:border-[#D4AF37]/50 transition flex flex-col justify-between space-y-4 shadow-xl"
+              className="glass-panel p-6 rounded-2xl hover:border-[#D4AF37]/50 transition flex flex-col justify-between space-y-4 shadow-xl"
             >
               <div>
                 <div className="flex items-center justify-between">

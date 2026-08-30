@@ -78,7 +78,7 @@ export const PlayCenterView: React.FC = () => {
   return (
     <div className="space-y-6 pb-12 animate-fadeIn">
       {/* Sub-Navigation Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0a0c12] p-3 md:p-4 rounded-xl border border-[#1e293b]">
+      <div className="glass-panel flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3 md:p-4 rounded-2xl">
         <div>
           <h2 className="text-xl font-black uppercase italic tracking-tight text-white flex items-center gap-2">
             <Zap className="w-5 h-5 text-[#D4AF37] fill-[#D4AF37]" />

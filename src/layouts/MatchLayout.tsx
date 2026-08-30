@@ -34,9 +34,11 @@ export const MatchLayout: React.FC<MatchLayoutProps> = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#030712] text-[#e2e8f0] flex flex-col font-sans selection:bg-[#D4AF37] selection:text-black relative">
+    <div className="fc-scanlines min-h-screen w-full bg-[#030712] text-[#e2e8f0] flex flex-col font-sans selection:bg-[#D4AF37] selection:text-black relative">
+      {/* Stadium atmosphere */}
+      <div className="fc-atmosphere"><div className="fc-atmosphere-grid" /></div>
       {/* MATCH TOP BAR */}
-      <header className="sticky top-0 z-40 bg-[#070b14]/95 backdrop-blur-md border-b border-[#1e293b] px-4 md:px-6 py-2.5 flex items-center justify-between gap-3 shadow-2xl">
+      <header className="fc-header sticky top-0 z-40 px-4 md:px-6 py-2.5 flex items-center justify-between gap-3">
         <div className="flex items-center space-x-3">
           <button
             onClick={() => setShowExitConfirm(true)}
@@ -73,7 +75,7 @@ export const MatchLayout: React.FC<MatchLayoutProps> = ({ children }) => {
       </header>
 
       {/* FULL MATCH ARENA CONTENT */}
-      <main className="flex-1 w-full p-3 sm:p-5 md:p-6 max-w-[1700px] mx-auto">
+      <main className="relative z-10 flex-1 w-full p-3 sm:p-5 md:p-6 max-w-[1800px] mx-auto">
         {children}
       </main>
 

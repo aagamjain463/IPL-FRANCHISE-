@@ -127,21 +127,22 @@ export const Navbar: React.FC = () => {
   return (
     <>
       {/* MINIMALIST HEADER BAR */}
-      <header className="sticky top-0 z-40 bg-[#060912]/95 backdrop-blur-md border-b border-[#141d2e] select-none">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-3 sm:gap-6">
+      <header className="fc-header sticky top-0 z-40 select-none">
+        <div className="max-w-[1800px] mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-3 sm:gap-6">
           
           {/* Left: Brand Identity (Guaranteed no overlap) */}
           <div className="flex items-center gap-2.5 shrink-0">
             {/* Team Logo Badge */}
             <div 
               onClick={() => handleTabClick('Dashboard')}
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-black text-xs sm:text-sm tracking-wider cursor-pointer border border-[#00FF87]/50 shadow-sm transition hover:scale-105 active:scale-95 shrink-0"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-black text-xs sm:text-sm tracking-wider cursor-pointer border border-[#00FF87]/50 shadow-lg shadow-[#00FF87]/20 transition hover:scale-105 active:scale-95 shrink-0 relative overflow-hidden"
               style={{ 
                 backgroundColor: userTeam?.primaryColor || '#0a0f1d',
                 color: userTeam?.secondaryColor || '#ffffff'
               }}
               title="Go to Home Hub"
             >
+              <span className="absolute inset-0 bg-gradient-to-br from-white/25 to-transparent pointer-events-none" />
               {userTeam?.shortName || 'FC'}
             </div>
 
@@ -150,7 +151,7 @@ export const Navbar: React.FC = () => {
               <div className="flex items-center gap-1.5">
                 <span 
                   onClick={() => handleTabClick('Dashboard')}
-                  className="text-xs sm:text-sm font-bold text-white tracking-tight truncate cursor-pointer hover:text-[#00FF87] transition max-w-[100px] sm:max-w-[140px] md:max-w-[180px]"
+                  className="text-xs sm:text-sm font-black text-white tracking-tight truncate cursor-pointer hover:text-[#00FF87] transition max-w-[100px] sm:max-w-[150px] md:max-w-[190px]"
                 >
                   {userTeam?.name}
                 </span>
@@ -168,12 +169,14 @@ export const Navbar: React.FC = () => {
                 <span className="text-[#00FF87] font-semibold">LV {levelInfo.level}</span>
                 <span>•</span>
                 <span>₹{userTeam?.purseCr.toFixed(1)} Cr</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline text-[#94a3b8]">SEASON {gameState.currentSeason}</span>
               </div>
             </div>
           </div>
 
-          {/* Center: Minimalist Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-1 bg-[#090e1a] p-1 rounded-xl border border-[#141d2e] shrink-0">
+          {/* Center: Minimalist Desktop Navigation — FC Dock */}
+          <nav className="fc-dock hidden md:flex items-center gap-0.5 p-1 rounded-2xl shrink-0">
             {primaryNavTabs.map(tab => {
               let isTabSelected = false;
               if (tab.id === 'Dashboard') isTabSelected = isHomeActive;
@@ -189,10 +192,10 @@ export const Navbar: React.FC = () => {
                   key={tab.id}
                   id={`nav-tab-${tab.id.toLowerCase()}`}
                   onClick={() => handleTabClick(tab.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-150 flex items-center gap-1.5 cursor-pointer select-none relative ${
+                  className={`fc-dock-item px-3.5 py-2 rounded-xl text-[11px] font-bold tracking-wider transition-all duration-150 flex items-center gap-1.5 cursor-pointer select-none relative ${
                     isTabSelected
-                      ? 'bg-[#121c2e] text-[#00FF87] font-bold shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-[#0e1624]'
+                      ? 'fc-dock-active'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
                   {tab.icon}
@@ -252,7 +255,7 @@ export const Navbar: React.FC = () => {
             <button
               id="btn-quick-play-nav"
               onClick={() => handleTabClick('Play')}
-              className="bg-[#00FF87] hover:bg-[#00e57a] text-black px-3 py-1.5 rounded-xl font-bold uppercase tracking-wider text-xs transition-transform active:scale-95 flex items-center gap-1.5 cursor-pointer font-mono shadow-sm"
+              className="btn-volt px-4 py-2 rounded-xl font-black uppercase tracking-wider text-xs flex items-center gap-1.5 cursor-pointer font-mono"
             >
               <Zap className="w-3.5 h-3.5 fill-black" />
               <span className="hidden sm:inline">MATCHDAY</span>
@@ -274,7 +277,7 @@ export const Navbar: React.FC = () => {
 
       {/* MOBILE PERSISTENT BOTTOM NAVIGATION BAR */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#060912]/95 backdrop-blur-md border-t border-[#141d2e] px-2 py-1 flex items-center justify-around"
+        className="fc-bottom-nav md:hidden fixed bottom-0 left-0 right-0 z-50 px-2 py-1 flex items-center justify-around"
         style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}
       >
         {primaryNavTabs.map(tab => {

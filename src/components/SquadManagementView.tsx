@@ -8,9 +8,11 @@ import {
 } from 'lucide-react';
 import { FCPlayerCard } from './fc26/FCPlayerCard';
 import { getFCCardTier } from '../engine/fc26Engine';
+import { computeTeamChemistry } from '../engine/chemistryEngine';
+import { Dumbbell, HeartPulse, Activity, BatteryCharging } from 'lucide-react';
 
 export const SquadManagementView: React.FC = () => {
-  const { gameState, setSelectedPlayerForModal, updateUserPlayingXI } = useGame();
+  const { gameState, setSelectedPlayerForModal, updateUserPlayingXI, runTrainingSession, showToast } = useGame();
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [tierFilter, setTierFilter] = useState<string>('ALL');
   const [sortBy, setSortBy] = useState<'overall' | 'form' | 'potential' | 'salaryCr' | 'age'>('overall');
@@ -47,6 +49,19 @@ export const SquadManagementView: React.FC = () => {
   const totalWage = players.reduce((acc, p) => acc + (p.salaryCr || p.basePriceCr || 0), 0);
   const avgOvr = players.length > 0 ? Math.round(players.reduce((acc, p) => acc + p.overall, 0) / players.length) : 0;
   const overseasCount = players.filter(p => p.isOverseas).length;
+  const xiPlayers = playingXIIds.map(id => gameState.allPlayers[id]).filter(Boolean);
+  const chemistry = computeTeamChemistry(xiPlayers);
+  const injuredCount = players.filter(p => p.injuryStatus && p.injuryStatus !== 'Fit').length;
+  const fatiguedCount = players.filter(p => (p.fatigue || 0) > 70).length;
+  const avgEnergy = players.length ? Math.round(players.reduce((s, p) => s + (p.energy ?? 100 - (p.fatigue || 0)), 0) / players.length) : 100;
+  const trainingCost = 1.2;
+  const trainedToday = !!userTeam.trainedThisMatchday;
+  const clubBudget = gameState.progression?.clubBudgetCr ?? 8.5;
+
+  const handleTraining = (focus: 'batting' | 'bowling' | 'recovery') => {
+    const res = runTrainingSession(focus);
+    showToast(res.message, res.applied > 0 ? 'success' : 'warn');
+  };
 
   return (
     <div className="space-y-6 animate-fadeIn pb-16 font-sans">
@@ -115,6 +130,107 @@ export const SquadManagementView: React.FC = () => {
           </div>
         </div>
 
+      </div>
+
+      {/* 1b. FITNESS, CHEMISTRY & TRAINING DECK */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5">
+        {/* Fitness pulse */}
+        <div className="bg-[#0a0f1d] p-4 rounded-2xl border border-[#182238] space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-[#00FF87]" /> SQUAD FITNESS PULSE
+            </span>
+            <span className="text-xs font-mono font-black text-white">{avgEnergy}%</span>
+          </div>
+          <div className="h-2 rounded-full bg-[#04060c] overflow-hidden border border-[#182238]">
+            <div
+              className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-emerald-500 to-[#00FF87]"
+              style={{ width: `${avgEnergy}%` }}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className={`p-2 rounded-xl border ${injuredCount > 0 ? 'border-red-500/40 bg-red-950/20' : 'border-[#182238] bg-[#04060c]'}`}>
+              <p className="text-[8px] uppercase font-black text-slate-500">Injured</p>
+              <p className={`text-sm font-black font-mono ${injuredCount > 0 ? 'text-red-400' : 'text-[#00FF87]'}`}>{injuredCount}</p>
+            </div>
+            <div className={`p-2 rounded-xl border ${fatiguedCount > 0 ? 'border-amber-500/40 bg-amber-950/20' : 'border-[#182238] bg-[#04060c]'}`}>
+              <p className="text-[8px] uppercase font-black text-slate-500">High Fatigue</p>
+              <p className={`text-sm font-black font-mono ${fatiguedCount > 0 ? 'text-amber-400' : 'text-[#00FF87]'}`}>{fatiguedCount}</p>
+            </div>
+          </div>
+          <p className="text-[9px] text-slate-500 leading-relaxed">
+            Matchday refreshes fatigue &amp; injury timers. Medical Lab speeds recovery; Training Center sharpens sessions.
+          </p>
+        </div>
+
+        {/* Chemistry */}
+        <div className="bg-[#0a0f1d] p-4 rounded-2xl border border-[#182238] space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 flex items-center gap-1.5">
+              <HeartPulse className="w-3.5 h-3.5 text-cyan-400" /> XI CHEMISTRY
+            </span>
+            <span className="text-xs font-mono font-black text-cyan-400">{chemistry.score}/100</span>
+          </div>
+          <div className="h-2 rounded-full bg-[#04060c] overflow-hidden border border-[#182238]">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#00E5FF] to-[#00FF87] transition-all duration-500"
+              style={{ width: `${chemistry.score}%` }}
+            />
+          </div>
+          <div className="space-y-1.5">
+            {chemistry.breakdown.map(item => (
+              <div key={item.label} className="flex items-center justify-between text-[9px]">
+                <span className="text-slate-500">{item.label}</span>
+                <span className="font-mono text-slate-400">{item.value}/{item.max}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[9px] text-slate-500">Match-day skill multiplier: <strong className="text-[#00FF87]">x{chemistry.multiplier.toFixed(3)}</strong></p>
+        </div>
+
+        {/* Training center */}
+        <div className="bg-[#0a0f1d] p-4 rounded-2xl border border-[#182238] space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400 flex items-center gap-1.5">
+              <Dumbbell className="w-3.5 h-3.5 text-[#D4AF37]" /> TRAINING CENTER
+            </span>
+            <span className="text-[9px] font-mono text-amber-400">LV {gameState.progression?.facilities?.training?.level || 1}</span>
+          </div>
+          <p className="text-[10px] text-slate-400">One session per matchday. Costs ₹{trainingCost.toFixed(2)} Cr club budget.</p>
+          {trainedToday ? (
+            <div className="p-3 rounded-xl border border-emerald-500/40 bg-emerald-950/20 text-emerald-300 text-[10px] font-bold text-center">
+              <BatteryCharging className="w-4 h-4 inline mr-1" /> Squad already trained today
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => handleTraining('batting')}
+                className="p-2.5 rounded-xl bg-[#04060c] hover:bg-[#12202c] border border-[#182238] text-center transition cursor-pointer disabled:opacity-40"
+                disabled={clubBudget < trainingCost}
+              >
+                <p className="text-[9px] font-black uppercase text-sky-300">Batting</p>
+                <p className="text-[8px] text-slate-500 mt-0.5">+Form</p>
+              </button>
+              <button
+                onClick={() => handleTraining('bowling')}
+                className="p-2.5 rounded-xl bg-[#04060c] hover:bg-[#12202c] border border-[#182238] text-center transition cursor-pointer disabled:opacity-40"
+                disabled={clubBudget < trainingCost}
+              >
+                <p className="text-[9px] font-black uppercase text-violet-300">Bowling</p>
+                <p className="text-[8px] text-slate-500 mt-0.5">+Form</p>
+              </button>
+              <button
+                onClick={() => handleTraining('recovery')}
+                className="p-2.5 rounded-xl bg-[#04060c] hover:bg-[#12202c] border border-[#182238] text-center transition cursor-pointer disabled:opacity-40"
+                disabled={clubBudget < trainingCost}
+              >
+                <p className="text-[9px] font-black uppercase text-emerald-300">Recovery</p>
+                <p className="text-[8px] text-slate-500 mt-0.5">-Fatigue</p>
+              </button>
+            </div>
+          )}
+          <p className="text-[9px] text-slate-500">Budget available: <strong className="font-mono text-white">₹{clubBudget.toFixed(1)} Cr</strong></p>
+        </div>
       </div>
 
       {/* 2. FILTER & SORTING BAR */}
@@ -236,14 +352,23 @@ export const SquadManagementView: React.FC = () => {
                       <td className="p-3 text-slate-400">{player.role}</td>
                       <td className="p-3 text-slate-400">{player.nationality}</td>
                       <td className="p-3 font-mono font-bold text-emerald-400">₹{player.salaryCr} Cr</td>
-                      <td className="p-3">
+                      <td className="p-3 space-y-1">
                         {isStarter ? (
-                          <span className="px-2 py-0.5 rounded-full bg-[#00FF87]/20 text-[#00FF87] font-black text-[9px]">
+                          <span className="inline-block px-2 py-0.5 rounded-full bg-[#00FF87]/20 text-[#00FF87] font-black text-[9px]">
                             PLAYING XI
                           </span>
                         ) : (
-                          <span className="text-slate-500 text-[10px]">Bench</span>
+                          <span className="inline-block text-slate-500 text-[10px]">Bench</span>
                         )}
+                        {player.injuryStatus && player.injuryStatus !== 'Fit' ? (
+                          <span className="inline-block ml-1 px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-black text-[9px]">
+                            {player.injuryStatus}
+                          </span>
+                        ) : (player.fatigue || 0) > 70 ? (
+                          <span className="inline-block ml-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-black text-[9px]">
+                            FATIGUED
+                          </span>
+                        ) : null}
                       </td>
                     </tr>
                   );

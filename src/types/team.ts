@@ -9,6 +9,9 @@ export interface Team {
   accentColor: string;
   homeVenue: string;
   city: string;
+  homePitchType?: string; // selected home surface: Flat, Green, Dusty, Slow, Balanced
+  medicalLabLevel?: number; // Sports Medicine Lab level (1-5) — injury prevention for this franchise only
+  trainedThisMatchday?: boolean; // one training block per matchday
   purseCr: number; // in Crores INR e.g. 120.0 initially, or remaining purse
   initialPurseCr: number;
   rosterPlayerIds: string[];

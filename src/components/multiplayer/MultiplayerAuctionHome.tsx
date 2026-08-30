@@ -539,7 +539,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
 
       {/* Feature Highlights Bento */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
-        <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-2 shadow-lg">
+        <div className="glass-panel p-5 rounded-2xl space-y-2 shadow-lg">
           <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
             <Zap className="w-4 h-4" />
           </div>
@@ -549,7 +549,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-2 shadow-lg">
+        <div className="glass-panel p-5 rounded-2xl space-y-2 shadow-lg">
           <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center">
             <Shield className="w-4 h-4" />
           </div>
@@ -559,7 +559,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-2 shadow-lg">
+        <div className="glass-panel p-5 rounded-2xl space-y-2 shadow-lg">
           <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
             <Award className="w-4 h-4" />
           </div>
