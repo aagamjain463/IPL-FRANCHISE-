@@ -112,12 +112,13 @@ fi
 TITLE="$(git log -1 --pretty=%s)"
 COUNT="$(git rev-list --count "origin/$BASE..HEAD" 2>/dev/null || echo '?')"
 STAT="$(git diff --stat "origin/$BASE" HEAD | tail -1)"
+HEAD_SHA="$(git rev-parse --short HEAD)"
 LIST="$(git log --oneline "origin/$BASE..HEAD" 2>/dev/null | head -20 || git log --oneline -10 HEAD)"
 
 BODY="$(cat <<EOF
 ### Synced from the Arena coding sandbox
 
-**$COUNT** commit(s) ahead of \`$BASE\` · **$FILES_CHANGED** file(s) changed · \`$STAT\`
+synced HEAD \`${HEAD_SHA}\` · **$COUNT** commit(s) ahead of \`$BASE\` · **$FILES_CHANGED** file(s) changed · \`$STAT\`
 
 ### Commits
 \`\`\`
@@ -142,8 +143,6 @@ if PR_REF="$(gh pr view --json number,url --jq '[.number,.url] | @tsv' 2>/dev/nu
   gh api -X PATCH "repos/{owner}/{repo}/issues/$PR_NUM" -F title="$TITLE" -F body="$BODY" >/dev/null 2>&1 \
     || gh pr edit "$PR_NUM" --title "$TITLE" --body "$BODY" >/dev/null 2>&1 \
     || warn "pushed fine, but could not refresh the PR title/body — edit it on $PR_URL if that matters"
-  gh pr comment "$PR_NUM" --body "Re-synced with \`$(git rev-parse --short HEAD)\` — $FILES_CHANGED file(s) changed." >/dev/null 2>&1 || true
-  gh pr comment "$EXISTING" --body "Re-synced with \`$(git rev-parse --short HEAD)\` — $FILES_CHANGED file(s) changed." >/dev/null 2>&1 || true
 else
   log "opening PR: $BRANCH → $BASE"
   gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body "$BODY"
