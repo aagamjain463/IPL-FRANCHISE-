@@ -136,7 +136,8 @@ EOF
 
 if EXISTING="$(gh pr view --json number,url --jq '.url' 2>/dev/null)"; then
   log "PR already open — updating: $EXISTING"
-  gh pr edit --title "$TITLE" --body "$BODY" >/dev/null
+  gh pr edit --title "$TITLE" --body "$BODY" >/dev/null 2>&1 \
+    || warn "could not refresh PR title/body (gh API quirk) — the push itself succeeded"
   gh pr comment "$EXISTING" --body "Re-synced with \`$(git rev-parse --short HEAD)\` — $FILES_CHANGED file(s) changed." >/dev/null 2>&1 || true
 else
   log "opening PR: $BRANCH → $BASE"
