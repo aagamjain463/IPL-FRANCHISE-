@@ -76,6 +76,119 @@ export function generateLeagueSchedule(teams: Record<string, Team>): TournamentF
   return fixtures;
 }
 
+export function getPlayoffTeams(standings: StandingsRow[]): string[] {
+  return standings.slice(0, 4).map(r => r.teamId);
+}
+
+export function isLeagueStageComplete(schedule: TournamentFixture[]): boolean {
+  return schedule.length > 0 && schedule.every(f => f.isPlayed && f.stage === 'League');
+}
+
+/**
+ * Authentic IPL playoff fixtures from the final league table:
+ * Q1: 1 v 2 (winner → Final), Eliminator: 3 v 4 (winner → Q2),
+ * Q2: Q1 loser v Eliminator winner (winner → Final), Final.
+ * Q1/Eliminators play at the higher seed's home venue.
+ */
+export function generatePlayoffFixtures(
+  standings: StandingsRow[],
+  season: number,
+  startMatchNumber: number
+): TournamentFixture[] {
+  const teams = getPlayoffTeams(standings);
+  if (teams.length < 4) return [];
+  const venueOf = (teamId: string, teamsMap?: Record<string, any>): { venue: string; city: string } => {
+    const t = teamsMap?.[teamId];
+    return { venue: t?.homeVenue || 'IPL Playoff Arena', city: t?.city || 'India' };
+  };
+
+  const q1venue = venueOf(teams[0]);
+  const elimVenue = venueOf(teams[2]);
+
+  return [
+    {
+      id: `po_q1_${season}`,
+      matchNumber: startMatchNumber,
+      stage: 'Qualifier 1',
+      teamAId: teams[0],
+      teamBId: teams[1],
+      venue: q1venue.venue,
+      city: q1venue.city,
+      isPlayed: false
+    },
+    {
+      id: `po_elim_${season}`,
+      matchNumber: startMatchNumber + 1,
+      stage: 'Eliminator',
+      teamAId: teams[2],
+      teamBId: teams[3],
+      venue: elimVenue.venue,
+      city: elimVenue.city,
+      isPlayed: false
+    },
+    {
+      id: `po_q2_${season}`,
+      matchNumber: startMatchNumber + 2,
+      stage: 'Qualifier 2',
+      teamAId: '', // resolved after Q1 + Eliminator
+      teamBId: '',
+      venue: 'Playoff Theatre',
+      city: 'India',
+      isPlayed: false
+    },
+    {
+      id: `po_final_${season}`,
+      matchNumber: startMatchNumber + 3,
+      stage: 'Final',
+      teamAId: '',
+      teamBId: '',
+      venue: 'IPL Grand Final Stadium',
+      city: 'India',
+      isPlayed: false
+    }
+  ];
+}
+
+export function resolvePlayoffFixtures(
+  schedule: TournamentFixture[],
+  teams: Record<string, any>
+): TournamentFixture[] {
+  const winnerOf = (f?: TournamentFixture) => (f ? ((f as any).winnerTeamId || f.matchResult?.winnerTeamId || '') : '');
+  const q1 = schedule.find(s => s.stage === 'Qualifier 1');
+  const elim = schedule.find(s => s.stage === 'Eliminator');
+  const q2 = schedule.find(s => s.stage === 'Qualifier 2');
+
+  return schedule.map(f => {
+    if (f.stage === 'Qualifier 1' || f.stage === 'Eliminator') return f;
+
+    if (f.stage === 'Qualifier 2' && q1?.isPlayed && elim?.isPlayed) {
+      const q1Loser = q1.teamAId === winnerOf(q1) ? q1.teamBId : q1.teamAId;
+      const elimWinner = winnerOf(elim);
+      const homeTeam = teams[elimWinner] || teams[q1Loser];
+      return {
+        ...f,
+        teamAId: q1Loser,
+        teamBId: elimWinner,
+        venue: homeTeam?.homeVenue || f.venue,
+        city: homeTeam?.city || f.city
+      };
+    }
+    if (f.stage === 'Final' && q1?.isPlayed && q2?.isPlayed) {
+      const q1Winner = winnerOf(q1);
+      const q2Winner = winnerOf(q2);
+      const homeTeam = teams[q1Winner] || teams[q2Winner];
+      return {
+        ...f,
+        teamAId: q1Winner,
+        teamBId: q2Winner,
+        venue: homeTeam?.homeVenue || f.venue,
+        city: homeTeam?.city || f.city
+      };
+    }
+    return f;
+  });
+}
+
 export function updateStandingsWithMatch(
   standings: StandingsRow[],
   teamAId: string,
@@ -135,8 +248,13 @@ export function updateStandingsWithMatch(
     const lastResult = recentForm[recentForm.length - 1] || 'W';
     const streak = `${streakCount}${lastResult}`;
 
-    // Qualification Prob
-    const qualificationProbability = Math.min(100, Math.max(5, Math.round((points / 28) * 100 + (nrr * 10))));
+    // Qualification Prob: ~15 pts usually secures a top-4 finish in a 10-team 18-game league
+    const effectiveWins = row.points / 2;
+    const winRate = row.played > 0 ? effectiveWins / row.played : 0.5;
+    const gamesLeft = 18 - row.played;
+    const winsNeeded = Math.max(0, 14.5 - effectiveWins);
+    const expectedFutureWins = winRate * gamesLeft;
+    const qualificationProbability = Math.min(98, Math.max(2, Math.round(50 + (expectedFutureWins - winsNeeded) * 14 + row.nrr * 9)));
 
     return {
       ...row,

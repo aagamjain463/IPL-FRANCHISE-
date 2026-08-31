@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { useGame } from '../context/GameContext';
 import { 
   Zap, Calendar, Trophy, Flame, Play, Clock, 
-  MapPin, Shield, CheckCircle2, Award, ChevronRight, Activity, RotateCcw
+  MapPin, Shield, CheckCircle2, Award, ChevronRight, Activity, RotateCcw, Gavel, Users
 } from 'lucide-react';
 import { MATCH_MOMENTS } from '../engine/progressionEngine';
 import { MatchMomentScenario } from '../types/franchise';
 import { SCENARIO_CHALLENGES, ChallengeScenario } from '../data/challenges';
 import { FixturesScheduleView } from './FixturesScheduleView';
+import { SuperOverH2HView } from './SuperOverH2HView';
+import { MultiplayerAuctionHome } from './multiplayer/MultiplayerAuctionHome';
 import { Team } from '../types/team';
 
 export const PlayCenterView: React.FC = () => {
@@ -19,7 +21,7 @@ export const PlayCenterView: React.FC = () => {
     setActiveTab 
   } = useGame();
 
-  const [activeSubTab, setActiveSubTab] = useState<'Matchday' | 'Schedule' | 'Moments' | 'QuickMatch' | 'Challenges' | 'Results'>('Matchday');
+  const [activeSubTab, setActiveSubTab] = useState<'Matchday' | 'MultiplayerAuction' | 'SuperOverH2H' | 'Moments' | 'Schedule' | 'QuickMatch' | 'Challenges' | 'Results'>('Matchday');
   const [selectedQuickTeamA, setSelectedQuickTeamA] = useState<string>(gameState?.userTeamId || 'csk');
   const [selectedQuickTeamB, setSelectedQuickTeamB] = useState<string>('mi');
   const [quickOvers, setQuickOvers] = useState<number>(20);
@@ -76,7 +78,7 @@ export const PlayCenterView: React.FC = () => {
   return (
     <div className="space-y-6 pb-12 animate-fadeIn">
       {/* Sub-Navigation Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0a0c12] p-3 md:p-4 rounded-xl border border-[#1e293b]">
+      <div className="glass-panel flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3 md:p-4 rounded-2xl">
         <div>
           <h2 className="text-xl font-black uppercase italic tracking-tight text-white flex items-center gap-2">
             <Zap className="w-5 h-5 text-[#D4AF37] fill-[#D4AF37]" />
@@ -89,6 +91,8 @@ export const PlayCenterView: React.FC = () => {
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
           {[
             { id: 'Matchday', label: 'Next Match', icon: Zap },
+            { id: 'MultiplayerAuction', label: 'Live Auction Room', icon: Gavel },
+            { id: 'SuperOverH2H', label: 'Super Over H2H', icon: Flame },
             { id: 'Moments', label: 'Clutch Moments', icon: Flame },
             { id: 'Schedule', label: 'Schedule', icon: Calendar },
             { id: 'QuickMatch', label: 'Exhibition', icon: Play },
@@ -114,6 +118,16 @@ export const PlayCenterView: React.FC = () => {
           })}
         </div>
       </div>
+
+      {/* MULTIPLAYER LIVE AUCTION WAR ROOM */}
+      {activeSubTab === 'MultiplayerAuction' && (
+        <MultiplayerAuctionHome />
+      )}
+
+      {/* SUPER OVER H2H MODE */}
+      {activeSubTab === 'SuperOverH2H' && (
+        <SuperOverH2HView onBackToPlay={() => setActiveSubTab('Matchday')} />
+      )}
 
       {/* TAB 1: MATCHDAY HERO & TACTICAL PREPARATION */}
       {activeSubTab === 'Matchday' && (

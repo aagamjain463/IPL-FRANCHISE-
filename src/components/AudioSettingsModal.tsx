@@ -28,12 +28,16 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({ isOpen, 
   const [currentTrack, setCurrentTrack] = useState<MusicTrackMetadata>(() => audioManager.getCurrentTrackMetadata());
 
   useEffect(() => {
+    if (!isOpen) return;
+    setSettings(audioManager.getSettings());
+    setCurrentTrack(audioManager.getCurrentTrackMetadata());
+
     const unsub = audioManager.subscribe(() => {
       setSettings(audioManager.getSettings());
       setCurrentTrack(audioManager.getCurrentTrackMetadata());
     });
     return unsub;
-  }, []);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

@@ -153,6 +153,42 @@ class MusicEngine {
     }
   }
 
+  public setTrackForScreen(screenOrTab: string) {
+    let targetIndex = 0;
+    const s = screenOrTab.toLowerCase();
+    if (s.includes('auction')) {
+      targetIndex = 1; // Golden Over (Auction Pressure)
+    } else if (s.includes('match') || s.includes('play')) {
+      targetIndex = 0; // Stadium Lights (Dynasty Mix)
+    } else if (s.includes('reward') || s.includes('evol') || s.includes('pack')) {
+      targetIndex = 3; // Final Over Thriller
+    } else {
+      targetIndex = 2; // VIP Pavilion Lounge
+    }
+
+    if (this.currentTrackIndex !== targetIndex) {
+      this.currentTrackIndex = targetIndex;
+      if (this.isPlaying) {
+        this.pause();
+        this.play();
+      } else {
+        this.notify();
+      }
+    }
+  }
+
+  public selectTrackByIndex(index: number) {
+    if (index >= 0 && index < PLAYLIST.length) {
+      this.currentTrackIndex = index;
+      if (this.isPlaying) {
+        this.pause();
+        this.play();
+      } else {
+        this.notify();
+      }
+    }
+  }
+
   public nextTrack() {
     this.currentTrackIndex = (this.currentTrackIndex + 1) % PLAYLIST.length;
     if (this.isPlaying) {

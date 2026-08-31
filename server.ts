@@ -3,6 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
+import { MultiplayerAuctionEngine } from './server/multiplayerAuctionEngine';
 
 dotenv.config();
 
@@ -24,6 +25,162 @@ async function startServer() {
   // API Routes
   app.get('/api/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', hasGeminiKey: Boolean(process.env.GEMINI_API_KEY) });
+  });
+
+  // ============================================================
+  // MULTIPLAYER AUCTION API & SSE REALTIME STREAM
+  // ============================================================
+  // 1. Create Room
+  app.post('/api/multiplayer/create', (req: Request, res: Response) => {
+    const { hostPlayerId, hostName, config } = req.body;
+    if (!hostPlayerId) {
+      return res.status(400).json({ error: 'hostPlayerId is required' });
+    }
+    const roomState = MultiplayerAuctionEngine.createRoom(hostPlayerId, hostName, config);
+    res.json({ success: true, state: roomState });
+  });
+
+  // 2. Join Room
+  app.post('/api/multiplayer/join', (req: Request, res: Response) => {
+    const { roomCode, playerId, playerName } = req.body;
+    if (!roomCode || !playerId) {
+      return res.status(400).json({ error: 'roomCode and playerId are required' });
+    }
+    const result = MultiplayerAuctionEngine.joinRoom(roomCode, playerId, playerName);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json(result);
+  });
+
+  // 3. Select Franchise (with server-side duplicate prevention)
+  app.post('/api/multiplayer/select-franchise', (req: Request, res: Response) => {
+    const { roomCode, playerId, franchiseId } = req.body;
+    if (!roomCode || !playerId || !franchiseId) {
+      return res.status(400).json({ error: 'roomCode, playerId, and franchiseId are required' });
+    }
+    const result = MultiplayerAuctionEngine.selectFranchise(roomCode, playerId, franchiseId);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json(result);
+  });
+
+  // 4. Toggle Ready
+  app.post('/api/multiplayer/ready', (req: Request, res: Response) => {
+    const { roomCode, playerId } = req.body;
+    if (!roomCode || !playerId) {
+      return res.status(400).json({ error: 'roomCode and playerId are required' });
+    }
+    const result = MultiplayerAuctionEngine.toggleReady(roomCode, playerId);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json(result);
+  });
+
+  // 5. Update Config (Host in Lobby only)
+  app.post('/api/multiplayer/config', (req: Request, res: Response) => {
+    const { roomCode, hostPlayerId, config } = req.body;
+    if (!roomCode || !hostPlayerId) {
+      return res.status(400).json({ error: 'roomCode and hostPlayerId are required' });
+    }
+    const result = MultiplayerAuctionEngine.updateConfig(roomCode, hostPlayerId, config);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json(result);
+  });
+
+  // 6. Start Auction (Host only)
+  app.post('/api/multiplayer/start', (req: Request, res: Response) => {
+    const { roomCode, hostPlayerId } = req.body;
+    if (!roomCode || !hostPlayerId) {
+      return res.status(400).json({ error: 'roomCode and hostPlayerId are required' });
+    }
+    const result = MultiplayerAuctionEngine.startAuction(roomCode, hostPlayerId);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json(result);
+  });
+
+  // 7. Place Bid (Server Authoritative)
+  app.post('/api/multiplayer/bid', (req: Request, res: Response) => {
+    const { roomCode, playerId, bidAmountCr } = req.body;
+    if (!roomCode || !playerId || typeof bidAmountCr !== 'number') {
+      return res.status(400).json({ error: 'roomCode, playerId, and valid numeric bidAmountCr are required' });
+    }
+    const result = MultiplayerAuctionEngine.placeBid(roomCode, playerId, bidAmountCr);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json(result);
+  });
+
+  // 8. Pause Auction (Host only)
+  app.post('/api/multiplayer/pause', (req: Request, res: Response) => {
+    const { roomCode, hostPlayerId } = req.body;
+    if (!roomCode || !hostPlayerId) {
+      return res.status(400).json({ error: 'roomCode and hostPlayerId are required' });
+    }
+    const result = MultiplayerAuctionEngine.pauseAuction(roomCode, hostPlayerId);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json(result);
+  });
+
+  // 9. Resume Auction (Host only)
+  app.post('/api/multiplayer/resume', (req: Request, res: Response) => {
+    const { roomCode, hostPlayerId } = req.body;
+    if (!roomCode || !hostPlayerId) {
+      return res.status(400).json({ error: 'roomCode and hostPlayerId are required' });
+    }
+    const result = MultiplayerAuctionEngine.resumeAuction(roomCode, hostPlayerId);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json(result);
+  });
+
+  // 10. Leave Room
+  app.post('/api/multiplayer/leave', (req: Request, res: Response) => {
+    const { roomCode, playerId } = req.body;
+    if (roomCode && playerId) {
+      MultiplayerAuctionEngine.leaveRoom(roomCode, playerId);
+    }
+    res.json({ success: true });
+  });
+
+  // 11. Get Room State Snapshot
+  app.get('/api/multiplayer/room/:roomCode', (req: Request, res: Response) => {
+    const room = MultiplayerAuctionEngine.getRoomState(req.params.roomCode);
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+    res.json({ success: true, state: room });
+  });
+
+  // 12. Server-Sent Events (SSE) Real-Time Stream
+  app.get('/api/multiplayer/events/:roomCode', (req: Request, res: Response) => {
+    const roomCode = req.params.roomCode;
+    const room = MultiplayerAuctionEngine.getRoomState(roomCode);
+
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const unsubscribe = MultiplayerAuctionEngine.subscribeSSE(roomCode, res);
+
+    req.on('close', () => {
+      unsubscribe();
+    });
   });
 
   // AI News & Headlines

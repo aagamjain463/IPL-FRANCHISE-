@@ -5,7 +5,8 @@ import {
   getBidIncrement, 
   AUCTION_SETS_INFO, 
   SET_ORDER,
-  assignPlayerAuctionSets
+  assignPlayerAuctionSets,
+  classifyAIPersonality
 } from '../engine/auctionEngine';
 import { Player } from '../types/cricket';
 import { Team } from '../types/team';
@@ -26,11 +27,11 @@ export const AuctionView: React.FC = () => {
   const { 
     gameState, 
     placeUserBid, 
-    passUserBid, 
     fastForwardAuctionPlayer,
     simulateEntireAuction,
     simulateCurrentAuctionSet,
     toggleAutoBid,
+    togglePauseAuction,
     switchUserFranchise,
     restartGame,
     setSelectedPlayerForModal,
@@ -47,7 +48,6 @@ export const AuctionView: React.FC = () => {
   const [showSimConfirmModal, setShowSimConfirmModal] = useState<boolean>(false);
   const [showFranchiseModal, setShowFranchiseModal] = useState<boolean>(false);
   const [simFromBeginningOption, setSimFromBeginningOption] = useState<boolean>(false);
-  const [isAuctionPaused, setIsAuctionPaused] = useState<boolean>(false);
   const [showQuitModal, setShowQuitModal] = useState<boolean>(false);
   
   // Squads view state
@@ -173,7 +173,7 @@ export const AuctionView: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn pb-12 font-sans">
       {/* Top Header Banner & Multi-View Navigation */}
-      <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+      <div className="glass-panel p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37]">
             <Gavel className="w-6 h-6" />
@@ -246,22 +246,35 @@ export const AuctionView: React.FC = () => {
                 10
               </span>
             </button>
+
+            <button
+              id="btn-switch-multiplayer-from-auction-view"
+              onClick={() => {
+                setCurrentScreen('MultiplayerAuction');
+                setActiveTab('MultiplayerAuction');
+              }}
+              className="px-3.5 py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5 bg-gradient-to-r from-blue-600/30 to-indigo-600/30 hover:from-blue-600/50 hover:to-indigo-600/50 text-blue-300 border border-blue-400/30 cursor-pointer shadow"
+              title="Switch to Real-Time Live Multiplayer Auction War Room"
+            >
+              <Users className="w-4 h-4 text-blue-400" />
+              <span>🌐 Live Multiplayer</span>
+            </button>
           </div>
 
           {/* Auction Control Actions */}
           <div className="flex items-center gap-2">
             <button
               id="btn-pause-auction"
-              onClick={() => setIsAuctionPaused(!isAuctionPaused)}
+              onClick={togglePauseAuction}
               className={`px-3.5 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition border flex items-center gap-1.5 cursor-pointer ${
-                isAuctionPaused
-                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 animate-pulse'
+                gameState.auctionState?.isPaused
+                  ? 'bg-amber-500/25 text-amber-300 border-amber-500/60 ring-2 ring-amber-500/40 animate-pulse'
                   : 'bg-[#05070a] hover:bg-[#1e293b] text-[#e2e8f0] border-[#1e293b]'
               }`}
-              title={isAuctionPaused ? 'Resume Auction' : 'Pause Auction'}
+              title={gameState.auctionState?.isPaused ? 'Resume Live Auction' : 'Pause Live Auction'}
             >
-              {isAuctionPaused ? <Play className="w-3.5 h-3.5 text-amber-400" /> : <Clock className="w-3.5 h-3.5 text-[#D4AF37]" />}
-              <span>{isAuctionPaused ? 'Resume Auction' : 'Pause Auction'}</span>
+              {gameState.auctionState?.isPaused ? <Play className="w-3.5 h-3.5 text-amber-400" /> : <Clock className="w-3.5 h-3.5 text-[#D4AF37]" />}
+              <span>{gameState.auctionState?.isPaused ? 'Resume Auction' : 'Pause Auction'}</span>
             </button>
 
             <button
@@ -358,6 +371,33 @@ export const AuctionView: React.FC = () => {
       {/* VIEW 1: LIVE AUCTION STAGE */}
       {activeAuctionTab === 'live' && (
         <>
+          {/* RECENT SOLD / HAMMER TICKER */}
+          {auc.soldPlayerRecords.length > 0 && (
+            <div className="bg-gradient-to-r from-emerald-950/80 via-[#0a1526] to-amber-950/60 p-3.5 rounded-2xl border border-emerald-500/30 flex flex-wrap items-center justify-between gap-3 shadow-lg animate-fadeIn">
+              <div className="flex items-center gap-2.5">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500 text-black font-black text-[10px] uppercase tracking-wider flex items-center gap-1 shadow">
+                  <Gavel className="w-3 h-3" /> HAMMERED SOLD
+                </span>
+                <span className="text-xs text-white font-bold">
+                  {auc.soldPlayerRecords[auc.soldPlayerRecords.length - 1].player.name}
+                </span>
+                <span className="text-xs text-slate-400">to</span>
+                <span className="text-xs font-black text-amber-300">
+                  {gameState.teams[auc.soldPlayerRecords[auc.soldPlayerRecords.length - 1].buyingTeamId]?.name || 'Franchise'}
+                </span>
+                <span className="text-xs font-mono font-black text-[#D4AF37]">
+                  (₹{auc.soldPlayerRecords[auc.soldPlayerRecords.length - 1].sellingPriceCr.toFixed(2)} Cr)
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                <span>Total Sold: <strong className="text-white font-mono">{auc.soldPlayerRecords.length}</strong></span>
+                <span>•</span>
+                <span>Unsold: <strong className="text-red-400 font-mono">{auc.unsoldPlayerIds.length}</strong></span>
+              </div>
+            </div>
+          )}
+
           {player ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left 2 Cols: Active Player Showcase & Bidding Paddle */}
@@ -367,188 +407,181 @@ export const AuctionView: React.FC = () => {
                   {/* Real IPL Set Tag & Capped Indicator Header */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-4 border-b border-[#1e293b]/60 text-xs">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded-full bg-[#D4AF37]/15 text-[#D4AF37] font-mono font-bold border border-[#D4AF37]/30 uppercase text-[11px]">
+                      <span className="px-3 py-1 rounded-full bg-[#D4AF37]/15 text-[#D4AF37] font-mono font-black border border-[#D4AF37]/30 uppercase text-[11px] tracking-wider shadow-sm">
                         {player.auctionSetCode ? `[${player.auctionSetCode}] ${AUCTION_SETS_INFO[player.auctionSetCode as AuctionSetCode]?.name || player.auctionSetName}` : 'Set 1 Marquee'}
                       </span>
                       {player.isCapped ? (
-                        <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[10px] border border-amber-500/30 flex items-center gap-1">
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-black text-[10px] border border-amber-500/40 flex items-center gap-1">
                           ⭐ CAPPED
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[10px] border border-emerald-500/30 flex items-center gap-1">
-                          🌱 UNCAPPED
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-black text-[10px] border border-emerald-500/40 flex items-center gap-1">
+                          🌱 UNCAPPED TALENT
                         </span>
                       )}
 
                       {/* Dynamic Scarcity & War Badges */}
                       {aiAdvice?.scarcityAnalysis?.isFinalEliteOption && (
-                        <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-bold text-[10px] border border-purple-500/30 flex items-center gap-1 animate-pulse">
+                        <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-black text-[10px] border border-purple-500/40 flex items-center gap-1 animate-pulse">
                           ⚡ FINAL ELITE SCARCITY
                         </span>
                       )}
                       {auc.bidHistory.length >= 4 && (
-                        <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-bold text-[10px] border border-orange-500/30 flex items-center gap-1">
+                        <span className="px-2.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-black text-[10px] border border-orange-500/40 flex items-center gap-1">
                           🔥 BIDDING WAR ({auc.bidHistory.length} BIDS)
                         </span>
                       )}
                       {(aiAdvice?.scarcityAnalysis?.teamsNeedingRoleCount || 0) >= 4 && (
-                        <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold text-[10px] border border-blue-500/30 flex items-center gap-1">
+                        <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-black text-[10px] border border-blue-500/40 flex items-center gap-1">
                           🎯 HIGH RIVAL DEMAND
                         </span>
                       )}
                     </div>
 
-                    <span className="text-[#64748b] text-[11px]">
-                      Lot #{auc.currentPlayerIndex + 1} of {totalPoolCount}
+                    <span className="text-slate-400 font-mono text-[11px] font-bold">
+                      LOT #{auc.currentPlayerIndex + 1} OF {totalPoolCount}
                     </span>
                   </div>
 
+                  {/* Player Spotlight Card */}
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-5 border-b border-[#1e293b]">
                     <div className="flex items-center gap-4">
                       <div 
                         onClick={() => setSelectedPlayerForModal(player)}
-                        className="w-16 h-16 rounded-xl bg-[#05070a] border border-[#1e293b] flex flex-col items-center justify-center cursor-pointer hover:border-[#D4AF37] transition group"
-                        title="Click to scout full player profile"
+                        className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-[#0e1628] to-[#05070a] border-2 border-[#D4AF37]/50 flex flex-col items-center justify-center cursor-pointer hover:scale-105 transition-all shadow-xl group shrink-0"
+                        title="Click to inspect full player profile"
                       >
-                        <span className="text-2xl font-black font-mono text-[#D4AF37] group-hover:scale-110 transition">{player.overall}</span>
-                        <span className="text-[9px] uppercase font-bold text-[#64748b]">OVR</span>
+                        <span className="text-2xl sm:text-3xl font-black font-mono text-[#D4AF37] group-hover:text-amber-300 transition leading-none">{player.overall}</span>
+                        <span className="text-[9px] uppercase font-black tracking-widest text-slate-400 mt-0.5">OVR</span>
                       </div>
 
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h3 
                             onClick={() => setSelectedPlayerForModal(player)}
-                            className="text-2xl font-black text-white cursor-pointer hover:text-[#D4AF37] transition"
+                            className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight cursor-pointer hover:text-[#D4AF37] transition"
                           >
                             {player.name}
                           </h3>
                           {player.isOverseas ? (
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-semibold border border-blue-500/30">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-950/80 text-blue-300 font-bold border border-blue-500/40 flex items-center gap-1">
                               ✈️ {player.nationality}
                             </span>
                           ) : (
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-semibold border border-emerald-500/30">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 font-bold border border-emerald-500/40 flex items-center gap-1">
                               🇮🇳 Indian
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-[#94a3b8] mt-1">
-                          {player.role} • {player.age} yrs • {player.battingStyle} • {player.bowlingStyle}
+                        <p className="text-xs sm:text-sm text-slate-300 font-medium mt-1">
+                          {player.role} • {player.age} yrs • {player.battingStyle}
                         </p>
-                        <div className="flex items-center gap-2 mt-1 text-[11px] text-[#64748b]">
-                          <span>Bat: <strong className="text-white font-mono">{player.battingRating}</strong></span>
+                        <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400 font-mono">
+                          <span>Bat: <strong className="text-rose-400 font-bold">{player.battingRating}</strong></span>
                           <span>•</span>
-                          <span>Bowl: <strong className="text-white font-mono">{player.bowlingRating}</strong></span>
+                          <span>Bowl: <strong className="text-blue-400 font-bold">{player.bowlingRating}</strong></span>
                           <span>•</span>
-                          <span>Potential: <strong className="text-purple-400 font-mono">{player.potential}</strong></span>
+                          <span>Potential: <strong className="text-purple-400 font-bold">{player.potential}</strong></span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Base Price */}
-                    <div className="text-left sm:text-right">
-                      <span className="text-[#64748b] text-xs block uppercase tracking-wider font-semibold">Base Price</span>
-                      <span className="font-mono font-bold text-white text-base">₹{player.basePriceCr.toFixed(2)} Cr</span>
+                    {/* Base Price Display */}
+                    <div className="text-left sm:text-right bg-[#05070a]/90 p-3 sm:p-4 rounded-xl border border-[#1e293b] shrink-0">
+                      <span className="text-slate-400 text-[10px] block uppercase tracking-widest font-black">Base Price</span>
+                      <span className="font-mono font-black text-[#D4AF37] text-lg sm:text-xl">₹{player.basePriceCr.toFixed(2)} Cr</span>
                     </div>
                   </div>
 
                   {/* Center Bidding Stage: Live Bid & Gavel Status */}
-                  <div className="py-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+                  <div className="py-6 flex flex-col sm:flex-row items-center justify-between gap-6 bg-gradient-to-r from-amber-500/5 via-transparent to-blue-500/5 rounded-2xl p-4 my-2 border border-white/5">
                     <div>
-                      <span className="text-xs uppercase font-bold text-[#94a3b8] tracking-widest block mb-1">
+                      <span className="text-xs uppercase font-black text-slate-400 tracking-widest block mb-1">
                         Current Highest Bid
                       </span>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-4xl md:text-5xl font-black font-mono text-[#D4AF37] tracking-tight">
+                        <span className="text-5xl md:text-6xl font-black font-mono text-[#D4AF37] tracking-tight drop-shadow-lg">
                           ₹{auc.currentBidCr.toFixed(2)}
                         </span>
-                        <span className="text-lg font-bold text-[#D4AF37]">Cr</span>
+                        <span className="text-xl font-black text-[#D4AF37]">Cr</span>
                       </div>
 
                       {leadingTeam ? (
-                        <div className="flex items-center gap-2 mt-2">
+                        <div className="flex items-center gap-2.5 mt-2 bg-[#05070a] px-3 py-1.5 rounded-xl border border-[#1e293b] w-fit shadow-sm">
                           <div 
-                            className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold shadow"
+                            className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shadow"
                             style={{ backgroundColor: leadingTeam.primaryColor, color: leadingTeam.secondaryColor }}
                           >
                             {leadingTeam.shortName.slice(0, 3)}
                           </div>
-                          <span className="text-xs text-[#94a3b8]">
-                            Held by <strong className="text-white">{leadingTeam.name}</strong>
+                          <span className="text-xs text-slate-300">
+                            Leading: <strong className="text-white font-bold">{leadingTeam.name}</strong>
                           </span>
                         </div>
                       ) : (
-                        <span className="text-xs text-[#64748b] mt-1 block">Opening Bid at Base Price</span>
+                        <span className="text-xs text-slate-500 mt-1 block font-mono">Opening Bid at Base Price</span>
                       )}
                     </div>
 
-                    {/* Gavel & Urgency Clock */}
-                    <div className="flex items-center gap-4 bg-[#05070a] p-4 rounded-xl border border-[#1e293b] w-full sm:w-auto justify-between sm:justify-start">
+                    {/* Gavel & Urgency Countdown Clock */}
+                    <div className="flex items-center gap-4 bg-[#05070a] p-4 rounded-2xl border border-[#1e293b] w-full sm:w-auto justify-between sm:justify-start shadow-inner">
                       <div className="text-center">
-                        <span className="text-[10px] text-[#64748b] uppercase font-bold block mb-0.5">Auctioneer</span>
-                        <span className={`text-xs font-black uppercase px-2.5 py-1 rounded ${
-                          auc.hammerState === 'Going Twice' ? 'bg-red-500/20 text-red-400 animate-pulse' :
-                          auc.hammerState === 'Going Once' ? 'bg-[#D4AF37]/20 text-[#D4AF37]' : 'bg-emerald-500/20 text-emerald-400'
+                        <span className="text-[10px] text-slate-400 uppercase font-black block mb-0.5 tracking-wider">Auctioneer Call</span>
+                        <span className={`text-xs font-black uppercase px-3 py-1.5 rounded-xl shadow-sm ${
+                          auc.hammerState === 'Going Twice' ? 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse' :
+                          auc.hammerState === 'Going Once' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                         }`}>
                           {auc.hammerState}
                         </span>
                       </div>
 
-                      <div className="w-px h-8 bg-[#1e293b]" />
+                      <div className="w-px h-10 bg-[#1e293b]" />
 
-                      <div className="flex items-center gap-2">
-                        <Clock className={`w-5 h-5 ${auc.auctionTimerSeconds <= 3 ? 'text-red-400 animate-bounce' : 'text-[#D4AF37]'}`} />
-                        <span className="font-mono font-black text-2xl text-white">
+                      <div className="flex items-center gap-2.5">
+                        <Clock className={`w-6 h-6 ${auc.auctionTimerSeconds <= 3 ? 'text-red-400 animate-bounce' : 'text-[#D4AF37]'}`} />
+                        <span className={`font-mono font-black text-3xl ${auc.auctionTimerSeconds <= 3 ? 'text-red-400' : 'text-white'}`}>
                           0:{auc.auctionTimerSeconds.toString().padStart(2, '0')}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Bidding Interaction Buttons */}
-                  <div className="pt-4 border-t border-[#1e293b] grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Bidding Interaction Buttons / Paddles */}
+                  <div className="pt-4 border-t border-[#1e293b] grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       id="btn-raise-bid"
                       onClick={placeUserBid}
                       disabled={!canAfford || isUserLeading}
-                      className={`py-3.5 px-4 rounded-full font-black text-xs uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 transition ${
+                      className={`py-4 px-6 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2.5 transition active:scale-95 ${
                         isUserLeading
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 cursor-not-allowed'
+                          ? 'bg-emerald-950/80 text-emerald-300 border-2 border-emerald-500/50 cursor-not-allowed shadow-emerald-500/10'
                           : canAfford
-                          ? 'bg-[#D4AF37] text-black hover:scale-105 active:scale-95 shadow-[#D4AF37]/20 cursor-pointer'
-                          : 'bg-[#1e293b] text-[#64748b] cursor-not-allowed'
+                          ? 'bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#D4AF37] hover:brightness-110 text-black shadow-[#D4AF37]/25 cursor-pointer'
+                          : 'bg-[#1e293b] text-slate-500 border border-slate-700 cursor-not-allowed'
                       }`}
                     >
-                      <Zap className="w-4 h-4 fill-current" />
+                      <Zap className="w-5 h-5 fill-current" />
                       <span>
                         {isUserLeading 
-                          ? 'You are High Bidder' 
+                          ? 'You Hold Leading Bid' 
                           : `Raise Bid (₹${nextUserBidAmount} Cr)`}
                       </span>
                     </button>
 
                     <button
-                      id="btn-pass-bid"
-                      onClick={passUserBid}
-                      className="py-3.5 px-4 rounded-full bg-[#05070a] hover:bg-[#1e293b] text-[#e2e8f0] font-bold text-xs uppercase tracking-widest transition border border-[#1e293b] flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <span>Pass / Concede</span>
-                    </button>
-
-                    <button
                       id="btn-fast-sim-player"
                       onClick={fastForwardAuctionPlayer}
-                      className="py-3.5 px-4 rounded-full bg-[#05070a] hover:bg-[#1e293b] text-[#94a3b8] font-bold text-xs uppercase tracking-widest transition border border-[#1e293b] flex items-center justify-center gap-2 cursor-pointer"
+                      className="py-4 px-6 rounded-2xl bg-[#05070a] hover:bg-[#1e293b] text-slate-300 font-bold text-xs uppercase tracking-widest transition border border-[#1e293b] flex items-center justify-center gap-2 cursor-pointer hover:border-blue-500/40"
                     >
-                      <Play className="w-3.5 h-3.5" />
-                      <span>Fast Resolve</span>
+                      <Play className="w-4 h-4 text-blue-400" />
+                      <span>Fast Resolve Lot</span>
                     </button>
                   </div>
                 </div>
 
                 {/* AI Assistant Scouting Analysis Card */}
                 {aiAdvice && (
-                  <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-3 shadow-xl">
+                  <div className="glass-panel p-5 rounded-2xl space-y-3 shadow-xl">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold uppercase tracking-widest text-[#D4AF37] flex items-center gap-1.5">
                         <Sparkles className="w-4 h-4 text-[#D4AF37]" /> AI Chief Scout Assessment
@@ -582,7 +615,7 @@ export const AuctionView: React.FC = () => {
 
                 {/* Next 3 Upcoming Lots Preview Carousel */}
                 {nextUpcomingQueue.length > 0 && (
-                  <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-3 shadow-xl">
+                  <div className="glass-panel p-5 rounded-2xl space-y-3 shadow-xl">
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold uppercase tracking-widest text-[#e2e8f0] flex items-center gap-1.5">
                         <Clock className="w-4 h-4 text-[#D4AF37]" /> On Deck: Next 3 Upcoming Lots
@@ -633,7 +666,7 @@ export const AuctionView: React.FC = () => {
                 )}
 
                 {/* Recent Bids Feed */}
-                <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-3 shadow-xl">
+                <div className="glass-panel p-5 rounded-2xl space-y-3 shadow-xl">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-bold uppercase tracking-widest text-[#94a3b8]">Live Paddle Bids Log</h4>
                     <span className="text-[10px] text-[#64748b] font-mono">{auc.bidHistory.length} Bids Logged</span>
@@ -671,7 +704,7 @@ export const AuctionView: React.FC = () => {
               </div>
 
               {/* Right Col: All 10 Franchise Purses Tracker & Quick Squad Inspection */}
-              <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-4 shadow-xl">
+              <div className="glass-panel p-5 rounded-2xl space-y-4 shadow-xl">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold uppercase tracking-widest text-[#D4AF37] flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4" /> Franchise Purses & Rosters
@@ -684,12 +717,14 @@ export const AuctionView: React.FC = () => {
                     const isUser = t.id === gameState.userTeamId;
                     const overseasInSquad = (t.rosterPlayerIds || []).map(id => gameState.allPlayers[id]).filter(p => p?.isOverseas).length;
 
+                    const persona = classifyAIPersonality(t);
                     return (
                       <div 
                         key={t.id} 
                         className={`p-3 rounded-xl border flex items-center justify-between transition group ${
                           isUser ? 'bg-[#1e293b]/70 border-[#D4AF37] text-white font-bold' : 'bg-[#05070a] border-[#1e293b] text-[#94a3b8] hover:border-[#1e293b]/80'
                         }`}
+                        title={isUser ? 'Your franchise' : `${persona.name} — ${persona.bidBehavior}`}
                       >
                         <div className="flex items-center gap-2.5">
                           <div 
@@ -708,6 +743,9 @@ export const AuctionView: React.FC = () => {
                             <span className="text-[10px] text-[#64748b] font-normal">
                               {t.rosterPlayerIds.length}/25 squad • {overseasInSquad}/8 OS
                             </span>
+                            {!isUser && (
+                              <span className="block text-[9px] font-mono text-amber-500/80">{persona.icon} {persona.name}</span>
+                            )}
                           </div>
                         </div>
 
@@ -785,7 +823,7 @@ export const AuctionView: React.FC = () => {
           </div>
 
           {/* Filtering and Search Controls */}
-          <div className="bg-[#0f172a] p-5 rounded-2xl border border-[#1e293b] space-y-4 shadow-xl">
+          <div className="glass-panel p-5 rounded-2xl space-y-4 shadow-xl">
             {/* Search Input and Top Quick Filters */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-3">
               <div className="relative w-full md:w-80">
@@ -1426,7 +1464,9 @@ export const AuctionView: React.FC = () => {
                 id="btn-resume-from-quit"
                 onClick={() => {
                   setShowQuitModal(false);
-                  setIsAuctionPaused(false);
+                  if (auc.isPaused) {
+                    togglePauseAuction();
+                  }
                 }}
                 className="w-full py-3 rounded-xl bg-[#D4AF37] text-black font-black text-xs uppercase tracking-wider shadow hover:scale-[1.02] transition cursor-pointer"
               >
