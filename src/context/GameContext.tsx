@@ -20,6 +20,7 @@ import { audioManager } from '../audio/audioManager';
 import { ScoutingDepartmentData, WatchlistItem, PriorityLevel, ScoutAlert } from '../types/scout';
 import { FranchiseProgressionState } from '../types/franchise';
 import { initFranchiseProgression } from '../engine/progressionEngine';
+import { getRouteForState } from '../utils/router';
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
@@ -97,14 +98,39 @@ const STORAGE_KEY = 'ipl_franchise_sim_save_v1';
 
 export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [gameState, setGameState] = useState<GameSave | null>(null);
-  const [currentScreen, setCurrentScreen] = useState<GameScreen>('MainMenu');
-  const [activeTab, setActiveTab] = useState<AppTab>('Dashboard');
+  const [currentScreen, setCurrentScreenState] = useState<GameScreen>('MainMenu');
+  const [activeTab, setActiveTabState] = useState<AppTab>('Dashboard');
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [selectedPlayerForModal, setSelectedPlayerForModal] = useState<Player | null>(null);
   const [activeChallenge, setActiveChallenge] = useState<ChallengeScenario | null>(null);
   const [toast, setToast] = useState<{ id: number; message: string; tone?: 'info' | 'success' | 'warn' | 'danger' } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outbidFlagRef = useRef<string | null>(null);
+
+  const pushGameRoute = (screen: GameScreen, tab: AppTab) => {
+    if (typeof window === 'undefined' || screen === 'MainMenu') return;
+    const route = getRouteForState(screen, tab);
+    if (route && window.location.pathname !== route) {
+      window.history.pushState({}, '', route);
+    }
+  };
+
+  const setCurrentScreen = (screen: GameScreen) => {
+    setCurrentScreenState(screen);
+  };
+
+  const setActiveTab = (tab: AppTab) => {
+    setActiveTabState(tab);
+    const nextScreen: GameScreen = tab === 'AuctionLive'
+      ? 'Auction'
+      : tab === 'MatchLive'
+        ? 'MatchLive'
+        : currentScreen === 'Auction' || currentScreen === 'MatchLive' || currentScreen === 'MultiplayerAuction'
+          ? 'Dashboard'
+          : currentScreen;
+    setCurrentScreenState(nextScreen);
+    pushGameRoute(nextScreen, tab);
+  };
 
   const showToast = (message: string, tone: 'info' | 'success' | 'warn' | 'danger' = 'info') => {
     setToast({ id: Date.now(), message, tone });
@@ -1119,7 +1145,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
     setCurrentScreen('MatchLive');
     setActiveTab('MatchLive');
-    window.history.pushState({}, '', '/play/live');
+    window.history.pushState({}, '', '/match');
   };
 
   const prepareScenarioChallenge = (challenge: ChallengeScenario) => {
@@ -1162,7 +1188,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
     setCurrentScreen('MatchLive');
     setActiveTab('MatchLive');
-    window.history.pushState({}, '', '/play/live');
+    window.history.pushState({}, '', '/match');
   };
 
   const bowlBall = () => {

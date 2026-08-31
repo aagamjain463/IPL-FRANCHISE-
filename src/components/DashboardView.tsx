@@ -64,6 +64,23 @@ export const DashboardView: React.FC = () => {
 
   const isSeasonEnd = !!gameState.seasonSummary || gameState.seasonStage === 'SeasonEnd';
   const rosterEmpty = userPlayers.length === 0;
+
+  const enterWorld = (tab: any, screen: any, path: string) => {
+    setCurrentScreen(screen);
+    setActiveTab(tab);
+    window.history.pushState({}, '', path);
+  };
+
+  const worldGateways = [
+    { title: 'Auction', kicker: 'War Room', meta: `₹${(userTeam?.purseCr || 0).toFixed(1)} Cr purse`, icon: <Gavel className="w-5 h-5" />, color: 'rgba(212,175,55,.28)', shadow: 'rgba(212,175,55,.55)', action: () => enterWorld('AuctionLive', 'Auction', '/auction') },
+    { title: 'Franchise', kicker: 'Club HQ', meta: `${userTeam?.fanSentiment || 0}% fan pulse`, icon: <Shield className="w-5 h-5" />, color: 'rgba(255,226,125,.20)', shadow: 'rgba(255,226,125,.40)', action: () => enterWorld('Club', 'Dashboard', '/franchise') },
+    { title: 'Squad', kicker: 'Cards & Roster', meta: `${userPlayers.length} players`, icon: <Users className="w-5 h-5" />, color: 'rgba(0,229,255,.22)', shadow: 'rgba(0,229,255,.45)', action: () => enterWorld('Squad', 'Dashboard', '/squad') },
+    { title: 'Playing XI', kicker: 'Tactics Lab', meta: `${xiPlayers.length || 0}/11 selected`, icon: <Layers className="w-5 h-5" />, color: 'rgba(0,255,135,.22)', shadow: 'rgba(0,255,135,.45)', action: () => enterWorld('PlayingXI', 'Dashboard', '/playing-xi') },
+    { title: 'Tournament', kicker: 'Competition', meta: userStanding ? `${userStanding.points} pts` : 'League ready', icon: <Trophy className="w-5 h-5" />, color: 'rgba(139,92,246,.22)', shadow: 'rgba(139,92,246,.45)', action: () => enterWorld('League', 'Dashboard', '/tournament') },
+    { title: 'Matchday', kicker: 'Live Arena', meta: nextFixture ? `M${nextFixture.matchNumber}` : 'No fixture', icon: <Zap className="w-5 h-5 fill-current" />, color: 'rgba(255,30,86,.22)', shadow: 'rgba(255,30,86,.45)', action: () => enterWorld('Play', 'Dashboard', '/play') },
+    { title: 'Scouting', kicker: 'Talent Network', meta: `${gameState.scoutingDepartment?.watchlist?.length || 0} watchlist`, icon: <Radio className="w-5 h-5" />, color: 'rgba(0,229,255,.20)', shadow: 'rgba(0,229,255,.4)', action: () => enterWorld('Scout', 'Dashboard', '/scouting') },
+    { title: 'Academy', kicker: 'Youth Lab', meta: `${gameState.youthAcademyPool?.length || 0} prospects`, icon: <Sparkles className="w-5 h-5" />, color: 'rgba(0,255,135,.20)', shadow: 'rgba(0,255,135,.4)', action: () => enterWorld('YouthAcademy', 'Dashboard', '/youth-academy') }
+  ];
   const nextThree = schedule.slice(gameState.currentFixtureIndex, gameState.currentFixtureIndex + 3).filter(f => !f.isPlayed);
   const nextUserFixture = schedule.find(f => !f.isPlayed && (f.teamAId === gameState.userTeamId || f.teamBId === gameState.userTeamId));
 
@@ -166,6 +183,42 @@ export const DashboardView: React.FC = () => {
           ) : (
             <div className="text-center py-10 text-slate-400 text-sm">Season fixture grid is being built…</div>
           )}
+        </div>
+      </section>
+
+      {/* ============ GAME WORLD GATEWAYS ============ */}
+      <section className="fc-pop-1 space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#D4AF37]">Enter World</p>
+            <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white">Franchise Universe</h2>
+          </div>
+          <p className="text-xs text-slate-500 max-w-xl">Each card launches a routed game screen with its own loading sequence, environment layer and preserved campaign state.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
+          {worldGateways.map((world, index) => (
+            <button
+              key={world.title}
+              onClick={world.action}
+              className="world-gateway-card p-4 text-left min-h-[140px] group"
+              style={{ '--world-color': world.color, '--world-shadow': world.shadow } as React.CSSProperties}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span className="w-11 h-11 rounded-2xl bg-black/45 border border-white/10 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                  {world.icon}
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">0{index + 1}</span>
+              </div>
+              <div className="mt-5">
+                <p className="text-[9px] font-black uppercase tracking-[0.24em] text-slate-500">{world.kicker}</p>
+                <h3 className="text-lg font-black uppercase text-white tracking-tight group-hover:text-[#00FF87] transition-colors">{world.title}</h3>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-mono text-[#D4AF37]">{world.meta}</span>
+                  <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-white group-hover:translate-x-1 transition-all" />
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
       </section>
 
