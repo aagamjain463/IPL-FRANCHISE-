@@ -170,6 +170,17 @@ export const SCREEN_ROUTES: ScreenRouteMeta[] = [
     loadingMessages: ['Opening Media Room', 'Loading Journalist Questions', 'Preparing Broadcast Feed']
   },
   {
+    path: '/news',
+    screen: 'Dashboard',
+    tab: 'News',
+    title: 'Newsroom',
+    eyebrow: 'Broadcast Wire',
+    subtitle: 'Club headlines, media reaction and league-wide storylines.',
+    variant: 'press',
+    isStandaloneMode: false,
+    loadingMessages: ['Opening Newsroom', 'Loading Headlines', 'Preparing Broadcast Wire']
+  },
+  {
     path: '/settings',
     screen: 'Dashboard',
     tab: 'Profile',
@@ -216,7 +227,7 @@ const PREFERRED_TAB_ROUTES: Partial<Record<AppTab, string>> = {
   MatchLive: '/match',
   Play: '/play',
   Profile: '/settings',
-  News: '/press-conference',
+  News: '/news',
   Rewards: '/rewards',
   WhatIfSimulator: '/whatif',
   OffSeason: '/offseason',

@@ -20,6 +20,7 @@ import { audioManager } from '../audio/audioManager';
 import { ScoutingDepartmentData, WatchlistItem, PriorityLevel, ScoutAlert } from '../types/scout';
 import { FranchiseProgressionState } from '../types/franchise';
 import { initFranchiseProgression } from '../engine/progressionEngine';
+import { getRouteForState } from '../utils/router';
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
@@ -106,15 +107,29 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outbidFlagRef = useRef<string | null>(null);
 
+  const pushGameRoute = (screen: GameScreen, tab: AppTab) => {
+    if (typeof window === 'undefined' || screen === 'MainMenu') return;
+    const route = getRouteForState(screen, tab);
+    if (route && window.location.pathname !== route) {
+      window.history.pushState({}, '', route);
+    }
+  };
+
   const setCurrentScreen = (screen: GameScreen) => {
     setCurrentScreenState(screen);
   };
 
   const setActiveTab = (tab: AppTab) => {
     setActiveTabState(tab);
-    if (tab === 'AuctionLive') setCurrentScreenState('Auction');
-    else if (tab === 'MatchLive') setCurrentScreenState('MatchLive');
-    else if (currentScreen === 'Auction' || currentScreen === 'MatchLive' || currentScreen === 'MultiplayerAuction') setCurrentScreenState('Dashboard');
+    const nextScreen: GameScreen = tab === 'AuctionLive'
+      ? 'Auction'
+      : tab === 'MatchLive'
+        ? 'MatchLive'
+        : currentScreen === 'Auction' || currentScreen === 'MatchLive' || currentScreen === 'MultiplayerAuction'
+          ? 'Dashboard'
+          : currentScreen;
+    setCurrentScreenState(nextScreen);
+    pushGameRoute(nextScreen, tab);
   };
 
   const showToast = (message: string, tone: 'info' | 'success' | 'warn' | 'danger' = 'info') => {

@@ -22,7 +22,7 @@ const toneByVariant: Record<string, 'gold' | 'volt' | 'cyan' | 'ruby'> = {
   hub: 'volt'
 };
 
-export const LoadingScreen: React.FC<LoadingScreenProps> = ({ route, durationMs = 760, onComplete }) => {
+export const LoadingScreen: React.FC<LoadingScreenProps> = ({ route, durationMs = 1850, onComplete }) => {
   const [progress, setProgress] = useState(8);
   const messages = route.loadingMessages.length ? route.loadingMessages : ['Preparing Screen', 'Loading Data', 'Finalizing Entry'];
   const activeMessage = useMemo(() => {
@@ -53,7 +53,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ route, durationMs 
       <div className="screen-loading__panel">
         <div className="screen-loading__brand">
           <span className="screen-loading__crest"><Shield className="w-5 h-5" /></span>
-          <span>IPL FRANCHISE</span>
+          <span>FRANCHISE XI 26</span>
         </div>
         <p className="screen-loading__eyebrow">{route.eyebrow}</p>
         <h1>ENTERING {route.title.toUpperCase()}</h1>

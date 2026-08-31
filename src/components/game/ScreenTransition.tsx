@@ -25,7 +25,10 @@ export const ScreenTransition: React.FC<ScreenTransitionProps> = ({ screen, tab,
     };
 
     window.history.pushState = function pushStatePatched(...args) {
-      const result = originalPush.apply(this, args as Parameters<typeof originalPush>);
+      const target = typeof args[2] === 'string' ? args[2] : '';
+      const targetPath = target ? new URL(target, window.location.origin).pathname : '';
+      const method = targetPath && targetPath === window.location.pathname ? originalReplace : originalPush;
+      const result = method.apply(this, args as Parameters<typeof originalPush>);
       emit();
       return result;
     };
@@ -53,8 +56,11 @@ export const ScreenTransition: React.FC<ScreenTransitionProps> = ({ screen, tab,
   }, []);
 
   const route = useMemo(() => {
-    const fromPath = getRouteMetaByPath(locationPath);
-    return fromPath || getRouteMetaForState(screen, tab);
+    const stateRoute = getRouteMetaForState(screen, tab);
+    const pathRoute = getRouteMetaByPath(locationPath);
+    // Prefer the actual game state so component-level tab changes without a
+    // manual URL write still receive the correct FC-style destination loader.
+    return stateRoute || pathRoute;
   }, [locationPath, screen, tab]);
 
   useEffect(() => {
