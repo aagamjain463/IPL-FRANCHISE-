@@ -40,7 +40,7 @@ export const AuctionLayout: React.FC<AuctionLayoutProps> = ({ children }) => {
     // Navigate safely back to main home dashboard
     setCurrentScreen('Dashboard');
     setActiveTab('Dashboard');
-    window.history.pushState({}, '', '/');
+    window.history.pushState({}, '', '/home');
   };
 
   const targetsList = (gameState.scoutingDepartment?.auctionTargetIds || [])

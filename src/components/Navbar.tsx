@@ -8,7 +8,7 @@ import {
   Crown, Layers, Palette, Cloud, CloudCheck, LogIn, Check, Globe
 } from 'lucide-react';
 import { getFranchiseLevelInfo } from '../engine/progressionEngine';
-import { getRouteForState } from '../utils/router';
+import { getRouteForTab } from '../navigation/screenRoutes';
 
 const THEME_OPTIONS: { id: FCThemeMode; label: string; bg: string; accent: string }[] = [
   { id: 'fc_neon_dark', label: 'FC 26 Neon Dark', bg: '#04060c', accent: '#00FF87' },
@@ -81,39 +81,10 @@ export const Navbar: React.FC = () => {
   ];
 
   const handleTabClick = (tabId: AppTab) => {
+    const nextScreen = tabId === 'AuctionLive' ? 'Auction' : tabId === 'MatchLive' ? 'MatchLive' : 'Dashboard';
+    setCurrentScreen(nextScreen);
     setActiveTab(tabId);
-    if (tabId === 'AuctionLive') {
-      setCurrentScreen('Auction');
-      window.history.pushState({}, '', '/auction');
-    } else if (tabId === 'MatchLive') {
-      setCurrentScreen('MatchLive');
-      window.history.pushState({}, '', '/play/live');
-    } else if (tabId === 'Play') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/play');
-    } else if (tabId === 'PlayingXI') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/tactics');
-    } else if (tabId === 'Squad') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/squad');
-    } else if (tabId === 'YouthAcademy') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/academy');
-    } else if (tabId === 'Club') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/club');
-    } else if (tabId === 'Rewards') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/rewards');
-    } else if (tabId === 'Dashboard') {
-      setCurrentScreen('Dashboard');
-      window.history.pushState({}, '', '/');
-    } else {
-      setCurrentScreen('Dashboard');
-      const route = getRouteForState('Dashboard', tabId);
-      window.history.pushState({}, '', route);
-    }
+    window.history.pushState({}, '', getRouteForTab(tabId));
   };
 
   const isHomeActive = activeTab === 'Dashboard';

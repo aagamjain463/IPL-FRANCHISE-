@@ -487,3 +487,299 @@ body.theme-stealth-carbon {
   backdrop-filter: blur(18px);
   box-shadow: 0 -12px 30px -18px rgba(0,0,0,.9);
 }
+
+/* ============================================================
+   IPL FRANCHISE — ORIGINAL MULTI-SCREEN GAME WORLDS
+   Cinematic routing, loading and screen identity layer
+   ============================================================ */
+@keyframes game-world-enter {
+  0% { opacity: 0; transform: translateY(24px) scale(.985); filter: blur(10px); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes game-world-breathe {
+  0%,100% { transform: translate3d(0,0,0) scale(1); opacity: .7; }
+  50% { transform: translate3d(2%, -2%, 0) scale(1.08); opacity: .95; }
+}
+@keyframes game-loader-in {
+  0% { opacity: 0; backdrop-filter: blur(0); }
+  100% { opacity: 1; backdrop-filter: blur(18px); }
+}
+@keyframes game-loader-panel {
+  0% { opacity: 0; transform: translateY(22px) scale(.96); filter: blur(8px); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes game-loader-sweep {
+  0% { transform: translateX(-120%) skewX(-22deg); }
+  100% { transform: translateX(240%) skewX(-22deg); }
+}
+@keyframes game-loader-grid {
+  0% { background-position: 0 0; }
+  100% { background-position: 72px 72px; }
+}
+
+.screen-transition-content {
+  min-height: 100vh;
+  transform-origin: 50% 22%;
+  transition: transform .42s var(--ease-snap), opacity .42s var(--ease-snap), filter .42s var(--ease-snap);
+}
+.screen-transition-content--exiting {
+  opacity: .25;
+  transform: scale(.985) translateY(10px);
+  filter: blur(8px) saturate(.82);
+  pointer-events: none;
+}
+.screen-transition-content--entered {
+  animation: game-world-enter .52s var(--ease-snap) both;
+}
+
+.screen-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(0,255,135,.16), transparent 34%),
+    radial-gradient(circle at 80% 22%, rgba(0,229,255,.12), transparent 32%),
+    linear-gradient(135deg, rgba(2,6,23,.94), rgba(0,0,0,.96));
+  animation: game-loader-in .2s ease-out both;
+  overflow: hidden;
+}
+.screen-loading--auction {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(212,175,55,.22), transparent 34%),
+    radial-gradient(circle at 80% 75%, rgba(255,30,86,.13), transparent 36%),
+    linear-gradient(135deg, rgba(20,12,4,.96), rgba(2,6,23,.98));
+}
+.screen-loading--match {
+  background:
+    radial-gradient(circle at 20% 80%, rgba(255,30,86,.20), transparent 34%),
+    radial-gradient(circle at 80% 18%, rgba(0,255,135,.14), transparent 36%),
+    linear-gradient(135deg, rgba(7,4,12,.96), rgba(2,6,23,.98));
+}
+.screen-loading--tournament, .screen-loading--scouting {
+  background:
+    radial-gradient(circle at 15% 20%, rgba(0,229,255,.20), transparent 34%),
+    radial-gradient(circle at 83% 80%, rgba(139,92,246,.18), transparent 36%),
+    linear-gradient(135deg, rgba(2,10,20,.96), rgba(2,6,23,.98));
+}
+.screen-loading__stadium {
+  position: absolute;
+  inset: -20%;
+  background-image:
+    linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% 105%, rgba(255,255,255,.12), transparent 45%);
+  background-size: 72px 72px, 72px 72px, 100% 100%;
+  mask-image: radial-gradient(ellipse at center, black 10%, transparent 72%);
+  animation: game-loader-grid 2.4s linear infinite;
+}
+.screen-loading__panel {
+  width: min(720px, 100%);
+  position: relative;
+  overflow: hidden;
+  border-radius: 2rem;
+  border: 1px solid rgba(255,255,255,.16);
+  background: linear-gradient(155deg, rgba(15,23,42,.78), rgba(2,6,23,.84));
+  box-shadow: 0 40px 120px -40px rgba(0,0,0,.96), inset 0 1px 0 rgba(255,255,255,.08);
+  padding: clamp(1.4rem, 4vw, 3rem);
+  animation: game-loader-panel .42s var(--ease-snap) both;
+}
+.screen-loading__panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 36%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.12), transparent);
+  animation: game-loader-sweep 1.35s ease-in-out infinite;
+  pointer-events: none;
+}
+.screen-loading__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: .65rem;
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .26em;
+  text-transform: uppercase;
+}
+.screen-loading__crest {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: .85rem;
+  display: grid;
+  place-items: center;
+  color: #06120a;
+  background: linear-gradient(135deg, #00FF87, #00E5FF);
+  box-shadow: 0 0 28px rgba(0,255,135,.35);
+}
+.screen-loading__eyebrow {
+  margin-top: 2.25rem;
+  color: #D4AF37;
+  font-size: .7rem;
+  font-weight: 900;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+}
+.screen-loading h1 {
+  margin-top: .3rem;
+  font-size: clamp(2.2rem, 7vw, 5rem);
+  line-height: .9;
+  font-weight: 1000;
+  letter-spacing: -.08em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.screen-loading__subtitle {
+  margin-top: 1rem;
+  max-width: 44rem;
+  color: rgba(203,213,225,.78);
+  font-size: .92rem;
+  line-height: 1.6;
+}
+.screen-loading__progress {
+  margin-top: 2rem;
+}
+.screen-loading__steps {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+}
+.screen-loading__steps span {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .45rem .65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(2,6,23,.45);
+  color: #64748b;
+  font-size: .62rem;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  transition: all .18s ease-out;
+}
+.screen-loading__steps span.is-done {
+  color: #fff;
+  border-color: rgba(0,255,135,.28);
+  background: rgba(0,255,135,.10);
+}
+
+.game-world {
+  position: relative;
+  min-height: 100%;
+  isolation: isolate;
+  animation: game-world-enter .58s var(--ease-snap) both;
+}
+.game-world__backdrop,
+.game-world__beam {
+  position: fixed;
+  pointer-events: none;
+  z-index: -1;
+}
+.game-world__backdrop {
+  inset: 0;
+  opacity: .72;
+}
+.game-world__beam {
+  width: 46vmax;
+  height: 46vmax;
+  border-radius: 999px;
+  filter: blur(90px);
+  animation: game-world-breathe 13s ease-in-out infinite;
+}
+.game-world__beam--left { top: 4rem; left: -18vmax; }
+.game-world__beam--right { right: -18vmax; bottom: -14vmax; animation-delay: -4s; }
+.game-world--hub .game-world__backdrop { background: radial-gradient(circle at 50% 0%, rgba(0,255,135,.08), transparent 40%); }
+.game-world--auction .game-world__backdrop { background: linear-gradient(180deg, rgba(212,175,55,.09), transparent 35%), radial-gradient(ellipse at 50% 100%, rgba(212,175,55,.08), transparent 50%); }
+.game-world--squad .game-world__backdrop { background: radial-gradient(circle at 18% 14%, rgba(0,229,255,.10), transparent 34%), radial-gradient(circle at 82% 80%, rgba(0,255,135,.08), transparent 36%); }
+.game-world--franchise .game-world__backdrop { background: radial-gradient(circle at 80% 18%, rgba(212,175,55,.10), transparent 35%); }
+.game-world--tournament .game-world__backdrop { background: linear-gradient(135deg, rgba(0,229,255,.08), transparent 42%), radial-gradient(circle at 70% 70%, rgba(139,92,246,.10), transparent 36%); }
+.game-world--match .game-world__backdrop { background: radial-gradient(circle at 50% 100%, rgba(0,255,135,.14), transparent 42%), linear-gradient(90deg, rgba(255,30,86,.08), transparent 32%, rgba(0,229,255,.08)); }
+.game-world--press .game-world__backdrop { background: radial-gradient(circle at 50% 0%, rgba(255,30,86,.10), transparent 38%); }
+.game-world--settings .game-world__backdrop { background: radial-gradient(circle at 80% 10%, rgba(148,163,184,.09), transparent 38%); }
+.game-world--auction .game-world__beam { background: rgba(212,175,55,.18); }
+.game-world--match .game-world__beam { background: rgba(255,30,86,.16); }
+.game-world--tournament .game-world__beam, .game-world--scouting .game-world__beam { background: rgba(0,229,255,.14); }
+.game-world--squad .game-world__beam, .game-world--academy .game-world__beam, .game-world--hub .game-world__beam { background: rgba(0,255,135,.12); }
+.game-world--franchise .game-world__beam { background: rgba(212,175,55,.12); }
+.game-world__header {
+  margin-bottom: 1.1rem;
+  padding: clamp(1rem, 3vw, 1.6rem);
+  border-radius: 1.75rem;
+  border: 1px solid rgba(255,255,255,.12);
+  background: linear-gradient(135deg, rgba(15,23,42,.72), rgba(2,6,23,.62));
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  overflow: hidden;
+}
+.game-world__eyebrow {
+  color: #D4AF37;
+  font-size: .64rem;
+  font-weight: 1000;
+  text-transform: uppercase;
+  letter-spacing: .26em;
+}
+.game-world__header h1 {
+  color: white;
+  font-size: clamp(1.65rem, 4vw, 3.5rem);
+  line-height: .95;
+  font-weight: 1000;
+  text-transform: uppercase;
+  letter-spacing: -.055em;
+  margin-top: .25rem;
+}
+.game-world__header p:not(.game-world__eyebrow) {
+  color: #94a3b8;
+  font-size: .86rem;
+  max-width: 48rem;
+  margin-top: .5rem;
+}
+.game-world__tag {
+  display: none;
+  align-items: center;
+  gap: .3rem;
+  color: #64748b;
+  font-size: .62rem;
+  font-weight: 900;
+  letter-spacing: .16em;
+  white-space: nowrap;
+}
+@media (min-width: 1024px) {
+  .game-world__tag { display: flex; }
+}
+
+.world-gateway-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.45rem;
+  border: 1px solid rgba(255,255,255,.12);
+  background: linear-gradient(150deg, rgba(15,23,42,.82), rgba(2,6,23,.72));
+  box-shadow: 0 20px 50px -28px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.06);
+  transition: transform .24s var(--ease-snap), border-color .24s ease, box-shadow .24s ease;
+}
+.world-gateway-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: radial-gradient(circle at var(--x, 15%) var(--y, 5%), var(--world-color, rgba(0,255,135,.18)), transparent 42%);
+  opacity: .8;
+}
+.world-gateway-card:hover {
+  transform: translateY(-5px) scale(1.015);
+  border-color: rgba(255,255,255,.24);
+  box-shadow: 0 28px 70px -34px var(--world-shadow, rgba(0,255,135,.45));
+}
+.world-gateway-card > * { position: relative; z-index: 1; }
+
+@media (max-width: 640px) {
+  .screen-loading__panel { border-radius: 1.45rem; }
+  .screen-loading h1 { letter-spacing: -.055em; }
+  .game-world__header { border-radius: 1.25rem; }
+}
