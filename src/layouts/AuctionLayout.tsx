@@ -39,8 +39,8 @@ export const AuctionLayout: React.FC<AuctionLayoutProps> = ({ children }) => {
   const handleExitAuction = () => {
     // Navigate safely back to main home dashboard
     setCurrentScreen('Dashboard');
-    setActiveTab('Dashboard');
-    window.history.pushState({}, '', '/home');
+    setActiveTab('Home');
+    window.history.pushState({}, '', '/');
   };
 
   const targetsList = (gameState.scoutingDepartment?.auctionTargetIds || [])
@@ -48,11 +48,9 @@ export const AuctionLayout: React.FC<AuctionLayoutProps> = ({ children }) => {
     .filter(Boolean) as Player[];
 
   return (
-    <div className="fc-scanlines min-h-screen w-full bg-[#030712] text-[#e2e8f0] flex flex-col font-sans selection:bg-[#D4AF37] selection:text-black relative">
-      {/* Stadium atmosphere */}
-      <div className="fc-atmosphere"><div className="fc-atmosphere-grid" /></div>
+    <div className="min-h-screen w-full bg-[#030712] text-[#e2e8f0] flex flex-col font-sans selection:bg-[#D4AF37] selection:text-black relative">
       {/* EXCLUSIVE AUCTION TOP BAR (NO MAIN NAVBAR) */}
-      <header className="fc-header sticky top-0 z-40 px-4 md:px-6 py-3 flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-40 bg-[#070b14]/95 backdrop-blur-md border-b border-[#1e293b] shadow-2xl px-4 md:px-6 py-3 flex items-center justify-between gap-3">
         {/* Left: Exit Auction and Mode Title */}
         <div className="flex items-center space-x-3 sm:space-x-4">
           <button
@@ -107,19 +105,6 @@ export const AuctionLayout: React.FC<AuctionLayoutProps> = ({ children }) => {
           {/* Quick Action Navigation Modals */}
           <div className="flex items-center space-x-1.5">
             <button
-              id="btn-switch-multiplayer-auction"
-              onClick={() => {
-                setCurrentScreen('MultiplayerAuction');
-                setActiveTab('MultiplayerAuction');
-              }}
-              className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-[#D4AF37]/20 to-amber-500/20 hover:from-[#D4AF37]/30 hover:to-amber-500/30 text-[#D4AF37] hover:text-white border border-[#D4AF37]/40 text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-              title="Enter Real-Time Live Multiplayer Auction War Rooms"
-            >
-              <Users className="w-3.5 h-3.5 text-[#D4AF37]" />
-              <span className="hidden lg:inline">Multiplayer Room</span>
-            </button>
-
-            <button
               id="btn-auction-history-modal"
               onClick={() => setShowHistoryModal(true)}
               className="px-2.5 py-1.5 rounded-lg bg-[#0f172a] hover:bg-[#1e293b] text-[#94a3b8] hover:text-white border border-[#1e293b] text-xs font-semibold uppercase tracking-wider transition flex items-center gap-1.5 cursor-pointer"
@@ -170,7 +155,7 @@ export const AuctionLayout: React.FC<AuctionLayoutProps> = ({ children }) => {
       </header>
 
       {/* FULL VIEWPORT AUCTION ARENA */}
-      <main className="relative z-10 flex-1 w-full p-3 sm:p-5 md:p-8 max-w-[1700px] mx-auto">
+      <main className="flex-1 w-full p-3 sm:p-5 md:p-8 max-w-[1700px] mx-auto">
         {children}
       </main>
 
