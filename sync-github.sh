@@ -134,10 +134,15 @@ _Pushed by \`sync-github.sh\` (no force-push, no branch deletion)._
 EOF
 )"
 
-if EXISTING="$(gh pr view --json number,url --jq '.url' 2>/dev/null)"; then
-  log "PR already open — updating: $EXISTING"
-  gh pr edit --title "$TITLE" --body "$BODY" >/dev/null 2>&1 \
-    || warn "could not refresh PR title/body (gh API quirk) — the push itself succeeded"
+if PR_REF="$(gh pr view --json number,url --jq '[.number,.url] | @tsv' 2>/dev/null)"; then
+  PR_NUM="${PR_REF%%	*}"; PR_URL="${PR_REF##*	}"
+  log "PR already open — updating: $PR_URL"
+  # `gh pr edit` still joins the sunset Projects-classic GraphQL field on some gh
+  # versions and dies; REST PATCH on the issue is the same write without that join.
+  gh api -X PATCH "repos/{owner}/{repo}/issues/$PR_NUM" -F title="$TITLE" -F body="$BODY" >/dev/null 2>&1 \
+    || gh pr edit "$PR_NUM" --title "$TITLE" --body "$BODY" >/dev/null 2>&1 \
+    || warn "pushed fine, but could not refresh the PR title/body — edit it on $PR_URL if that matters"
+  gh pr comment "$PR_NUM" --body "Re-synced with \`$(git rev-parse --short HEAD)\` — $FILES_CHANGED file(s) changed." >/dev/null 2>&1 || true
   gh pr comment "$EXISTING" --body "Re-synced with \`$(git rev-parse --short HEAD)\` — $FILES_CHANGED file(s) changed." >/dev/null 2>&1 || true
 else
   log "opening PR: $BRANCH → $BASE"
