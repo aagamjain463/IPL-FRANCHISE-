@@ -9,11 +9,11 @@ import {
   MultiplayerAward,
   MultiplayerClientEvent,
   HammerCallState
-} from '../src/types/multiplayerAuction';
-import { INITIAL_PLAYERS } from '../src/data/players';
-import { INITIAL_TEAMS } from '../src/data/teams';
-import { Player } from '../src/types/cricket';
-import { calculateAuctionPerformanceScore, getMultiplayerBidIncrement, isValidBidIncrement, MULTIPLAYER_AUCTION_RULES, normalizeCr } from '../src/multiplayer/auctionRules';
+} from '../src/types/multiplayerAuction.js';
+import { INITIAL_PLAYERS } from '../src/data/players.js';
+import { INITIAL_TEAMS } from '../src/data/teams.js';
+import { Player } from '../src/types/cricket.js';
+import { calculateAuctionPerformanceScore, getMultiplayerBidIncrement, isValidBidIncrement, MULTIPLAYER_AUCTION_RULES, normalizeCr } from '../src/multiplayer/auctionRules.js';
 import { LeaderboardStore } from './leaderboardStore';
 
 // Default config

@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { MultiplayerRoomState } from '../src/types/multiplayerAuction';
+import { MultiplayerRoomState } from '../src/types/multiplayerAuction.js';
 
 interface SupabaseServerCredentials {
   url: string;
