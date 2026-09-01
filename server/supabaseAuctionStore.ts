@@ -150,7 +150,7 @@ export const SupabaseAuctionStore = {
       return true;
     } catch (err) {
       console.error('[Server Supabase] Save room exception:', err);
-      return false;
+      throw err;
     }
   },
 
