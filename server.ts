@@ -4,6 +4,9 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { MultiplayerAuctionEngine } from './server/multiplayerAuctionEngine';
+import { LeaderboardStore } from './server/leaderboardStore';
+import { LeaderboardCategory } from './src/types/leaderboard';
+import { cloudSaveStore } from './server/cloudSaveStore';
 
 dotenv.config();
 
