@@ -248,14 +248,23 @@ async function startServer() {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
-
+    res.write(': connected\n\n');
     const unsubscribe = MultiplayerAuctionEngine.subscribeSSE(roomCode, res);
-
-    req.on('close', () => {
-      unsubscribe();
-    });
-  });
+    const heartbeat = setInterval(() => {
+          try {
+            res.write(': heartbeat\n\n');
+          } catch {
+            clearInterval(heartbeat);
+          }
+        }, 15000);
+    
+        req.on('close', () => {
+          clearInterval(heartbeat);
+          unsubscribe();
+        });
+      });
 
   // AI News & Headlines
   app.post('/api/ai/news-headline', async (req: Request, res: Response) => {
