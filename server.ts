@@ -233,6 +233,8 @@ async function startServer() {
     }
     res.json({ success: true, state: room });
   });
+  // 12. Server-Sent Events (SSE) Real-Time Stream
+  // 13. Server-Sent Events (SSE) Real-Time Stream
 
   // 12. Server-Sent Events (SSE) Real-Time Stream
   app.get('/api/multiplayer/events/:roomCode', (req: Request, res: Response) => {
