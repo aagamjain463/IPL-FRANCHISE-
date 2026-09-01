@@ -485,11 +485,6 @@ export const MultiplayerAuctionEngine = {
       return { success: false, error: 'Auction is already in progress in this room.' };
     }
 
-    const liveConnections = sseClients.get(room.roomCode)?.size || 0;
-    if (liveConnections === 0) {
-      return { success: false, error: 'Room host is no longer connected. Please join an active lobby or create a new room.' };
-    }
-
     if (room.participants.length >= room.config.maxPlayers) {
       return { success: false, error: `Room is full (Maximum ${room.config.maxPlayers} players).` };
     }

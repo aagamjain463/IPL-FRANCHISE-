@@ -396,6 +396,11 @@ Output valid JSON:
     }
   });
 
+  // Catch-all for undefined API routes so they return JSON, not HTML SPA fallback
+  app.all('/api/*', (req: Request, res: Response) => {
+    res.status(404).json({ success: false, error: `API route ${req.method} ${req.path} not found` });
+  });
+
   // Vite middleware for development vs static build for production
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
