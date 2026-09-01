@@ -1,5 +1,49 @@
 @import "tailwindcss";
 
+/* ============================================================
+   IPL FRANCHISE — DESIGN TOKENS
+   Tailwind v4 is CSS-first: every --color-* / --radius-* / --ease-*
+   variable below is automatically turned into real utility classes
+   (bg-canvas, text-gold, border-line, rounded-card, ease-snap, etc).
+   New/updated screens should reach for these instead of raw hex
+   arbitrary values so the whole app shares one visual language.
+   ============================================================ */
+@theme {
+  /* Surfaces */
+  --color-canvas: #05070a;        /* app background */
+  --color-header: #070b14;        /* sticky header / top bars */
+  --color-surface: #0f172a;       /* cards, panels, inputs */
+  --color-surface-elevated: #131d35; /* active/selected surfaces, modals-on-modals */
+
+  /* Borders */
+  --color-line: #1e293b;          /* default hairline border */
+  --color-line-strong: #334155;   /* hover / emphasized border */
+
+  /* Text */
+  --color-ink: #e2e8f0;           /* primary text (on dark) */
+  --color-ink-muted: #94a3b8;     /* secondary text */
+  --color-ink-faint: #64748b;     /* tertiary / label text */
+
+  /* Brand accent */
+  --color-gold: #D4AF37;
+  --color-gold-soft: #f5d67a;     /* amber-300 equivalent, for gradients */
+
+  /* Semantic status */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #3b82f6;
+
+  /* Radius scale (sports-card rounding) */
+  --radius-card: 1rem;      /* 16px, matches rounded-2xl usage */
+  --radius-pill: 999px;
+
+  /* Motion */
+  --ease-snap: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+}
+
 @layer base {
   body {
     background-color: #05070a;
