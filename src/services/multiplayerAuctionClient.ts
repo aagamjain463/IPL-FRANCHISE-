@@ -125,7 +125,12 @@ export const MultiplayerAuctionClient = {
       return { success: true, state: res.data.state };
     }
 
-    return { success: false, error: res.data?.error || res.error || 'Failed to create room on server' };
+    const rawError = res.data?.error || res.error || '';
+    const friendlyError = rawError.includes('404') || rawError.includes('500') || rawError.includes('Network')
+      ? 'Auction server is initializing. Please try creating the room again in a moment.'
+      : (rawError || 'Failed to create room on server');
+
+    return { success: false, error: friendlyError };
   },
 
   // Join Room
@@ -143,7 +148,12 @@ export const MultiplayerAuctionClient = {
       return { success: true, state: res.data.state };
     }
 
-    return { success: false, error: res.data?.error || res.error || `Room ${code} not found` };
+    const rawError = res.data?.error || res.error || '';
+    const friendlyError = rawError.includes('404') || rawError.includes('not found')
+      ? `Room "${code}" was not found. Please verify the 6-character room code or create a new room.`
+      : (rawError || `Unable to join room ${code}`);
+
+    return { success: false, error: friendlyError };
   },
 
   // Select Franchise
