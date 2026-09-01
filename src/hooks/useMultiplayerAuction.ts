@@ -22,6 +22,15 @@ export function useMultiplayerAuction() {
 
   const roomCodeRef = useRef<string | null>(null);
 
+  // Auto-clear error messages after 4.5 seconds
+  useEffect(() => {
+    if (!errorMessage) return;
+    const timer = setTimeout(() => {
+      setErrorMessage(null);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [errorMessage]);
+
   // Sync identity
   const updateManagerIdentity = useCallback((name: string) => {
     saveManagerName(name);
