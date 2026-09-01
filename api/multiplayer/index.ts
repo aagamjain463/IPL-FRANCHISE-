@@ -10,6 +10,15 @@ function getPathParts(req: any): string[] {
   const raw = req.query?.path;
   if (Array.isArray(raw)) return raw.map(String);
   if (typeof raw === 'string') return [raw];
+
+  const url = String(req.url || '');
+  const pathname = url.split('?')[0];
+  const prefix = '/api/multiplayer/';
+
+  if (pathname.startsWith(prefix)) {
+    return pathname.slice(prefix.length).split('/').filter(Boolean);
+  }
+
   return [];
 }
 
