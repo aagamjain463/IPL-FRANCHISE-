@@ -8,6 +8,7 @@ import { localMultiplayerEngine } from './localMultiplayerEngine';
 import { 
   isSupabaseConfigured, 
   getSupabaseClient, 
+  fetchServerSupabaseConfig,
   SupabaseAuctionService 
 } from './supabaseClient';
 import { CloudRelayService } from './cloudRelayService';
@@ -132,31 +133,32 @@ async function syncRoomStateAcrossTransports(state: MultiplayerRoomState, option
 export const MultiplayerAuctionClient = {
   // Create Room
   async createRoom(hostName: string, config?: Partial<MultiplayerAuctionConfig>): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
+    await fetchServerSupabaseConfig().catch(() => {});
     const { playerId } = getOrCreatePlayerIdentity();
     const cleanHostName = hostName?.trim() || 'Tactician';
 
     // Initialize local state
     const localState = localMultiplayerEngine.createRoom(playerId, cleanHostName, config);
+    const code = localState.roomCode.trim().toUpperCase();
 
-    // Sync to Cloud Relay immediately
-    CloudRelayService.publishRoomState(localState).catch(() => {});
-
-    // Try Express Backend API
+    // 1. Sync to Express Backend API with matching roomCode & state
     try {
-      safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>('/api/multiplayer/create', {
+      await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>('/api/multiplayer/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostPlayerId: playerId, hostName: cleanHostName, config })
-      }).then(res => {
-        if (res.ok && res.data?.state) {
-          syncRoomStateAcrossTransports(res.data.state);
-        }
-      }).catch(() => {});
+        body: JSON.stringify({ 
+          hostPlayerId: playerId, 
+          hostName: cleanHostName, 
+          config, 
+          roomCode: code,
+          state: localState 
+        })
+      });
     } catch {
       // ignore
     }
 
-    // Try Supabase (if configured)
+    // 2. Sync to Supabase (if configured)
     if (isSupabaseConfigured()) {
       try {
         await SupabaseAuctionService.saveRoom(localState);
@@ -166,11 +168,15 @@ export const MultiplayerAuctionClient = {
       }
     }
 
+    // 3. Sync to Cloud Relay immediately
+    CloudRelayService.publishRoomState(localState).catch(() => {});
+
     return { success: true, state: localState };
   },
 
   // Join Room
   async joinRoom(roomCode: string, playerName: string): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
+    await fetchServerSupabaseConfig().catch(() => {});
     if (!roomCode || !roomCode.trim()) {
       return { success: false, error: 'Please enter a valid room code.' };
     }
@@ -178,23 +184,7 @@ export const MultiplayerAuctionClient = {
     const { playerId } = getOrCreatePlayerIdentity();
     const cleanPlayerName = playerName?.trim() || 'Manager';
 
-    // 1. Try Express Backend API Mode
-    try {
-      const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/join', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode: code, playerId, playerName: cleanPlayerName })
-      });
-
-      if (res.ok && res.data?.success && res.data.state) {
-        await syncRoomStateAcrossTransports(res.data.state);
-        return { success: true, state: res.data.state };
-      }
-    } catch {
-      // offline fallback
-    }
-
-    // 2. Try Supabase Mode
+    // 1. Try Supabase Mode First (Global Cloud Database)
     if (isSupabaseConfigured()) {
       try {
         const remoteRoom = await SupabaseAuctionService.getRoom(code);
@@ -212,6 +202,22 @@ export const MultiplayerAuctionClient = {
       } catch (err: any) {
         console.warn('[MultiplayerClient] Supabase join check error:', err);
       }
+    }
+
+    // 2. Try Express Backend API Mode
+    try {
+      const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomCode: code, playerId, playerName: cleanPlayerName })
+      });
+
+      if (res.ok && res.data?.success && res.data.state) {
+        await syncRoomStateAcrossTransports(res.data.state);
+        return { success: true, state: res.data.state };
+      }
+    } catch {
+      // offline fallback
     }
 
     // 3. Try Cloud Relay Mode (Global peer discovery)
@@ -429,21 +435,10 @@ export const MultiplayerAuctionClient = {
 
   // Public room browser: collects rooms from all transports and merges deduplicated
   async getOpenRooms(): Promise<any[]> {
+    await fetchServerSupabaseConfig().catch(() => {});
     const roomsMap = new Map<string, any>();
 
-    // 1. Fetch from Express Backend API
-    try {
-      const res = await safeFetchJson<{ success: boolean; rooms?: any[] }>('/api/multiplayer/rooms', { cache: 'no-store' });
-      if (res.ok && Array.isArray(res.data?.rooms)) {
-        res.data.rooms.forEach(r => {
-          if (r?.code) roomsMap.set(r.code.toUpperCase(), r);
-        });
-      }
-    } catch {
-      // ignore
-    }
-
-    // 2. Fetch from Supabase (if configured)
+    // 1. Fetch from Supabase (if configured) - Primary Cloud Source
     if (isSupabaseConfigured()) {
       try {
         const supRooms = await SupabaseAuctionService.listRooms();
@@ -468,6 +463,20 @@ export const MultiplayerAuctionClient = {
       } catch (err) {
         console.warn('[MultiplayerClient] Supabase open rooms error:', err);
       }
+    }
+
+    // 2. Fetch from Express Backend API
+    try {
+      const res = await safeFetchJson<{ success: boolean; rooms?: any[] }>('/api/multiplayer/rooms', { cache: 'no-store' });
+      if (res.ok && Array.isArray(res.data?.rooms)) {
+        res.data.rooms.forEach(r => {
+          if (r?.code && !roomsMap.has(r.code.toUpperCase())) {
+            roomsMap.set(r.code.toUpperCase(), r);
+          }
+        });
+      }
+    } catch {
+      // ignore
     }
 
     // 3. Fetch from Global Cloud Relay
@@ -504,6 +513,7 @@ export const MultiplayerAuctionClient = {
   // Get Room State Snapshot
   async getRoomState(roomCode: string): Promise<MultiplayerRoomState | null> {
     if (!roomCode) return null;
+    await fetchServerSupabaseConfig().catch(() => {});
     const code = roomCode.trim().toUpperCase();
 
     // 1. Supabase Mode

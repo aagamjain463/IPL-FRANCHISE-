@@ -9,8 +9,43 @@ export interface SupabaseCredentials {
 let cachedClient: SupabaseClient | null = null;
 let lastUrl = '';
 let lastKey = '';
+let serverFetchedUrl = '';
+let serverFetchedKey = '';
+let hasInitiatedConfigFetch = false;
+
+export async function fetchServerSupabaseConfig(): Promise<SupabaseCredentials> {
+  if (serverFetchedUrl && serverFetchedKey) {
+    return { url: serverFetchedUrl, anonKey: serverFetchedKey };
+  }
+  try {
+    const res = await fetch('/api/config');
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.supabaseUrl && data?.supabaseAnonKey) {
+        serverFetchedUrl = String(data.supabaseUrl).trim();
+        serverFetchedKey = String(data.supabaseAnonKey).trim();
+        cachedClient = null;
+        return { url: serverFetchedUrl, anonKey: serverFetchedKey };
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return getSupabaseCredentials();
+}
+
+// Auto-trigger config fetch on module load in browser
+if (typeof window !== 'undefined' && !hasInitiatedConfigFetch) {
+  hasInitiatedConfigFetch = true;
+  fetchServerSupabaseConfig().catch(() => {});
+}
 
 export function getSupabaseCredentials(): SupabaseCredentials {
+  if (typeof window !== 'undefined' && !hasInitiatedConfigFetch) {
+    hasInitiatedConfigFetch = true;
+    fetchServerSupabaseConfig().catch(() => {});
+  }
+
   const envObj = (import.meta as unknown as { env?: Record<string, string> }).env;
   const envUrl = (envObj?.VITE_SUPABASE_URL || '').trim();
   const envKey = (envObj?.VITE_SUPABASE_ANON_KEY || '').trim();
@@ -19,8 +54,8 @@ export function getSupabaseCredentials(): SupabaseCredentials {
   const localKey = (typeof window !== 'undefined' ? localStorage.getItem('ipl_supabase_anon_key') || '' : '').trim();
 
   return {
-    url: envUrl || localUrl,
-    anonKey: envKey || localKey
+    url: serverFetchedUrl || envUrl || localUrl,
+    anonKey: serverFetchedKey || envKey || localKey
   };
 }
 

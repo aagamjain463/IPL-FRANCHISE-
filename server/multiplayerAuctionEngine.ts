@@ -404,10 +404,12 @@ function startRoomTimer(roomCode: string) {
 // ==========================================
 export const MultiplayerAuctionEngine = {
   // Create Room
-  createRoom(hostPlayerId: string, hostName: string, customConfig?: Partial<MultiplayerAuctionConfig>): MultiplayerRoomState {
-    let roomCode = generateRoomCode();
-    while (rooms.has(roomCode)) {
-      roomCode = generateRoomCode();
+  createRoom(hostPlayerId: string, hostName: string, customConfig?: Partial<MultiplayerAuctionConfig>, customRoomCode?: string): MultiplayerRoomState {
+    let roomCode = customRoomCode ? customRoomCode.trim().toUpperCase() : generateRoomCode();
+    if (!customRoomCode) {
+      while (rooms.has(roomCode)) {
+        roomCode = generateRoomCode();
+      }
     }
 
     const config: MultiplayerAuctionConfig = {

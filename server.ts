@@ -30,6 +30,17 @@ async function startServer() {
     res.json({ status: 'ok', hasGeminiKey: Boolean(process.env.GEMINI_API_KEY) });
   });
 
+  // Global App Public Configuration for automatic Supabase Realtime synchronization
+  app.get('/api/config', (req: Request, res: Response) => {
+    const supabaseUrl = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
+    const supabaseAnonKey = (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+    res.json({
+      supabaseUrl,
+      supabaseAnonKey,
+      hasSupabase: Boolean(supabaseUrl && supabaseAnonKey)
+    });
+  });
+
   // ============================================================
   // GOOGLE SIGN-IN + CLOUD SAVE API
   // ============================================================
@@ -98,11 +109,15 @@ async function startServer() {
   // 1. Create Room
   app.post('/api/multiplayer/create', (req: Request, res: Response) => {
     try {
-      const { hostPlayerId, hostName, config } = req.body || {};
+      const { hostPlayerId, hostName, config, roomCode, state } = req.body || {};
       if (!hostPlayerId) {
         return res.status(400).json({ success: false, error: 'hostPlayerId is required' });
       }
-      const roomState = MultiplayerAuctionEngine.createRoom(hostPlayerId, hostName || 'Host Manager', config);
+      if (state && state.roomCode) {
+        MultiplayerAuctionEngine.setRoomState(state);
+        return res.json({ success: true, state });
+      }
+      const roomState = MultiplayerAuctionEngine.createRoom(hostPlayerId, hostName || 'Host Manager', config, roomCode);
       res.json({ success: true, state: roomState });
     } catch (err) {
       console.error('Error in /api/multiplayer/create:', err);

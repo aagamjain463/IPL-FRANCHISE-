@@ -7,7 +7,7 @@ import { MultiplayerCompletedView } from './MultiplayerCompletedView';
 import { MultiplayerAuctionConfig } from '../../types/multiplayerAuction';
 import { LeaderboardMiniPanel } from '../LeaderboardMiniPanel';
 import { SupabaseConfigModal } from './SupabaseConfigModal';
-import { isSupabaseConfigured } from '../../services/supabaseClient';
+import { isSupabaseConfigured, fetchServerSupabaseConfig } from '../../services/supabaseClient';
 import { 
   Users, Plus, LogIn, Shield, Sparkles, Gavel, 
   Zap, Clock, Award, AlertCircle, Edit2, Check,
@@ -80,7 +80,12 @@ export const MultiplayerAuctionHome: React.FC = () => {
   };
 
   useEffect(() => {
-    loadOpenRooms();
+    fetchServerSupabaseConfig().then(() => {
+      setSupabaseActive(isSupabaseConfigured());
+      loadOpenRooms();
+    }).catch(() => {
+      loadOpenRooms();
+    });
     const refreshInterval = window.setInterval(loadOpenRooms, 2500);
     return () => window.clearInterval(refreshInterval);
   }, []);
