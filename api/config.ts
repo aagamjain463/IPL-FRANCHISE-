@@ -1,4 +1,4 @@
-import { SupabaseAuctionStore } from '../server/supabaseAuctionStore';
+import { SupabaseAuctionStore } from '../server/supabaseAuctionStore.js';
 
 export default function handler(_req: any, res: any) {
   const supabaseUrl = (
