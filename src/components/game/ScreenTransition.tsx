@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { LoadingScreen } from './LoadingScreen';
 import { getRouteMetaByPath, getRouteMetaForState, ScreenRouteMeta } from '../../navigation/screenRoutes';
 import { AppTab, GameScreen } from '../../types/game';
 import { gameAudioEvents } from '../../audio/gameAudioEvents';
+import { pageMotion, reduceMotionTransition } from '../../motion';
 
 interface ScreenTransitionProps {
   screen: GameScreen;
@@ -13,6 +15,8 @@ interface ScreenTransitionProps {
 export const ScreenTransition: React.FC<ScreenTransitionProps> = ({ screen, tab, children }) => {
   const [locationPath, setLocationPath] = useState(() => window.location.pathname);
   const [loadingRoute, setLoadingRoute] = useState<ScreenRouteMeta | null>(null);
+  const [isRevealing, setIsRevealing] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
   const firstRender = useRef(true);
   const previousKey = useRef(`${screen}:${tab}:${window.location.pathname}`);
 
@@ -79,15 +83,38 @@ export const ScreenTransition: React.FC<ScreenTransitionProps> = ({ screen, tab,
 
   const finishTransition = useCallback(() => {
     gameAudioEvents.trigger('screen-enter', loadingRoute?.variant);
+    setIsRevealing(true);
     setLoadingRoute(null);
-  }, [loadingRoute?.variant]);
+    window.setTimeout(() => setIsRevealing(false), shouldReduceMotion ? 40 : 260);
+  }, [loadingRoute?.variant, shouldReduceMotion]);
 
   return (
     <>
-      <div className={`screen-transition-content ${loadingRoute ? 'screen-transition-content--exiting' : 'screen-transition-content--entered'}`}>
-        {children}
-      </div>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={route.path}
+          variants={shouldReduceMotion ? undefined : pageMotion}
+          initial={shouldReduceMotion ? false : "initial"}
+          animate="enter"
+          exit="exit"
+          transition={shouldReduceMotion ? reduceMotionTransition : undefined}
+          className={`screen-transition-content ${loadingRoute ? 'screen-transition-content--exiting' : 'screen-transition-content--entered'}`}
+        >
+          {children}
+        </motion.div>
+      </AnimatePresence>
       {loadingRoute && <LoadingScreen route={loadingRoute} onComplete={finishTransition} />}
+      <AnimatePresence>
+        {isRevealing && (
+          <motion.div
+            className="screen-transition-veil"
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: shouldReduceMotion ? 0.01 : 0.24, ease: [0.16, 1, 0.3, 1] }}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 };

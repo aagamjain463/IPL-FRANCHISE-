@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import confetti from 'canvas-confetti';
+import { useGame } from '../../context/GameContext';
 import { 
   MultiplayerRoomState, 
   MultiplayerRanking, 
@@ -22,6 +23,7 @@ export const MultiplayerCompletedView: React.FC<MultiplayerCompletedViewProps> =
   currentUserId,
   onLeaveRoom
 }) => {
+  const { setActiveTab, setCurrentScreen } = useGame();
   const [selectedParticipantId, setSelectedParticipantId] = useState<string | null>(null);
 
   // Trigger celebratory confetti on mount
@@ -272,11 +274,23 @@ export const MultiplayerCompletedView: React.FC<MultiplayerCompletedViewProps> =
       )}
 
       {/* Return to Lounge Action */}
-      <div className="flex justify-center pt-4">
+      <div className="flex flex-col sm:flex-row justify-center gap-3 pt-4">
+        <button
+          id="btn-multiplayer-view-global-ranks"
+          onClick={() => {
+            setCurrentScreen('Dashboard');
+            setActiveTab('Leaderboard');
+            window.history.pushState({}, '', '/leaderboard');
+          }}
+          className="px-8 py-4 rounded-2xl bg-[#00FF87] hover:brightness-110 text-black font-black text-sm uppercase tracking-widest shadow-2xl flex items-center justify-center gap-2.5 cursor-pointer transition transform active:scale-95"
+        >
+          <ExternalLink className="w-4 h-4" />
+          <span>View Global Rank</span>
+        </button>
         <button
           id="btn-multiplayer-return-lounge"
           onClick={onLeaveRoom}
-          className="px-8 py-4 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#D4AF37] hover:brightness-110 text-black font-black text-sm uppercase tracking-widest shadow-2xl flex items-center gap-2.5 cursor-pointer transition transform active:scale-95"
+          className="px-8 py-4 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#D4AF37] hover:brightness-110 text-black font-black text-sm uppercase tracking-widest shadow-2xl flex items-center justify-center gap-2.5 cursor-pointer transition transform active:scale-95"
         >
           <RotateCcw className="w-4 h-4" />
           <span>Return to Multiplayer Lounge</span>

@@ -374,6 +374,39 @@ export function getBidIncrement(currentBidCr: number): number {
   return 0.50; // 50 Lakhs standard above 10 Cr in IPL
 }
 
+const clampAuctionNumber = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+function applyRealWorldAuctionElasticity(player: Player, valuationCr: number, marketAnchorCr: number): number {
+  // Not a hard ceiling: this is a soft market-resistance curve. IPL teams can still create
+  // surprise overpays, but bidding becomes increasingly irrational once it drifts far above
+  // a player's real market band, so ₹40-50Cr outcomes become naturally rare instead of capped.
+  const isGenerational = player.overall >= 95;
+  const isMarquee = player.overall >= 92 || player.auctionSetCode === 'M1' || player.auctionSetCode === 'M2';
+  const isUncappedFever = !player.isCapped && player.age <= 24 && player.potential >= 90;
+  const rationalStretch = isGenerational ? 1.34 : isMarquee ? 1.26 : isUncappedFever ? 1.44 : player.overall >= 88 ? 1.20 : 1.14;
+  const softBandCr = marketAnchorCr * rationalStretch;
+
+  if (valuationCr <= softBandCr) return valuationCr;
+
+  const excessCr = valuationCr - softBandCr;
+  const elasticity = isGenerational ? 0.34 : isUncappedFever ? 0.42 : isMarquee ? 0.30 : 0.24;
+  return softBandCr + Math.pow(excessCr, 0.82) * elasticity;
+}
+
+function getAuctionSurpriseMultiplier(player: Player, team: Team): number {
+  const personality = team.aiPersonality;
+  const aggression = personality?.aggression ?? 50;
+  const risk = personality?.riskTolerance ?? 50;
+  const persistence = personality?.biddingPersistence ?? 65;
+  const starOrGem = player.overall >= 92 || (!player.isCapped && player.potential >= 90);
+  const feverChance = starOrGem
+    ? clampAuctionNumber((aggression + risk + persistence - 185) / 450, 0.015, 0.16)
+    : clampAuctionNumber((aggression + risk - 125) / 650, 0.005, 0.055);
+
+  if (Math.random() > feverChance) return 1;
+  return Number((1.06 + Math.random() * (starOrGem ? 0.16 : 0.09)).toFixed(3));
+}
+
 // -------------------------------------------------------------
 // 1. DYNAMIC SQUAD-NEEDS ENGINE
 // -------------------------------------------------------------
@@ -827,29 +860,40 @@ export function evaluatePlayerValueForTeam(
     personalityMult -= ((p.budgetDiscipline - 50) / 50) * 0.08;
   }
 
-  // Combine valuation
+  // Combine valuation, then pass it through a real-world IPL market-resistance curve.
+  // This keeps the auction free-form and dramatic without relying on an artificial fixed price cap.
   let contextualValuation = baseMarketValue * needFit.multiplier * appliedScarcity * phaseMult * personalityMult;
+  contextualValuation = applyRealWorldAuctionElasticity(player, contextualValuation, baseMarketValue);
 
   // 6. Purse & Budget Constraints
   const { reservedPurseCr, availablePurseCr } = calculateReservedPurse(team, 18);
   if (availablePurseCr <= 0) return 0;
 
-  // Dynamic max share of available purse
+  // Dynamic purse discipline: teams protect enough money to complete a real squad instead of
+  // spending half their purse on one player. This is strategic behavior, not a price ceiling.
   const slotsRemaining = Math.max(1, 18 - team.rosterPlayerIds.length);
-  let maxPurseShare = 0.32;
+  let maxPurseShare = 0.24;
   if (slotsRemaining <= 2) {
-    maxPurseShare = 0.88;
+    maxPurseShare = 0.62;
   } else if (slotsRemaining <= 5) {
-    maxPurseShare = 0.55;
-  } else if (slotsRemaining <= 8) {
     maxPurseShare = 0.42;
+  } else if (slotsRemaining <= 8) {
+    maxPurseShare = 0.32;
   } else {
-    maxPurseShare = 0.30;
+    maxPurseShare = 0.24;
   }
 
   if (player.overall >= 94) {
-    maxPurseShare = Math.min(0.88, maxPurseShare + 0.08);
+    maxPurseShare = Math.min(0.68, maxPurseShare + 0.06);
+  } else if (!player.isCapped && player.potential >= 90) {
+    maxPurseShare = Math.min(0.46, maxPurseShare + 0.04);
   }
+
+  const discipline = p?.budgetDiscipline ?? 65;
+  const risk = p?.riskTolerance ?? 50;
+  const aggression = p?.aggression ?? 50;
+  const purseTemperament = clampAuctionNumber(1 + (risk - discipline) / 260 + (aggression - 50) / 360, 0.78, 1.14);
+  maxPurseShare *= purseTemperament;
 
   const teamBudgetCap = availablePurseCr * maxPurseShare;
   const finalValuation = Math.min(contextualValuation, teamBudgetCap, availablePurseCr);
@@ -992,13 +1036,15 @@ export function evaluateAIDecisionForTeam(
     if (!player.isCapped) archetypeStretch *= 1.05;
   }
 
-  // Effective ceiling for this team in this auction state
-  let effectiveCeiling = Number((baseCeiling * momentumStretch * aggressionStretch * rivalryStretch * archetypeStretch).toFixed(2));
+  // Effective ceiling for this team in this auction state. A soft market-resistance curve
+  // prevents endless AI escalation while still allowing rare IPL-style surprise premiums.
+  let effectiveCeiling = baseCeiling * momentumStretch * aggressionStretch * rivalryStretch * archetypeStretch;
+  effectiveCeiling = applyRealWorldAuctionElasticity(player, effectiveCeiling, baseValuation);
   effectiveCeiling = Math.min(effectiveCeiling, availablePurseCr, team.purseCr);
 
-  // Controlled Randomness / Realistic Variance (±3%)
-  const randomVariance = (Math.random() - 0.5) * 0.06;
-  const randomizedCeiling = Number((effectiveCeiling * (1 + randomVariance)).toFixed(2));
+  // Controlled Randomness / Realistic Variance: enough to surprise, not enough to break economy.
+  const randomVariance = (Math.random() - 0.5) * 0.08;
+  const randomizedCeiling = Number((effectiveCeiling * (1 + randomVariance) * getAuctionSurpriseMultiplier(player, team)).toFixed(2));
 
   // Value-hunting archetypes wait out bidding wars rather than feed them
   if (
@@ -1026,10 +1072,11 @@ export function evaluateAIDecisionForTeam(
       return leaderFit.primaryUrgency === 'CRITICAL' || leaderFit.primaryUrgency === 'HIGH';
     })();
 
-    if (isRivalSpoil) {
+    const realisticPressureBand = baseValuation * (player.overall >= 92 ? 1.16 : 1.08);
+    if (isRivalSpoil && nextBidAmount <= realisticPressureBand && Math.random() < 0.34) {
       return makeDecision(
         'PRESSURE_BID',
-        `RIVAL SPOILER: ${team.shortName} inflating the price against ${allTeams[userTeamId!]?.shortName || 'your franchise'} for a player they want`,
+        `RIVAL SPOILER: ${team.shortName} briefly inflating the price against ${allTeams[userTeamId!]?.shortName || 'your franchise'} without losing purse discipline`,
         nextBidAmount,
         6.0,
         true
@@ -1149,9 +1196,30 @@ export function getNextAIBid(
 
   if (candidateDecisions.length === 0) return null;
 
-  // Sort by willingness and highest margin
+  // Weighted contender selection: the strongest bidder is favored, but not guaranteed.
+  // This creates realistic room behavior: hesitation, surprise paddles, and late rival jumps.
   candidateDecisions.sort((a, b) => b.willingnessScore - a.willingnessScore);
-  const chosen = candidateDecisions[0];
+  const contenders = candidateDecisions.slice(0, Math.min(4, candidateDecisions.length));
+  const topScore = Math.max(1, contenders[0]?.willingnessScore || 1);
+  const pressure = auctionState.auctionTimerSeconds <= 3 ? 1.12 : auctionState.auctionTimerSeconds <= 5 ? 1.04 : 0.92;
+  const bidProbability = clampAuctionNumber(0.38 + (topScore / 18) * pressure + contenders.length * 0.035, 0.38, 0.88);
+  if (Math.random() > bidProbability) return null;
+
+  const weights = contenders.map((ctx, index) => {
+    const recencyPenalty = auctionState.bidHistory[0]?.teamId === ctx.teamId ? 0.72 : 1;
+    const rankBias = 1 / (1 + index * 0.52);
+    return Math.max(0.05, ctx.willingnessScore) * rankBias * recencyPenalty;
+  });
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  let roll = Math.random() * totalWeight;
+  let chosen = contenders[0];
+  for (let i = 0; i < contenders.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) {
+      chosen = contenders[i];
+      break;
+    }
+  }
 
   return {
     teamId: chosen.teamId,
@@ -1199,14 +1267,15 @@ export function simulateAuctionBattle(
     } else {
       const val = evaluatePlayerValueForTeam(player, team, teamPlayers, 8, 'MIDDLE');
       const p = team.aiPersonality;
-      const persistenceBonus = (p?.biddingPersistence ?? 70) > 75 ? 1.05 : 1.01;
-      const randomVar = (Math.random() - 0.5) * 0.05;
-      // Rival spoiler: a high-rivalry AI inflates its ceiling when the user targets this exact player
+      const persistenceBonus = (p?.biddingPersistence ?? 70) > 75 ? 1.035 : 1.005;
+      const randomVar = (Math.random() - 0.5) * 0.075;
+      // Rival spoiler: high-rivalry AI can stretch, but only inside the same realistic market curve.
       let spoiler = 1.0;
       if (userTeamId && rivalTargetIds?.includes(player.id) && (p?.rivalryTendency ?? 50) >= 70) {
-        spoiler = 1.0 + Math.min(1, ((p?.rivalryTendency ?? 70) - 50) / 50) * 0.10;
+        spoiler = 1.0 + Math.min(1, ((p?.rivalryTendency ?? 70) - 50) / 50) * 0.065;
       }
-      ceiling = Number((val * persistenceBonus * spoiler * (1 + randomVar)).toFixed(2));
+      const rawCeiling = val * persistenceBonus * spoiler * (1 + randomVar) * getAuctionSurpriseMultiplier(player, team);
+      ceiling = Number(applyRealWorldAuctionElasticity(player, rawCeiling, calculateBaseMarketValue(player)).toFixed(2));
     }
 
     const { availablePurseCr } = calculateReservedPurse(team, 18);
@@ -1254,10 +1323,25 @@ export function simulateAuctionBattle(
     const nextInc = getBidIncrement(currentPrice);
     const nextPrice = Number((currentPrice + nextInc).toFixed(2));
 
-    // Filter competitors who are still willing and able to pay nextPrice
+    // Filter competitors who are still willing and able to pay nextPrice.
+    // Near their limit, franchises may blink early; this makes the battle thrilling without
+    // mechanically marching to every team's exact maximum valuation.
+    const marketAnchor = calculateBaseMarketValue(player);
     activeCompetitors = activeCompetitors.filter(c => {
       if (c.teamId === activeLeaderId) return true;
-      return c.ceiling >= nextPrice;
+      if (c.ceiling < nextPrice) return false;
+
+      const ceilingPressure = nextPrice / Math.max(c.ceiling, 0.1);
+      const marketPressure = nextPrice / Math.max(marketAnchor, player.basePriceCr, 0.1);
+      let dropoutChance = 0;
+      if (ceilingPressure > 0.78) dropoutChance += (ceilingPressure - 0.78) * 1.55;
+      if (ceilingPressure > 0.92) dropoutChance += (ceilingPressure - 0.92) * 2.10;
+      if (marketPressure > 1.16) dropoutChance += (marketPressure - 1.16) * 0.28;
+      if (marketPressure > 1.34) dropoutChance += (marketPressure - 1.34) * 0.48;
+      dropoutChance -= (c.persistence - 65) * 0.0022;
+      dropoutChance -= (c.aggression - 55) * 0.0018;
+
+      return Math.random() >= clampAuctionNumber(dropoutChance, 0.015, 0.64);
     });
 
     if (activeCompetitors.length <= 1) {

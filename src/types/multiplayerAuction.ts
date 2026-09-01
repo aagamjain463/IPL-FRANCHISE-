@@ -25,6 +25,8 @@ export interface MultiplayerParticipant {
   squadPlayerIds: string[];
   squadPlayers: Player[];
   isConnected: boolean;
+  disconnectedAt?: number | null;
+  isAI?: boolean;
   lastBidCr: number | null;
 }
 
@@ -73,6 +75,9 @@ export interface MultiplayerRanking {
   overseasCount: number;
   spentPurseCr: number;
   remainingPurseCr: number;
+  auctionScore: number;
+  bestPurchaseName?: string;
+  biggestOverpayName?: string;
 }
 
 export type HammerCallState = 'Opening Bid' | 'Active Bidding' | 'Going Once' | 'Going Twice' | 'Sold!' | 'Unsold';
@@ -100,6 +105,9 @@ export interface MultiplayerRoomState {
   unsoldPlayerIds: string[];
   rankings: MultiplayerRanking[];
   awards: MultiplayerAward[];
+  deadlineEpochMs: number | null;
+  serverSequence: number;
+  leaderboardApplied?: boolean;
   version: number;
 }
 
@@ -107,6 +115,8 @@ export type MultiplayerClientEvent =
   | { type: 'STATE_UPDATE'; state: MultiplayerRoomState }
   | { type: 'TICK'; hammerSecondsRemaining: number; hammerCall: HammerCallState }
   | { type: 'BID_PLACED'; bid: MultiplayerBidRecord; currentHighBidCr: number; hammerSecondsRemaining: number }
+  | { type: 'BID_REJECTED'; playerId: string; message: string }
+  | { type: 'TIMER_EXTENDED'; hammerSecondsRemaining: number; extensionSeconds: number }
   | { type: 'LOT_SOLD'; record: MultiplayerSoldRecord; nextLotInSeconds: number }
   | { type: 'LOT_UNSOLD'; player: Player; nextLotInSeconds: number }
   | { type: 'LOT_STARTED'; player: Player; lotIndex: number; totalLots: number }

@@ -7,13 +7,3 @@ coverage/
 .env*
 !.env.example
 .data/
-# Arena transfer/recovery artifacts (not app source)
-arena-unsynced-changes.patch
-arena-unsynced-changes.txt
-arena-*-sync.bundle
-ipl-franchise-updated-codebase.zip
-patch-chunks/
-public/arena-unsynced-changes.txt
-public/download-codebase.html
-public/download-patch.html
-public/ipl-franchise-updated-codebase.zip

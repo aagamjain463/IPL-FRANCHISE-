@@ -29,6 +29,7 @@ async function startServer() {
   app.get('/api/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', hasGeminiKey: Boolean(process.env.GEMINI_API_KEY) });
   });
+
   // ============================================================
   // GOOGLE SIGN-IN + CLOUD SAVE API
   // ============================================================
@@ -90,7 +91,6 @@ async function startServer() {
     if (!playerId) return res.status(400).json({ error: 'playerId is required' });
     res.json({ success: true, profile: LeaderboardStore.upsertProfile(playerId, displayName) });
   });
-
 
   // ============================================================
   // MULTIPLAYER AUCTION API & SSE REALTIME STREAM
@@ -217,15 +217,13 @@ async function startServer() {
     }
     res.json({ success: true });
   });
-   // 11. Get Room State Snapshot
+
   // 11. Public Open Rooms Browser — only actual existing lobby rooms, never fake/AI rooms
   app.get('/api/multiplayer/rooms', (req: Request, res: Response) => {
     res.json({ success: true, rooms: MultiplayerAuctionEngine.listOpenRooms() });
   });
 
   // 12. Get Room State Snapshot
-
-  // 11. Get Room State Snapshot
   app.get('/api/multiplayer/room/:roomCode', (req: Request, res: Response) => {
     const room = MultiplayerAuctionEngine.getRoomState(req.params.roomCode);
     if (!room) {
@@ -233,10 +231,8 @@ async function startServer() {
     }
     res.json({ success: true, state: room });
   });
-  // 12. Server-Sent Events (SSE) Real-Time Stream
-  // 13. Server-Sent Events (SSE) Real-Time Stream
 
-  // 12. Server-Sent Events (SSE) Real-Time Stream
+  // 13. Server-Sent Events (SSE) Real-Time Stream
   app.get('/api/multiplayer/events/:roomCode', (req: Request, res: Response) => {
     const roomCode = req.params.roomCode;
     const room = MultiplayerAuctionEngine.getRoomState(roomCode);
@@ -250,21 +246,23 @@ async function startServer() {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
+
     res.write(': connected\n\n');
+
     const unsubscribe = MultiplayerAuctionEngine.subscribeSSE(roomCode, res);
     const heartbeat = setInterval(() => {
-          try {
-            res.write(': heartbeat\n\n');
-          } catch {
-            clearInterval(heartbeat);
-          }
-        }, 15000);
-    
-        req.on('close', () => {
-          clearInterval(heartbeat);
-          unsubscribe();
-        });
-      });
+      try {
+        res.write(': heartbeat\n\n');
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+  });
 
   // AI News & Headlines
   app.post('/api/ai/news-headline', async (req: Request, res: Response) => {

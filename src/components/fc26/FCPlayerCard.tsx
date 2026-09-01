@@ -295,7 +295,7 @@ export const FCPlayerCard: React.FC<FCPlayerCardProps> = ({
 
   // 3. STANDARD, MEDIUM, LARGE & HERO 3D FOIL CARDS
   const sizeClasses = {
-    sm: 'w-[155px] h-[245px] text-[10px]',
+    sm: 'w-[182px] h-[274px] text-[10px]',
     md: 'w-[215px] h-[335px] text-xs',
     lg: 'w-[275px] h-[425px] text-sm',
     hero: 'w-[325px] h-[495px] text-base',
@@ -312,11 +312,11 @@ export const FCPlayerCard: React.FC<FCPlayerCardProps> = ({
         transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
         transition: 'transform 0.12s ease-out'
       }}
-      className={`relative select-none cursor-pointer group rounded-[24px] p-[3px] bg-gradient-to-b ${theme.borderGrad} transition-all duration-300 ${sizeClasses[size]} ${theme.glow} ${className}`}
+      className={`fc-player-card fc-player-card--${size} relative select-none cursor-pointer group rounded-[24px] p-[3px] bg-gradient-to-b ${theme.borderGrad} transition-all duration-300 ${sizeClasses[size]} ${theme.glow} ${className}`}
     >
       {/* Outer Card Hex/Shield Container */}
       <div 
-        className={`w-full h-full rounded-[22px] ${theme.bgGradient} p-[3px] border ${theme.cardFrame} relative overflow-hidden shadow-2xl flex flex-col justify-between fc-card-shimmer`}
+        className={`fc-player-card__face w-full h-full rounded-[22px] ${theme.bgGradient} p-[3px] border ${theme.cardFrame} relative overflow-hidden shadow-2xl flex flex-col justify-between fc-card-shimmer`}
       >
         {/* Holographic dynamic glare overlay */}
         <div
@@ -428,11 +428,11 @@ export const FCPlayerCard: React.FC<FCPlayerCardProps> = ({
           </div>
 
           {/* Player Name Banner with FC Mobile Style Bar */}
-          <div className="text-center bg-black/40 py-1 px-2 rounded-xl backdrop-blur-xs border border-white/10">
-            <h4 className={`font-black text-xs md:text-sm uppercase tracking-tight truncate ${theme.textColor} drop-shadow font-heading`}>
+          <div className="fc-player-card__name-plate text-center bg-black/40 py-1 px-2 rounded-xl backdrop-blur-xs border border-white/10">
+            <h4 className={`fc-player-card__name font-black text-xs md:text-sm uppercase tracking-tight ${theme.textColor} drop-shadow font-heading`}>
               {player.name}
             </h4>
-            <div className="flex items-center justify-center gap-1.5 text-[9px] font-bold uppercase tracking-wider opacity-80 mt-0.5">
+            <div className="fc-player-card__meta flex items-center justify-center gap-1.5 text-[9px] font-bold uppercase tracking-wider opacity-80 mt-0.5">
               <span>{player.role}</span>
               <span>•</span>
               <span>AGE {player.age}</span>

@@ -5,6 +5,8 @@ import {
   TrendingUp, CheckCircle2, ChevronRight, BarChart2, Star, Sparkles, Home
 } from 'lucide-react';
 import { Player } from '../types/cricket';
+import { deriveRewardProgression, ensureRewardEcosystem } from '../rewards/rewardEngine';
+import { XPBar } from '../rewards/components/RewardPrimitives';
 
 export const PostMatchPresentationView: React.FC = () => {
   const { gameState, answerPressQuestion, setActiveTab, setCurrentScreen } = useGame();
@@ -71,6 +73,7 @@ export const PostMatchPresentationView: React.FC = () => {
     .sort((a, b) => (b.stats.runs + b.stats.wickets * 25) - (a.stats.runs + a.stats.wickets * 25));
   
   const potm: Player | undefined = momCandidates[0] || allPlayersList[0];
+  const rewardView = gameState.progression ? deriveRewardProgression(ensureRewardEcosystem(gameState.progression), gameState.teams[gameState.userTeamId], gameState.allPlayers) : null;
 
   const handleSelectAnswer = (idx: number) => {
     setSelectedOptionIndex(idx);
@@ -237,6 +240,22 @@ export const PostMatchPresentationView: React.FC = () => {
                   <span className="text-lg font-black font-mono text-blue-400">{potm.stats?.wickets || 0}</span>
                 </div>
               </div>
+            </div>
+          )}
+
+          {rewardView && (
+            <div className="bg-[#05070a] p-5 rounded-2xl border border-[#00FF87]/20 shadow-xl space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#00FF87]">MATCH REWARDS APPLIED</span>
+                  <h3 className="text-xl font-black text-white uppercase">Level {rewardView.level} · {rewardView.title}</h3>
+                  <p className="text-xs text-[#94a3b8]">Progress and objectives are updated from this real match result.</p>
+                </div>
+                <button onClick={() => setActiveTab('Rewards')} className="px-4 py-2 rounded-xl bg-[#00FF87] text-black font-black text-[11px] uppercase tracking-wider flex items-center gap-2">
+                  Rewards <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+              <XPBar value={rewardView.progressPercent} current={rewardView.currentLevelXp} max={rewardView.nextLevelXp} />
             </div>
           )}
 
