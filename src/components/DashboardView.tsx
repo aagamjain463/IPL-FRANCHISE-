@@ -360,13 +360,4 @@ export const DashboardView: React.FC = () => {
     </div>
   );
 };
-              <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
 
-      </div>
-
-    </div>
-  );
-};
