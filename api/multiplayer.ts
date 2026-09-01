@@ -173,7 +173,7 @@ export default async function handler(req: any, res: any) {
   } catch (err) {
     return res.status(500).json({
       success: false,
-      error: err instanceof Error ? err.message : 'Multiplayer API failed'
+      error: err instanceof Error ? err.stack : String(err)
     });
   }
 }
