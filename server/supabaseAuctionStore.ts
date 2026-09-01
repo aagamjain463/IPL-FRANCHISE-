@@ -143,11 +143,10 @@ export const SupabaseAuctionStore = {
           state: normalizedState,
           updated_at: new Date().toISOString()
         }, { onConflict: 'room_code' });
-
-      if (error) {
-        console.error('[Server Supabase] Failed to save auction room:', error.message);
-        return false;
-      }
+            if (error) {
+          console.error('[Server Supabase] Failed to save auction room:', error);
+          throw new Error(`Supabase saveRoom failed: ${error.message}`);
+        }
       return true;
     } catch (err) {
       console.error('[Server Supabase] Save room exception:', err);
