@@ -1,6 +1,86 @@
--- IPL FRANCHISE multiplayer + leaderboard schema template.
--- This repository has no Supabase client configured yet. Do not place service-role keys in the browser.
--- Apply this in Supabase when DATABASE_URL/SUPABASE env wiring is added server-side.
+-- IPL FRANCHISE Supabase schema.
+-- Live multiplayer auction uses public.ipl_auction_rooms as its active room
+-- snapshot table. The rest of this file keeps the original future-proof tables.
+
+-- ==============================================================================
+-- LIVE MULTIPLAYER ROOM SNAPSHOTS (CURRENT APP PATH)
+-- ==============================================================================
+
+create table if not exists public.ipl_auction_rooms (
+  room_code text primary key,
+  host_id text not null,
+  host_name text not null,
+  status text not null default 'lobby' check (status in ('lobby','in_progress','lot_break','completed')),
+  participants_count integer not null default 1,
+  is_public boolean not null default true,
+  state jsonb not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index if not exists idx_ipl_auction_rooms_public_status_updated
+  on public.ipl_auction_rooms (is_public, status, updated_at desc);
+
+create or replace function public.set_ipl_auction_room_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = timezone('utc'::text, now());
+  return new;
+end;
+$$;
+
+drop trigger if exists set_ipl_auction_room_updated_at on public.ipl_auction_rooms;
+create trigger set_ipl_auction_room_updated_at
+  before update on public.ipl_auction_rooms
+  for each row execute function public.set_ipl_auction_room_updated_at();
+
+alter table public.ipl_auction_rooms enable row level security;
+
+drop policy if exists "Allow public read access to auction rooms" on public.ipl_auction_rooms;
+create policy "Allow public read access to auction rooms"
+  on public.ipl_auction_rooms for select
+  using (true);
+
+drop policy if exists "Allow public insert to auction rooms" on public.ipl_auction_rooms;
+create policy "Allow public insert to auction rooms"
+  on public.ipl_auction_rooms for insert
+  with check (true);
+
+drop policy if exists "Allow public update to auction rooms" on public.ipl_auction_rooms;
+create policy "Allow public update to auction rooms"
+  on public.ipl_auction_rooms for update
+  using (true)
+  with check (true);
+
+drop policy if exists "Allow public delete to auction rooms" on public.ipl_auction_rooms;
+create policy "Allow public delete to auction rooms"
+  on public.ipl_auction_rooms for delete
+  using (true);
+
+grant select, insert, update, delete on public.ipl_auction_rooms to anon, authenticated;
+
+alter table public.ipl_auction_rooms replica identity full;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'ipl_auction_rooms'
+  ) then
+    alter publication supabase_realtime add table public.ipl_auction_rooms;
+  end if;
+exception
+  when duplicate_object then null;
+end $$;
+
+-- ==============================================================================
+-- ORIGINAL NORMALIZED TABLES (RESERVED FOR FUTURE SERVER-AUTHORITATIVE STORAGE)
+-- ==============================================================================
 
 create table if not exists profiles (
   player_id text primary key,
@@ -119,4 +199,6 @@ alter table auction_events enable row level security;
 alter table auction_results enable row level security;
 alter table player_progression enable row level security;
 
--- Suggested policies: public can read leaderboard and lobby snapshots; only server/service role mutates authoritative auction and leaderboard records.
+-- Suggested policies for normalized tables: public can read leaderboard and lobby
+-- snapshots; only a trusted server/service role should mutate authoritative auction
+-- and leaderboard records.

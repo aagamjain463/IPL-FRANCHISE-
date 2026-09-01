@@ -56,6 +56,13 @@ export const MultiplayerLobbyView: React.FC<MultiplayerLobbyViewProps> = ({
   const allPlayersReady = roomState.participants.every(p => p.isReady);
   const canStartAuction = isHost && hasMinPlayers && allPlayersHaveFranchise && allPlayersReady;
 
+  const getInviteUrl = () => {
+    const url = new URL(window.location.href);
+    url.pathname = '/multiplayer-auction';
+    url.searchParams.set('room', roomState.roomCode);
+    return url.toString();
+  };
+
   const handleCopyCode = () => {
     navigator.clipboard.writeText(roomState.roomCode);
     setCopied(true);
@@ -63,14 +70,17 @@ export const MultiplayerLobbyView: React.FC<MultiplayerLobbyViewProps> = ({
   };
 
   const handleShareRoom = () => {
+    const inviteUrl = getInviteUrl();
     if (navigator.share) {
       navigator.share({
         title: 'Join my IPL Live Auction Room!',
         text: `Join my live IPL Franchise Mega Auction on room code: ${roomState.roomCode}`,
-        url: window.location.href
+        url: inviteUrl
       }).catch(() => {});
     } else {
-      handleCopyCode();
+      navigator.clipboard.writeText(inviteUrl).catch(() => navigator.clipboard.writeText(roomState.roomCode));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
     }
   };
 

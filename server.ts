@@ -4,8 +4,10 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { MultiplayerAuctionEngine } from './server/multiplayerAuctionEngine';
+import { SupabaseAuctionStore } from './server/supabaseAuctionStore';
 import { LeaderboardStore } from './server/leaderboardStore';
 import { LeaderboardCategory } from './src/types/leaderboard';
+import { MultiplayerRoomState } from './src/types/multiplayerAuction';
 import { cloudSaveStore } from './server/cloudSaveStore';
 
 dotenv.config();
@@ -23,7 +25,32 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '4mb' }));
+
+  const normalizeRoomCode = (roomCode: string) => String(roomCode || '').trim().toUpperCase();
+
+  const hydrateRoomFromSupabase = async (roomCode: string): Promise<MultiplayerRoomState | null> => {
+    const code = normalizeRoomCode(roomCode);
+    if (!code) return null;
+    const inMemory = MultiplayerAuctionEngine.getRoomState(code);
+    const remoteRoom = await Promise.race([
+      SupabaseAuctionStore.getRoom(code),
+      new Promise<MultiplayerRoomState | null>(resolve => setTimeout(() => resolve(null), 1500))
+    ]).catch(() => null);
+    if (remoteRoom && (!inMemory || Number(remoteRoom.version || 1) > Number(inMemory.version || 1))) {
+      MultiplayerAuctionEngine.setRoomState(remoteRoom);
+      return MultiplayerAuctionEngine.getRoomState(code) || remoteRoom;
+    }
+    return inMemory || remoteRoom || null;
+  };
+
+  const persistRoomState = async (state?: MultiplayerRoomState | null) => {
+    if (!state) return false;
+    return Promise.race([
+      SupabaseAuctionStore.saveRoom(state),
+      new Promise<boolean>(resolve => setTimeout(() => resolve(false), 1500))
+    ]).catch(() => false);
+  };
 
   // API Routes
   app.get('/api/health', (req: Request, res: Response) => {
@@ -32,12 +59,25 @@ async function startServer() {
 
   // Global App Public Configuration for automatic Supabase Realtime synchronization
   app.get('/api/config', (req: Request, res: Response) => {
-    const supabaseUrl = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
-    const supabaseAnonKey = (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+    const supabaseUrl = (
+      process.env.SUPABASE_URL ||
+      process.env.VITE_SUPABASE_URL ||
+      process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      process.env.PUBLIC_SUPABASE_URL ||
+      ''
+    ).trim();
+    const supabaseAnonKey = (
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.VITE_SUPABASE_ANON_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.PUBLIC_SUPABASE_ANON_KEY ||
+      ''
+    ).trim();
     res.json({
       supabaseUrl,
       supabaseAnonKey,
-      hasSupabase: Boolean(supabaseUrl && supabaseAnonKey)
+      hasSupabase: Boolean(supabaseUrl && supabaseAnonKey),
+      hasServerSupabaseStore: SupabaseAuctionStore.isConfigured()
     });
   });
 
@@ -107,18 +147,22 @@ async function startServer() {
   // MULTIPLAYER AUCTION API & SSE REALTIME STREAM
   // ============================================================
   // 1. Create Room
-  app.post('/api/multiplayer/create', (req: Request, res: Response) => {
+  app.post('/api/multiplayer/create', async (req: Request, res: Response) => {
     try {
       const { hostPlayerId, hostName, config, roomCode, state } = req.body || {};
       if (!hostPlayerId) {
         return res.status(400).json({ success: false, error: 'hostPlayerId is required' });
       }
       if (state && state.roomCode) {
-        MultiplayerAuctionEngine.setRoomState(state);
-        return res.json({ success: true, state });
+        const normalizedState = { ...state, roomCode: normalizeRoomCode(state.roomCode) } as MultiplayerRoomState;
+        MultiplayerAuctionEngine.setRoomState(normalizedState);
+        const syncedState = MultiplayerAuctionEngine.getRoomState(normalizedState.roomCode) || normalizedState;
+        const cloudSync = await persistRoomState(syncedState);
+        return res.json({ success: true, state: syncedState, cloudSync });
       }
       const roomState = MultiplayerAuctionEngine.createRoom(hostPlayerId, hostName || 'Host Manager', config, roomCode);
-      res.json({ success: true, state: roomState });
+      const cloudSync = await persistRoomState(roomState);
+      res.json({ success: true, state: roomState, cloudSync });
     } catch (err) {
       console.error('Error in /api/multiplayer/create:', err);
       res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error creating room' });
@@ -126,17 +170,20 @@ async function startServer() {
   });
 
   // 2. Join Room
-  app.post('/api/multiplayer/join', (req: Request, res: Response) => {
+  app.post('/api/multiplayer/join', async (req: Request, res: Response) => {
     try {
       const { roomCode, playerId, playerName } = req.body || {};
       if (!roomCode || !playerId) {
         return res.status(400).json({ success: false, error: 'roomCode and playerId are required' });
       }
-      const result = MultiplayerAuctionEngine.joinRoom(String(roomCode).trim().toUpperCase(), String(playerId), playerName || 'Manager');
+      const code = normalizeRoomCode(roomCode);
+      await hydrateRoomFromSupabase(code);
+      const result = MultiplayerAuctionEngine.joinRoom(code, String(playerId), playerName || 'Manager');
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
       }
-      res.json(result);
+      const cloudSync = await persistRoomState(result.state);
+      res.json({ ...result, cloudSync });
     } catch (err) {
       console.error('Error in /api/multiplayer/join:', err);
       res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error joining room' });
@@ -144,17 +191,20 @@ async function startServer() {
   });
 
   // 3. Select Franchise (with server-side duplicate prevention)
-  app.post('/api/multiplayer/select-franchise', (req: Request, res: Response) => {
+  app.post('/api/multiplayer/select-franchise', async (req: Request, res: Response) => {
     try {
       const { roomCode, playerId, franchiseId } = req.body || {};
       if (!roomCode || !playerId || !franchiseId) {
         return res.status(400).json({ success: false, error: 'roomCode, playerId, and franchiseId are required' });
       }
-      const result = MultiplayerAuctionEngine.selectFranchise(String(roomCode).trim().toUpperCase(), String(playerId), String(franchiseId));
+      const code = normalizeRoomCode(roomCode);
+      await hydrateRoomFromSupabase(code);
+      const result = MultiplayerAuctionEngine.selectFranchise(code, String(playerId), String(franchiseId));
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
       }
-      res.json(result);
+      const cloudSync = await persistRoomState(result.state);
+      res.json({ ...result, cloudSync });
     } catch (err) {
       console.error('Error in /api/multiplayer/select-franchise:', err);
       res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error selecting franchise' });
@@ -162,17 +212,20 @@ async function startServer() {
   });
 
   // 4. Toggle Ready
-  app.post('/api/multiplayer/ready', (req: Request, res: Response) => {
+  app.post('/api/multiplayer/ready', async (req: Request, res: Response) => {
     try {
       const { roomCode, playerId } = req.body || {};
       if (!roomCode || !playerId) {
         return res.status(400).json({ success: false, error: 'roomCode and playerId are required' });
       }
-      const result = MultiplayerAuctionEngine.toggleReady(String(roomCode).trim().toUpperCase(), String(playerId));
+      const code = normalizeRoomCode(roomCode);
+      await hydrateRoomFromSupabase(code);
+      const result = MultiplayerAuctionEngine.toggleReady(code, String(playerId));
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
       }
-      res.json(result);
+      const cloudSync = await persistRoomState(result.state);
+      res.json({ ...result, cloudSync });
     } catch (err) {
       console.error('Error in /api/multiplayer/ready:', err);
       res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error updating ready state' });
@@ -180,17 +233,20 @@ async function startServer() {
   });
 
   // 5. Update Config (Host in Lobby only)
-  app.post('/api/multiplayer/config', (req: Request, res: Response) => {
+  app.post('/api/multiplayer/config', async (req: Request, res: Response) => {
     try {
       const { roomCode, hostPlayerId, config } = req.body || {};
       if (!roomCode || !hostPlayerId) {
         return res.status(400).json({ success: false, error: 'roomCode and hostPlayerId are required' });
       }
-      const result = MultiplayerAuctionEngine.updateConfig(String(roomCode).trim().toUpperCase(), String(hostPlayerId), config);
+      const code = normalizeRoomCode(roomCode);
+      await hydrateRoomFromSupabase(code);
+      const result = MultiplayerAuctionEngine.updateConfig(code, String(hostPlayerId), config);
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
       }
-      res.json(result);
+      const cloudSync = await persistRoomState(result.state);
+      res.json({ ...result, cloudSync });
     } catch (err) {
       console.error('Error in /api/multiplayer/config:', err);
       res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error updating config' });
@@ -198,17 +254,20 @@ async function startServer() {
   });
 
   // 6. Start Auction (Host only)
-  app.post('/api/multiplayer/start', (req: Request, res: Response) => {
+  app.post('/api/multiplayer/start', async (req: Request, res: Response) => {
     try {
       const { roomCode, hostPlayerId } = req.body || {};
       if (!roomCode || !hostPlayerId) {
         return res.status(400).json({ success: false, error: 'roomCode and hostPlayerId are required' });
       }
-      const result = MultiplayerAuctionEngine.startAuction(String(roomCode).trim().toUpperCase(), String(hostPlayerId));
+      const code = normalizeRoomCode(roomCode);
+      await hydrateRoomFromSupabase(code);
+      const result = MultiplayerAuctionEngine.startAuction(code, String(hostPlayerId));
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
       }
-      res.json(result);
+      const cloudSync = await persistRoomState(result.state);
+      res.json({ ...result, cloudSync });
     } catch (err) {
       console.error('Error in /api/multiplayer/start:', err);
       res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error starting auction' });
@@ -216,17 +275,20 @@ async function startServer() {
   });
 
   // 7. Place Bid (Server Authoritative)
-  app.post('/api/multiplayer/bid', (req: Request, res: Response) => {
+  app.post('/api/multiplayer/bid', async (req: Request, res: Response) => {
     try {
       const { roomCode, playerId, bidAmountCr } = req.body || {};
       if (!roomCode || !playerId || typeof bidAmountCr !== 'number') {
         return res.status(400).json({ success: false, error: 'roomCode, playerId, and valid numeric bidAmountCr are required' });
       }
-      const result = MultiplayerAuctionEngine.placeBid(String(roomCode).trim().toUpperCase(), String(playerId), bidAmountCr);
+      const code = normalizeRoomCode(roomCode);
+      await hydrateRoomFromSupabase(code);
+      const result = MultiplayerAuctionEngine.placeBid(code, String(playerId), bidAmountCr);
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
       }
-      res.json(result);
+      const cloudSync = await persistRoomState(result.state);
+      res.json({ ...result, cloudSync });
     } catch (err) {
       console.error('Error in /api/multiplayer/bid:', err);
       res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error placing bid' });
@@ -234,17 +296,20 @@ async function startServer() {
   });
 
   // 8. Pause Auction (Host only)
-  app.post('/api/multiplayer/pause', (req: Request, res: Response) => {
+  app.post('/api/multiplayer/pause', async (req: Request, res: Response) => {
     try {
       const { roomCode, hostPlayerId } = req.body || {};
       if (!roomCode || !hostPlayerId) {
         return res.status(400).json({ success: false, error: 'roomCode and hostPlayerId are required' });
       }
-      const result = MultiplayerAuctionEngine.pauseAuction(String(roomCode).trim().toUpperCase(), String(hostPlayerId));
+      const code = normalizeRoomCode(roomCode);
+      await hydrateRoomFromSupabase(code);
+      const result = MultiplayerAuctionEngine.pauseAuction(code, String(hostPlayerId));
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
       }
-      res.json(result);
+      const cloudSync = await persistRoomState(result.state);
+      res.json({ ...result, cloudSync });
     } catch (err) {
       console.error('Error in /api/multiplayer/pause:', err);
       res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error pausing auction' });
@@ -252,17 +317,20 @@ async function startServer() {
   });
 
   // 9. Resume Auction (Host only)
-  app.post('/api/multiplayer/resume', (req: Request, res: Response) => {
+  app.post('/api/multiplayer/resume', async (req: Request, res: Response) => {
     try {
       const { roomCode, hostPlayerId } = req.body || {};
       if (!roomCode || !hostPlayerId) {
         return res.status(400).json({ success: false, error: 'roomCode and hostPlayerId are required' });
       }
-      const result = MultiplayerAuctionEngine.resumeAuction(String(roomCode).trim().toUpperCase(), String(hostPlayerId));
+      const code = normalizeRoomCode(roomCode);
+      await hydrateRoomFromSupabase(code);
+      const result = MultiplayerAuctionEngine.resumeAuction(code, String(hostPlayerId));
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
       }
-      res.json(result);
+      const cloudSync = await persistRoomState(result.state);
+      res.json({ ...result, cloudSync });
     } catch (err) {
       console.error('Error in /api/multiplayer/resume:', err);
       res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error resuming auction' });
@@ -270,11 +338,19 @@ async function startServer() {
   });
 
   // 10. Leave Room
-  app.post('/api/multiplayer/leave', (req: Request, res: Response) => {
+  app.post('/api/multiplayer/leave', async (req: Request, res: Response) => {
     try {
       const { roomCode, playerId } = req.body || {};
       if (roomCode && playerId) {
-        MultiplayerAuctionEngine.leaveRoom(String(roomCode).trim().toUpperCase(), String(playerId));
+        const code = normalizeRoomCode(roomCode);
+        await hydrateRoomFromSupabase(code);
+        MultiplayerAuctionEngine.leaveRoom(code, String(playerId));
+        const state = MultiplayerAuctionEngine.getRoomState(code);
+        if (state) {
+          await persistRoomState(state);
+        } else {
+          await SupabaseAuctionStore.deleteRoom(code);
+        }
       }
       res.json({ success: true });
     } catch (err) {
@@ -284,9 +360,19 @@ async function startServer() {
   });
 
   // 11. Public Open Rooms Browser — only actual existing lobby rooms, never fake/AI rooms
-  app.get('/api/multiplayer/rooms', (req: Request, res: Response) => {
+  app.get('/api/multiplayer/rooms', async (req: Request, res: Response) => {
     try {
-      res.json({ success: true, rooms: MultiplayerAuctionEngine.listOpenRooms() });
+      const roomsMap = new Map<string, any>();
+      MultiplayerAuctionEngine.listOpenRooms().forEach(room => roomsMap.set(normalizeRoomCode(room.code), room));
+      const supabaseRooms = await Promise.race([
+        SupabaseAuctionStore.listOpenRooms(),
+        new Promise<any[]>(resolve => setTimeout(() => resolve([]), 1500))
+      ]).catch(() => []);
+      supabaseRooms.forEach(room => {
+        const code = normalizeRoomCode(room.code);
+        if (!roomsMap.has(code)) roomsMap.set(code, room);
+      });
+      res.json({ success: true, rooms: Array.from(roomsMap.values()) });
     } catch (err) {
       console.error('Error in /api/multiplayer/rooms:', err);
       res.status(500).json({ success: false, error: 'Failed to fetch rooms', rooms: [] });
@@ -294,22 +380,25 @@ async function startServer() {
   });
 
   // Sync Room from client/external transport
-  app.post('/api/multiplayer/sync', (req: Request, res: Response) => {
+  app.post('/api/multiplayer/sync', async (req: Request, res: Response) => {
     try {
       const { state } = req.body || {};
       if (state && state.roomCode) {
-        MultiplayerAuctionEngine.setRoomState(state);
+        const normalizedState = { ...state, roomCode: normalizeRoomCode(state.roomCode) } as MultiplayerRoomState;
+        MultiplayerAuctionEngine.setRoomState(normalizedState);
+        await persistRoomState(MultiplayerAuctionEngine.getRoomState(normalizedState.roomCode) || normalizedState);
       }
       res.json({ success: true });
-    } catch {
+    } catch (err) {
+      console.error('Error in /api/multiplayer/sync:', err);
       res.json({ success: false });
     }
   });
 
   // 12. Get Room State Snapshot
-  app.get('/api/multiplayer/room/:roomCode', (req: Request, res: Response) => {
+  app.get('/api/multiplayer/room/:roomCode', async (req: Request, res: Response) => {
     try {
-      const room = MultiplayerAuctionEngine.getRoomState(String(req.params.roomCode || ''));
+      const room = await hydrateRoomFromSupabase(String(req.params.roomCode || ''));
       if (!room) {
         return res.status(404).json({ success: false, error: 'Room not found' });
       }
@@ -321,9 +410,9 @@ async function startServer() {
   });
 
   // 13. Server-Sent Events (SSE) Real-Time Stream
-  app.get('/api/multiplayer/events/:roomCode', (req: Request, res: Response) => {
-    const roomCode = String(req.params.roomCode || '').trim().toUpperCase();
-    const room = MultiplayerAuctionEngine.getRoomState(roomCode);
+  app.get('/api/multiplayer/events/:roomCode', async (req: Request, res: Response) => {
+    const roomCode = normalizeRoomCode(String(req.params.roomCode || ''));
+    const room = await hydrateRoomFromSupabase(roomCode);
 
     if (!room) {
       return res.status(404).json({ success: false, error: 'Room not found' });

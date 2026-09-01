@@ -905,7 +905,38 @@ export const MultiplayerAuctionEngine = {
   setRoomState(room: MultiplayerRoomState): void {
     if (!room?.roomCode) return;
     const code = room.roomCode.trim().toUpperCase();
-    rooms.set(code, room);
+    const incomingVersion = Number(room.version || 1);
+    const existingRoom = rooms.get(code);
+    if (existingRoom && Number(existingRoom.version || 1) > incomingVersion) {
+      return;
+    }
+
+    const normalizedRoom: MultiplayerRoomState = {
+      ...room,
+      roomCode: code,
+      version: incomingVersion,
+      serverSequence: Number(room.serverSequence || 1)
+    };
+
+    rooms.set(code, normalizedRoom);
+
+    // If a room is restored into this process from Supabase while already live,
+    // revive the authoritative server hammer timer instead of leaving joiners stuck.
+    if (normalizedRoom.status === 'in_progress') {
+      if (normalizedRoom.deadlineEpochMs && normalizedRoom.deadlineEpochMs > Date.now()) {
+        startRoomTimer(code);
+      } else if (normalizedRoom.currentLotPlayer) {
+        resolveCurrentLot(normalizedRoom);
+      }
+    } else {
+      const existingTimer = roomTimers.get(code);
+      if (existingTimer) {
+        clearInterval(existingTimer);
+        roomTimers.delete(code);
+      }
+    }
+
+    broadcastState(normalizedRoom);
   },
 
   // Subscribe SSE stream

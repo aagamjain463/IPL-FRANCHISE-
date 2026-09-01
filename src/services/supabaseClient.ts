@@ -47,15 +47,31 @@ export function getSupabaseCredentials(): SupabaseCredentials {
   }
 
   const envObj = (import.meta as unknown as { env?: Record<string, string> }).env;
-  const envUrl = (envObj?.VITE_SUPABASE_URL || '').trim();
-  const envKey = (envObj?.VITE_SUPABASE_ANON_KEY || '').trim();
+  const envUrl = (
+    envObj?.VITE_SUPABASE_URL ||
+    envObj?.NEXT_PUBLIC_SUPABASE_URL ||
+    envObj?.PUBLIC_SUPABASE_URL ||
+    ''
+  ).trim();
+  const envKey = (
+    envObj?.VITE_SUPABASE_ANON_KEY ||
+    envObj?.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    envObj?.PUBLIC_SUPABASE_ANON_KEY ||
+    ''
+  ).trim();
 
   const localUrl = (typeof window !== 'undefined' ? localStorage.getItem('ipl_supabase_url') || '' : '').trim();
   const localKey = (typeof window !== 'undefined' ? localStorage.getItem('ipl_supabase_anon_key') || '' : '').trim();
 
+  // A manually saved browser config should override a stale/wrong deploy env.
+  // Other users who do not have local overrides still receive the deploy/server config.
+  if (localUrl && localKey) {
+    return { url: localUrl, anonKey: localKey };
+  }
+
   return {
-    url: serverFetchedUrl || envUrl || localUrl,
-    anonKey: serverFetchedKey || envKey || localKey
+    url: serverFetchedUrl || envUrl,
+    anonKey: serverFetchedKey || envKey
   };
 }
 
@@ -121,9 +137,11 @@ export const SupabaseAuctionService = {
     try {
       const { data, error } = await supabase
         .from('ipl_auction_rooms')
-        .select('state')
+        .select('state, updated_at')
+        .eq('is_public', true)
+        .eq('status', 'lobby')
         .order('updated_at', { ascending: false })
-        .limit(25);
+        .limit(50);
 
       if (error) {
         console.warn('[Supabase] Failed to list rooms:', error.message);
@@ -175,7 +193,7 @@ export const SupabaseAuctionService = {
           host_name: host?.name || 'Host',
           status: state.status,
           participants_count: state.participants.length,
-          is_public: true,
+          is_public: state.status === 'lobby',
           state: state,
           updated_at: new Date().toISOString()
         }, { onConflict: 'room_code' });
@@ -198,14 +216,33 @@ export const SupabaseAuctionService = {
 
     try {
       const code = state.roomCode.trim().toUpperCase();
-      const channel = supabase.channel(`room:${code}`);
-      
-      // Send broadcast event
+      const channel = supabase.channel(`room:${code}`, {
+        config: { broadcast: { ack: true, self: false } }
+      });
+
+      await new Promise<void>((resolve) => {
+        const timeout = window.setTimeout(resolve, 800);
+        channel.subscribe((status: string) => {
+          if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            window.clearTimeout(timeout);
+            resolve();
+          }
+        });
+      });
+
       await channel.send({
         type: 'broadcast',
         event: 'STATE_UPDATE',
         payload: { state }
       });
+
+      window.setTimeout(() => {
+        try {
+          supabase.removeChannel(channel);
+        } catch {
+          // ignore cleanup issues
+        }
+      }, 250);
     } catch (err) {
       console.warn('[Supabase] Broadcast error:', err);
     }

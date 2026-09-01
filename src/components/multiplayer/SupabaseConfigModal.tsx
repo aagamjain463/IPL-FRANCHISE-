@@ -17,31 +17,58 @@ interface SupabaseConfigModalProps {
   onConfigured?: () => void;
 }
 
-const SUPABASE_SCHEMA_SQL = `-- 1. Create Auction Rooms Table in Supabase SQL Editor
+const SUPABASE_SCHEMA_SQL = `-- IPL FRANCHISE Live Multiplayer Supabase Schema
+-- Safe to re-run in Supabase SQL Editor
+
 create table if not exists public.ipl_auction_rooms (
   room_code text primary key,
   host_id text not null,
   host_name text not null,
-  status text not null default 'lobby',
-  participants_count integer default 1,
-  is_public boolean default true,
+  status text not null default 'lobby' check (status in ('lobby','in_progress','lot_break','completed')),
+  participants_count integer not null default 1,
+  is_public boolean not null default true,
   state jsonb not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
--- 2. Enable RLS and public policies
+create index if not exists idx_ipl_auction_rooms_public_status_updated
+  on public.ipl_auction_rooms (is_public, status, updated_at desc);
+
 alter table public.ipl_auction_rooms enable row level security;
 
+drop policy if exists "Allow public read access to auction rooms" on public.ipl_auction_rooms;
 create policy "Allow public read access to auction rooms"
   on public.ipl_auction_rooms for select using (true);
+
+drop policy if exists "Allow public insert to auction rooms" on public.ipl_auction_rooms;
 create policy "Allow public insert to auction rooms"
   on public.ipl_auction_rooms for insert with check (true);
-create policy "Allow public update to auction rooms"
-  on public.ipl_auction_rooms for update using (true);
 
--- 3. Enable Realtime Replication
-alter publication supabase_realtime add table public.ipl_auction_rooms;`;
+drop policy if exists "Allow public update to auction rooms" on public.ipl_auction_rooms;
+create policy "Allow public update to auction rooms"
+  on public.ipl_auction_rooms for update using (true) with check (true);
+
+drop policy if exists "Allow public delete to auction rooms" on public.ipl_auction_rooms;
+create policy "Allow public delete to auction rooms"
+  on public.ipl_auction_rooms for delete using (true);
+
+grant select, insert, update, delete on public.ipl_auction_rooms to anon, authenticated;
+
+alter table public.ipl_auction_rooms replica identity full;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'ipl_auction_rooms'
+  ) then
+    alter publication supabase_realtime add table public.ipl_auction_rooms;
+  end if;
+exception when duplicate_object then null;
+end $$;`;
 
 export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ isOpen, onClose, onConfigured }) => {
   const currentCreds = getSupabaseCredentials();
@@ -158,7 +185,7 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ isOpen
               <Sparkles className="w-4 h-4" /> Why connect Supabase?
             </div>
             <p>
-              When hosting on static platforms like <strong className="text-white">Vercel</strong>, Supabase provides instant WebSockets, persistent war rooms, and sub-50ms live bidding between friends on mobile and desktop without server timeouts.
+              When hosting on static platforms like <strong className="text-white">Vercel</strong>, Supabase provides persistent war rooms and live bidding between friends. For everyone to see the same room list automatically, set <strong className="text-white">VITE_SUPABASE_URL</strong> and <strong className="text-white">VITE_SUPABASE_ANON_KEY</strong> in your deployment; this modal is a per-browser override for testing.
             </p>
           </div>
 
