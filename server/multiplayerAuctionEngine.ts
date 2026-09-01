@@ -14,7 +14,7 @@ import { INITIAL_PLAYERS } from '../src/data/players.js';
 import { INITIAL_TEAMS } from '../src/data/teams.js';
 import { Player } from '../src/types/cricket.js';
 import { calculateAuctionPerformanceScore, getMultiplayerBidIncrement, isValidBidIncrement, MULTIPLAYER_AUCTION_RULES, normalizeCr } from '../src/multiplayer/auctionRules.js';
-import { LeaderboardStore } from './leaderboardStore';
+import { LeaderboardStore } from './leaderboardStore.js';
 
 // Default config
 const DEFAULT_CONFIG: MultiplayerAuctionConfig = {
