@@ -117,9 +117,17 @@ export function useMultiplayerAuction() {
     const savedRoom = localStorage.getItem('ipl_multiplayer_room_code');
     if (!savedRoom || roomState) return;
     let cancelled = false;
-    MultiplayerAuctionClient.joinRoom(savedRoom, identity.playerName).then(result => {
-      if (!cancelled && result.success && result.state) setRoomState(result.state);
-    }).catch(() => undefined);
+    MultiplayerAuctionClient.joinRoom(savedRoom.trim().toUpperCase(), identity.playerName).then(result => {
+      if (cancelled) return;
+      if (result.success && result.state) {
+        setRoomState(result.state);
+      } else {
+        // Room no longer exists on server, remove stale key
+        localStorage.removeItem('ipl_multiplayer_room_code');
+      }
+    }).catch(() => {
+      localStorage.removeItem('ipl_multiplayer_room_code');
+    });
     return () => { cancelled = true; };
   }, [identity.playerName, roomState]);
 

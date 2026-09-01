@@ -467,16 +467,18 @@ export const MultiplayerAuctionEngine = {
 
   // Join Room
   joinRoom(roomCode: string, playerId: string, playerName: string): { success: boolean; state?: MultiplayerRoomState; error?: string } {
-    const room = rooms.get(roomCode.toUpperCase());
+    if (!roomCode) return { success: false, error: 'Room code is required.' };
+    const code = roomCode.trim().toUpperCase();
+    const room = rooms.get(code);
     if (!room) {
-      return { success: false, error: `Room ${roomCode} not found.` };
+      return { success: false, error: `Room ${code} not found. Please verify the 6-character code.` };
     }
 
     const existingParticipant = room.participants.find(p => p.id === playerId);
     if (existingParticipant) {
       existingParticipant.isConnected = true;
       existingParticipant.disconnectedAt = null;
-      existingParticipant.name = playerName || existingParticipant.name;
+      existingParticipant.name = playerName?.trim() || existingParticipant.name;
       broadcastState(room);
       return { success: true, state: room };
     }
@@ -491,7 +493,7 @@ export const MultiplayerAuctionEngine = {
 
     const newParticipant: MultiplayerParticipant = {
       id: playerId,
-      name: playerName || `Manager ${room.participants.length + 1}`,
+      name: playerName?.trim() || `Manager ${room.participants.length + 1}`,
       isHost: false,
       franchiseId: null,
       isReady: false,
@@ -511,7 +513,8 @@ export const MultiplayerAuctionEngine = {
 
   // Select Franchise (Enforces duplicate prevention)
   selectFranchise(roomCode: string, playerId: string, franchiseId: string): { success: boolean; state?: MultiplayerRoomState; error?: string } {
-    const room = rooms.get(roomCode.toUpperCase());
+    if (!roomCode) return { success: false, error: 'Room code is required.' };
+    const room = rooms.get(roomCode.trim().toUpperCase());
     if (!room) return { success: false, error: 'Room not found.' };
 
     if (room.status !== 'lobby') {
@@ -542,7 +545,8 @@ export const MultiplayerAuctionEngine = {
 
   // Toggle Ready
   toggleReady(roomCode: string, playerId: string): { success: boolean; state?: MultiplayerRoomState; error?: string } {
-    const room = rooms.get(roomCode.toUpperCase());
+    if (!roomCode) return { success: false, error: 'Room code is required.' };
+    const room = rooms.get(roomCode.trim().toUpperCase());
     if (!room) return { success: false, error: 'Room not found.' };
 
     const participant = room.participants.find(p => p.id === playerId);
@@ -559,7 +563,8 @@ export const MultiplayerAuctionEngine = {
 
   // Update Config (Host only, in lobby)
   updateConfig(roomCode: string, hostPlayerId: string, newConfig: Partial<MultiplayerAuctionConfig>): { success: boolean; state?: MultiplayerRoomState; error?: string } {
-    const room = rooms.get(roomCode.toUpperCase());
+    if (!roomCode) return { success: false, error: 'Room code is required.' };
+    const room = rooms.get(roomCode.trim().toUpperCase());
     if (!room) return { success: false, error: 'Room not found.' };
 
     if (room.hostId !== hostPlayerId) {
@@ -595,7 +600,8 @@ export const MultiplayerAuctionEngine = {
 
   // Start Auction (Host only)
   startAuction(roomCode: string, hostPlayerId: string): { success: boolean; state?: MultiplayerRoomState; error?: string } {
-    const room = rooms.get(roomCode.toUpperCase());
+    if (!roomCode) return { success: false, error: 'Room code is required.' };
+    const room = rooms.get(roomCode.trim().toUpperCase());
     if (!room) return { success: false, error: 'Room not found.' };
 
     if (room.hostId !== hostPlayerId) {
@@ -654,7 +660,8 @@ export const MultiplayerAuctionEngine = {
 
   // Place Bid (Any participant)
   placeBid(roomCode: string, playerId: string, bidAmountCr: number): { success: boolean; state?: MultiplayerRoomState; error?: string } {
-    const room = rooms.get(roomCode.toUpperCase());
+    if (!roomCode) return { success: false, error: 'Room code is required.' };
+    const room = rooms.get(roomCode.trim().toUpperCase());
     if (!room) return { success: false, error: 'Room not found.' };
 
     if (room.status !== 'in_progress') {
@@ -769,7 +776,8 @@ export const MultiplayerAuctionEngine = {
 
   // Pause Auction (Host only)
   pauseAuction(roomCode: string, hostPlayerId: string): { success: boolean; state?: MultiplayerRoomState; error?: string } {
-    const room = rooms.get(roomCode.toUpperCase());
+    if (!roomCode) return { success: false, error: 'Room code is required.' };
+    const room = rooms.get(roomCode.trim().toUpperCase());
     if (!room) return { success: false, error: 'Room not found.' };
 
     if (room.hostId !== hostPlayerId) {
@@ -795,7 +803,8 @@ export const MultiplayerAuctionEngine = {
 
   // Resume Auction (Host only)
   resumeAuction(roomCode: string, hostPlayerId: string): { success: boolean; state?: MultiplayerRoomState; error?: string } {
-    const room = rooms.get(roomCode.toUpperCase());
+    if (!roomCode) return { success: false, error: 'Room code is required.' };
+    const room = rooms.get(roomCode.trim().toUpperCase());
     if (!room) return { success: false, error: 'Room not found.' };
 
     if (room.hostId !== hostPlayerId) {
@@ -815,13 +824,15 @@ export const MultiplayerAuctionEngine = {
 
   // Leave / Disconnect Room
   leaveRoom(roomCode: string, playerId: string): { success: boolean } {
-    const room = rooms.get(roomCode.toUpperCase());
+    if (!roomCode) return { success: true };
+    const code = roomCode.trim().toUpperCase();
+    const room = rooms.get(code);
     if (!room) return { success: true };
 
     if (room.status === 'lobby') {
       room.participants = room.participants.filter(p => p.id !== playerId);
       if (room.participants.length === 0) {
-        rooms.delete(roomCode);
+        rooms.delete(code);
         return { success: true };
       }
       // Reassign host if host left in lobby

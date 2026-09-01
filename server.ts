@@ -97,148 +97,208 @@ async function startServer() {
   // ============================================================
   // 1. Create Room
   app.post('/api/multiplayer/create', (req: Request, res: Response) => {
-    const { hostPlayerId, hostName, config } = req.body;
-    if (!hostPlayerId) {
-      return res.status(400).json({ error: 'hostPlayerId is required' });
+    try {
+      const { hostPlayerId, hostName, config } = req.body || {};
+      if (!hostPlayerId) {
+        return res.status(400).json({ success: false, error: 'hostPlayerId is required' });
+      }
+      const roomState = MultiplayerAuctionEngine.createRoom(hostPlayerId, hostName || 'Host Manager', config);
+      res.json({ success: true, state: roomState });
+    } catch (err) {
+      console.error('Error in /api/multiplayer/create:', err);
+      res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error creating room' });
     }
-    const roomState = MultiplayerAuctionEngine.createRoom(hostPlayerId, hostName, config);
-    res.json({ success: true, state: roomState });
   });
 
   // 2. Join Room
   app.post('/api/multiplayer/join', (req: Request, res: Response) => {
-    const { roomCode, playerId, playerName } = req.body;
-    if (!roomCode || !playerId) {
-      return res.status(400).json({ error: 'roomCode and playerId are required' });
+    try {
+      const { roomCode, playerId, playerName } = req.body || {};
+      if (!roomCode || !playerId) {
+        return res.status(400).json({ success: false, error: 'roomCode and playerId are required' });
+      }
+      const result = MultiplayerAuctionEngine.joinRoom(String(roomCode).trim().toUpperCase(), String(playerId), playerName || 'Manager');
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      res.json(result);
+    } catch (err) {
+      console.error('Error in /api/multiplayer/join:', err);
+      res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error joining room' });
     }
-    const result = MultiplayerAuctionEngine.joinRoom(roomCode, playerId, playerName);
-    if (!result.success) {
-      return res.status(400).json({ error: result.error });
-    }
-    res.json(result);
   });
 
   // 3. Select Franchise (with server-side duplicate prevention)
   app.post('/api/multiplayer/select-franchise', (req: Request, res: Response) => {
-    const { roomCode, playerId, franchiseId } = req.body;
-    if (!roomCode || !playerId || !franchiseId) {
-      return res.status(400).json({ error: 'roomCode, playerId, and franchiseId are required' });
+    try {
+      const { roomCode, playerId, franchiseId } = req.body || {};
+      if (!roomCode || !playerId || !franchiseId) {
+        return res.status(400).json({ success: false, error: 'roomCode, playerId, and franchiseId are required' });
+      }
+      const result = MultiplayerAuctionEngine.selectFranchise(String(roomCode).trim().toUpperCase(), String(playerId), String(franchiseId));
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      res.json(result);
+    } catch (err) {
+      console.error('Error in /api/multiplayer/select-franchise:', err);
+      res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error selecting franchise' });
     }
-    const result = MultiplayerAuctionEngine.selectFranchise(roomCode, playerId, franchiseId);
-    if (!result.success) {
-      return res.status(400).json({ error: result.error });
-    }
-    res.json(result);
   });
 
   // 4. Toggle Ready
   app.post('/api/multiplayer/ready', (req: Request, res: Response) => {
-    const { roomCode, playerId } = req.body;
-    if (!roomCode || !playerId) {
-      return res.status(400).json({ error: 'roomCode and playerId are required' });
+    try {
+      const { roomCode, playerId } = req.body || {};
+      if (!roomCode || !playerId) {
+        return res.status(400).json({ success: false, error: 'roomCode and playerId are required' });
+      }
+      const result = MultiplayerAuctionEngine.toggleReady(String(roomCode).trim().toUpperCase(), String(playerId));
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      res.json(result);
+    } catch (err) {
+      console.error('Error in /api/multiplayer/ready:', err);
+      res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error updating ready state' });
     }
-    const result = MultiplayerAuctionEngine.toggleReady(roomCode, playerId);
-    if (!result.success) {
-      return res.status(400).json({ error: result.error });
-    }
-    res.json(result);
   });
 
   // 5. Update Config (Host in Lobby only)
   app.post('/api/multiplayer/config', (req: Request, res: Response) => {
-    const { roomCode, hostPlayerId, config } = req.body;
-    if (!roomCode || !hostPlayerId) {
-      return res.status(400).json({ error: 'roomCode and hostPlayerId are required' });
+    try {
+      const { roomCode, hostPlayerId, config } = req.body || {};
+      if (!roomCode || !hostPlayerId) {
+        return res.status(400).json({ success: false, error: 'roomCode and hostPlayerId are required' });
+      }
+      const result = MultiplayerAuctionEngine.updateConfig(String(roomCode).trim().toUpperCase(), String(hostPlayerId), config);
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      res.json(result);
+    } catch (err) {
+      console.error('Error in /api/multiplayer/config:', err);
+      res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error updating config' });
     }
-    const result = MultiplayerAuctionEngine.updateConfig(roomCode, hostPlayerId, config);
-    if (!result.success) {
-      return res.status(400).json({ error: result.error });
-    }
-    res.json(result);
   });
 
   // 6. Start Auction (Host only)
   app.post('/api/multiplayer/start', (req: Request, res: Response) => {
-    const { roomCode, hostPlayerId } = req.body;
-    if (!roomCode || !hostPlayerId) {
-      return res.status(400).json({ error: 'roomCode and hostPlayerId are required' });
+    try {
+      const { roomCode, hostPlayerId } = req.body || {};
+      if (!roomCode || !hostPlayerId) {
+        return res.status(400).json({ success: false, error: 'roomCode and hostPlayerId are required' });
+      }
+      const result = MultiplayerAuctionEngine.startAuction(String(roomCode).trim().toUpperCase(), String(hostPlayerId));
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      res.json(result);
+    } catch (err) {
+      console.error('Error in /api/multiplayer/start:', err);
+      res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error starting auction' });
     }
-    const result = MultiplayerAuctionEngine.startAuction(roomCode, hostPlayerId);
-    if (!result.success) {
-      return res.status(400).json({ error: result.error });
-    }
-    res.json(result);
   });
 
   // 7. Place Bid (Server Authoritative)
   app.post('/api/multiplayer/bid', (req: Request, res: Response) => {
-    const { roomCode, playerId, bidAmountCr } = req.body;
-    if (!roomCode || !playerId || typeof bidAmountCr !== 'number') {
-      return res.status(400).json({ error: 'roomCode, playerId, and valid numeric bidAmountCr are required' });
+    try {
+      const { roomCode, playerId, bidAmountCr } = req.body || {};
+      if (!roomCode || !playerId || typeof bidAmountCr !== 'number') {
+        return res.status(400).json({ success: false, error: 'roomCode, playerId, and valid numeric bidAmountCr are required' });
+      }
+      const result = MultiplayerAuctionEngine.placeBid(String(roomCode).trim().toUpperCase(), String(playerId), bidAmountCr);
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      res.json(result);
+    } catch (err) {
+      console.error('Error in /api/multiplayer/bid:', err);
+      res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error placing bid' });
     }
-    const result = MultiplayerAuctionEngine.placeBid(roomCode, playerId, bidAmountCr);
-    if (!result.success) {
-      return res.status(400).json({ error: result.error });
-    }
-    res.json(result);
   });
 
   // 8. Pause Auction (Host only)
   app.post('/api/multiplayer/pause', (req: Request, res: Response) => {
-    const { roomCode, hostPlayerId } = req.body;
-    if (!roomCode || !hostPlayerId) {
-      return res.status(400).json({ error: 'roomCode and hostPlayerId are required' });
+    try {
+      const { roomCode, hostPlayerId } = req.body || {};
+      if (!roomCode || !hostPlayerId) {
+        return res.status(400).json({ success: false, error: 'roomCode and hostPlayerId are required' });
+      }
+      const result = MultiplayerAuctionEngine.pauseAuction(String(roomCode).trim().toUpperCase(), String(hostPlayerId));
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      res.json(result);
+    } catch (err) {
+      console.error('Error in /api/multiplayer/pause:', err);
+      res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error pausing auction' });
     }
-    const result = MultiplayerAuctionEngine.pauseAuction(roomCode, hostPlayerId);
-    if (!result.success) {
-      return res.status(400).json({ error: result.error });
-    }
-    res.json(result);
   });
 
   // 9. Resume Auction (Host only)
   app.post('/api/multiplayer/resume', (req: Request, res: Response) => {
-    const { roomCode, hostPlayerId } = req.body;
-    if (!roomCode || !hostPlayerId) {
-      return res.status(400).json({ error: 'roomCode and hostPlayerId are required' });
+    try {
+      const { roomCode, hostPlayerId } = req.body || {};
+      if (!roomCode || !hostPlayerId) {
+        return res.status(400).json({ success: false, error: 'roomCode and hostPlayerId are required' });
+      }
+      const result = MultiplayerAuctionEngine.resumeAuction(String(roomCode).trim().toUpperCase(), String(hostPlayerId));
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      res.json(result);
+    } catch (err) {
+      console.error('Error in /api/multiplayer/resume:', err);
+      res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error resuming auction' });
     }
-    const result = MultiplayerAuctionEngine.resumeAuction(roomCode, hostPlayerId);
-    if (!result.success) {
-      return res.status(400).json({ error: result.error });
-    }
-    res.json(result);
   });
 
   // 10. Leave Room
   app.post('/api/multiplayer/leave', (req: Request, res: Response) => {
-    const { roomCode, playerId } = req.body;
-    if (roomCode && playerId) {
-      MultiplayerAuctionEngine.leaveRoom(roomCode, playerId);
+    try {
+      const { roomCode, playerId } = req.body || {};
+      if (roomCode && playerId) {
+        MultiplayerAuctionEngine.leaveRoom(String(roomCode).trim().toUpperCase(), String(playerId));
+      }
+      res.json({ success: true });
+    } catch (err) {
+      console.error('Error in /api/multiplayer/leave:', err);
+      res.json({ success: true });
     }
-    res.json({ success: true });
   });
 
   // 11. Public Open Rooms Browser — only actual existing lobby rooms, never fake/AI rooms
   app.get('/api/multiplayer/rooms', (req: Request, res: Response) => {
-    res.json({ success: true, rooms: MultiplayerAuctionEngine.listOpenRooms() });
+    try {
+      res.json({ success: true, rooms: MultiplayerAuctionEngine.listOpenRooms() });
+    } catch (err) {
+      console.error('Error in /api/multiplayer/rooms:', err);
+      res.status(500).json({ success: false, error: 'Failed to fetch rooms', rooms: [] });
+    }
   });
 
   // 12. Get Room State Snapshot
   app.get('/api/multiplayer/room/:roomCode', (req: Request, res: Response) => {
-    const room = MultiplayerAuctionEngine.getRoomState(req.params.roomCode);
-    if (!room) {
-      return res.status(404).json({ error: 'Room not found' });
+    try {
+      const room = MultiplayerAuctionEngine.getRoomState(String(req.params.roomCode || ''));
+      if (!room) {
+        return res.status(404).json({ success: false, error: 'Room not found' });
+      }
+      res.json({ success: true, state: room });
+    } catch (err) {
+      console.error('Error in /api/multiplayer/room/:roomCode:', err);
+      res.status(500).json({ success: false, error: 'Failed to retrieve room snapshot' });
     }
-    res.json({ success: true, state: room });
   });
 
   // 13. Server-Sent Events (SSE) Real-Time Stream
   app.get('/api/multiplayer/events/:roomCode', (req: Request, res: Response) => {
-    const roomCode = req.params.roomCode;
+    const roomCode = String(req.params.roomCode || '').trim().toUpperCase();
     const room = MultiplayerAuctionEngine.getRoomState(roomCode);
 
     if (!room) {
-      return res.status(404).json({ error: 'Room not found' });
+      return res.status(404).json({ success: false, error: 'Room not found' });
     }
 
     res.setHeader('Content-Type', 'text/event-stream');

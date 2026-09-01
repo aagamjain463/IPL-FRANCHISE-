@@ -107,6 +107,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
   };
 
   const handleCreateRoomSubmit = async () => {
+    setErrorMessage(null);
     await createRoom({
       startingPurseCr: customStartingPurse,
       minPlayers: Math.min(2, customMaxPlayers),
@@ -118,11 +119,17 @@ export const MultiplayerAuctionHome: React.FC = () => {
 
   const handleJoinRoomSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputRoomCode.trim()) {
+    const cleanCode = inputRoomCode.trim().toUpperCase();
+    if (!cleanCode) {
       setErrorMessage('Please enter a 6-character room code.');
       return;
     }
-    await joinRoom(inputRoomCode.trim());
+    if (cleanCode.length < 4) {
+      setErrorMessage('Room code must be at least 4 characters long.');
+      return;
+    }
+    setErrorMessage(null);
+    await joinRoom(cleanCode);
   };
 
   // If currently in a room, render the appropriate stage
