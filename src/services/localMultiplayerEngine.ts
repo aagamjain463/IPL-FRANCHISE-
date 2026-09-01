@@ -167,64 +167,6 @@ class LocalMultiplayerEngine {
         // ignore
       }
     }
-
-    this.seedPublicRooms();
-  }
-
-  private seedPublicRooms() {
-    const demoConfigs = [
-      { code: 'IPL749', host: 'MS Dhoni', franchise: 'csk', purse: 100 },
-      { code: 'CSK888', host: 'Gautam Gambhir', franchise: 'kkr', purse: 120 },
-      { code: 'RCB018', host: 'Rohit Sharma', franchise: 'mi', purse: 100 }
-    ];
-
-    demoConfigs.forEach(d => {
-      if (!this.rooms.has(d.code)) {
-        const pool = generatePlayerPool('Full Draft Pool');
-        const room: MultiplayerRoomState = {
-          roomCode: d.code,
-          roomName: `${d.host}'s War Room`,
-          hostId: `bot_${d.code}`,
-          config: { ...DEFAULT_CONFIG, startingPurseCr: d.purse },
-          status: 'lobby',
-          participants: [
-            {
-              id: `bot_${d.code}`,
-              name: d.host,
-              franchiseId: d.franchise,
-              isHost: true,
-              isReady: true,
-              isAI: true,
-              purseCr: d.purse,
-              squadPlayerIds: [],
-              squadPlayers: [],
-              isConnected: true,
-              lastBidCr: null
-            }
-          ],
-          playerPool: pool,
-          currentLotIndex: 0,
-          totalLots: pool.length,
-          currentLotPlayer: null,
-          currentHighBidCr: 0,
-          currentHighBidderId: null,
-          currentHighBidderFranchiseId: null,
-          hammerSecondsRemaining: 15,
-          hammerCall: 'Opening Bid',
-          isPaused: false,
-          pausedByHostId: null,
-          bidHistory: [],
-          soldRecords: [],
-          unsoldPlayerIds: [],
-          rankings: [],
-          awards: [],
-          deadlineEpochMs: null,
-          serverSequence: 1,
-          version: 1
-        };
-        this.rooms.set(d.code, room);
-      }
-    });
   }
 
   private notifyListeners(roomCode: string, event: MultiplayerClientEvent) {
@@ -349,15 +291,12 @@ class LocalMultiplayerEngine {
     return roomState;
   }
 
-  joinRoom(roomCode: string, playerId: string, playerName: string): { success: boolean; state?: MultiplayerRoomState; error?: string } {
+  joinRoom(roomCode: string, playerId: string, playerName?: string): { success: boolean; state?: MultiplayerRoomState; error?: string } {
     const code = roomCode.trim().toUpperCase();
-    let room = this.rooms.get(code);
+    const room = this.rooms.get(code);
 
     if (!room) {
-      room = this.createRoom(playerId, playerName);
-      room.roomCode = code;
-      this.rooms.set(code, room);
-      return { success: true, state: room };
+      return { success: false, error: `Room "${code}" not found. Please verify the 6-character code.` };
     }
 
     const existing = room.participants.find(p => p.id === playerId);

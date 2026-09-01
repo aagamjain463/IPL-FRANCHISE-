@@ -116,8 +116,14 @@ export const MultiplayerAuctionClient = {
       if (res.ok && res.data?.success && res.data.state) {
         return { success: true, state: res.data.state };
       }
+      if (res.data?.error) {
+        return { success: false, error: res.data.error };
+      }
+      if (!res.ok && res.status !== 0) {
+        return { success: false, error: res.data?.error || `Failed to create room (HTTP ${res.status})` };
+      }
     } catch {
-      // fallback to local engine
+      // offline fallback only
     }
 
     // Fallback to client-side auction room engine
@@ -140,8 +146,14 @@ export const MultiplayerAuctionClient = {
       if (res.ok && res.data?.success && res.data.state) {
         return { success: true, state: res.data.state };
       }
+      if (res.data?.error) {
+        return { success: false, error: res.data.error };
+      }
+      if (!res.ok && res.status !== 0) {
+        return { success: false, error: res.data?.error || `Room "${code}" not found. Please verify the 6-character code.` };
+      }
     } catch {
-      // fallback to local engine
+      // offline fallback only
     }
 
     return localMultiplayerEngine.joinRoom(code, playerId, playerName);
@@ -160,6 +172,9 @@ export const MultiplayerAuctionClient = {
 
       if (res.ok && res.data?.success && res.data.state) {
         return { success: true, state: res.data.state };
+      }
+      if (res.data?.error) {
+        return { success: false, error: res.data.error };
       }
     } catch {
       // fallback
@@ -182,6 +197,9 @@ export const MultiplayerAuctionClient = {
       if (res.ok && res.data?.success && res.data.state) {
         return { success: true, state: res.data.state };
       }
+      if (res.data?.error) {
+        return { success: false, error: res.data.error };
+      }
     } catch {
       // fallback
     }
@@ -203,6 +221,9 @@ export const MultiplayerAuctionClient = {
       if (res.ok && res.data?.success && res.data.state) {
         return { success: true, state: res.data.state };
       }
+      if (res.data?.error) {
+        return { success: false, error: res.data.error };
+      }
     } catch {
       // fallback
     }
@@ -223,6 +244,9 @@ export const MultiplayerAuctionClient = {
 
       if (res.ok && res.data?.success && res.data.state) {
         return { success: true, state: res.data.state };
+      }
+      if (res.data?.error) {
+        return { success: false, error: res.data.error };
       }
     } catch {
       // fallback
@@ -246,6 +270,9 @@ export const MultiplayerAuctionClient = {
         auctionAudio.playBidPaddleSound();
         return { success: true, state: res.data.state };
       }
+      if (res.data?.error) {
+        return { success: false, error: res.data.error };
+      }
     } catch {
       // fallback
     }
@@ -268,6 +295,9 @@ export const MultiplayerAuctionClient = {
       if (res.ok && res.data?.success && res.data.state) {
         return { success: true, state: res.data.state };
       }
+      if (res.data?.error) {
+        return { success: false, error: res.data.error };
+      }
     } catch {
       // fallback
     }
@@ -288,6 +318,9 @@ export const MultiplayerAuctionClient = {
 
       if (res.ok && res.data?.success && res.data.state) {
         return { success: true, state: res.data.state };
+      }
+      if (res.data?.error) {
+        return { success: false, error: res.data.error };
       }
     } catch {
       // fallback
@@ -314,7 +347,7 @@ export const MultiplayerAuctionClient = {
   async getOpenRooms(): Promise<any[]> {
     try {
       const res = await safeFetchJson<{ success: boolean; rooms?: any[] }>('/api/multiplayer/rooms', { cache: 'no-store' });
-      if (res.ok && res.data?.rooms && Array.isArray(res.data.rooms) && res.data.rooms.length > 0) {
+      if (res.ok && res.data?.rooms && Array.isArray(res.data.rooms)) {
         return res.data.rooms;
       }
     } catch {
@@ -346,6 +379,7 @@ export const MultiplayerAuctionClient = {
     const code = roomCode.trim().toUpperCase();
     let eventSource: EventSource | null = null;
     let fallbackInterval: NodeJS.Timeout | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
     let isCleanedUp = false;
 
     // Listen to local engine events (guarantees real-time responses even if server is offline/static)
@@ -365,6 +399,9 @@ export const MultiplayerAuctionClient = {
     const connectSSE = () => {
       if (isCleanedUp) return;
       try {
+        if (eventSource) {
+          eventSource.close();
+        }
         eventSource = new EventSource(`/api/multiplayer/events/${code}`);
 
         eventSource.onopen = () => {
@@ -389,10 +426,15 @@ export const MultiplayerAuctionClient = {
         };
 
         eventSource.onerror = () => {
-          onConnectionChange?.(true); // Keep UI active via local fallback
           if (eventSource) {
             eventSource.close();
             eventSource = null;
+          }
+          if (!isCleanedUp && !reconnectTimeout) {
+            reconnectTimeout = setTimeout(() => {
+              reconnectTimeout = null;
+              connectSSE();
+            }, 3000);
           }
         };
       } catch {
@@ -402,18 +444,22 @@ export const MultiplayerAuctionClient = {
 
     connectSSE();
 
-    // Active state sync polling
+    // Active high-speed state sync polling (every 1.5s) to guarantee instantaneous lobby and lot synchronization
     fallbackInterval = setInterval(async () => {
       if (isCleanedUp) return;
       const state = await MultiplayerAuctionClient.getRoomState(code);
       if (state) {
         onEvent({ type: 'STATE_UPDATE', state });
       }
-    }, 3000);
+    }, 1500);
 
     return () => {
       isCleanedUp = true;
       unsubscribeLocal();
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
       if (eventSource) {
         eventSource.close();
         eventSource = null;
