@@ -6,10 +6,12 @@ import { MultiplayerLiveAuctionArena } from './MultiplayerLiveAuctionArena';
 import { MultiplayerCompletedView } from './MultiplayerCompletedView';
 import { MultiplayerAuctionConfig } from '../../types/multiplayerAuction';
 import { LeaderboardMiniPanel } from '../LeaderboardMiniPanel';
+import { SupabaseConfigModal } from './SupabaseConfigModal';
+import { isSupabaseConfigured } from '../../services/supabaseClient';
 import { 
   Users, Plus, LogIn, Shield, Sparkles, Gavel, 
   Zap, Clock, Award, AlertCircle, Edit2, Check,
-  Search, RefreshCw, Radio, Flame, Trophy, Globe
+  Search, RefreshCw, Radio, Flame, Trophy, Globe, Database
 } from 'lucide-react';
 
 interface PublicRoomItem {
@@ -67,6 +69,8 @@ export const MultiplayerAuctionHome: React.FC = () => {
   const [roomSearch, setRoomSearch] = useState('');
   const [publicRooms, setPublicRooms] = useState<PublicRoomItem[]>(DEFAULT_PUBLIC_ROOMS);
   const [isRefreshingRooms, setIsRefreshingRooms] = useState(false);
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [supabaseActive, setSupabaseActive] = useState(isSupabaseConfigured());
 
   const loadOpenRooms = async () => {
     setIsRefreshingRooms(true);
@@ -195,6 +199,20 @@ export const MultiplayerAuctionHome: React.FC = () => {
             <p className="text-sm text-slate-300 max-w-xl leading-relaxed">
               Create or join live multiplayer rooms with friends across any device. Pick your IPL franchise, manage real purses, and battle in real time with server-synced hammer timers.
             </p>
+
+            <div className="pt-2 flex items-center gap-3">
+              <button
+                onClick={() => setIsSupabaseModalOpen(true)}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                  supabaseActive
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25'
+                    : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:border-emerald-500/50 hover:text-white'
+                }`}
+              >
+                <Database className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{supabaseActive ? 'Supabase Realtime Active ⚡' : 'Setup Supabase Cloud Sync'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Manager Identity Card */}
@@ -550,6 +568,16 @@ No open live rooms right now. Create a room above and share the code — it will
           </p>
         </div>
       </div>
+
+      <SupabaseConfigModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+        onConfigured={() => {
+          setSupabaseActive(isSupabaseConfigured());
+          loadOpenRooms();
+        }}
+      />
     </div>
   );
 };
+

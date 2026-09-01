@@ -237,6 +237,16 @@ class LocalMultiplayerEngine {
     return this.rooms.get(code) || null;
   }
 
+  hasRoom(roomCode: string): boolean {
+    const code = roomCode.trim().toUpperCase();
+    return this.rooms.has(code);
+  }
+
+  setRoom(room: MultiplayerRoomState): void {
+    const code = room.roomCode.trim().toUpperCase();
+    this.rooms.set(code, room);
+  }
+
   createRoom(hostPlayerId: string, hostName: string, config?: Partial<MultiplayerAuctionConfig>): MultiplayerRoomState {
     const code = generateRoomCode();
     const finalConfig: MultiplayerAuctionConfig = {
