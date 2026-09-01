@@ -5,51 +5,61 @@ import { StandingsRow, TournamentFixture, SeasonAwards } from './tournament';
 import { ScoutingDepartmentData } from './scout';
 import { FranchiseProgressionState } from './franchise';
 
-export const SAVE_VERSION = 2;
-
-export interface SeasonSummary {
-  seasonYear: number;
-  championTeamId: string;
-  runnerUpTeamId: string;
-  userTeamFinish: string; // 'Champions' | 'Runners-Up' | 'Qualifier 1' | 'Eliminator' | 'League Stage'
-  userRecord: string;
-  orangeCap: { playerId: string; playerName: string; teamShortName: string; runs: number };
-  purpleCap: { playerId: string; playerName: string; teamShortName: string; wickets: number };
-  mvp: { playerId: string; playerName: string; teamShortName: string; pts: number };
-  emergingPlayer: { playerId: string; playerName: string; teamShortName: string; reason: string };
-  playoffResults: Array<{ stage: string; resultText: string }>;
-  awardWinners: Array<{ playerId: string; playerName: string; teamShortName: string; award: string }>;
-}
-
 export type GameMode = 'Authentic IPL' | 'Mega Auction Mode' | 'Full Season' | 'Dynasty Career' | 'Quick Match' | 'What-If Simulator' | 'Scenario Challenge';
 
+// === PRIMARY NAVIGATION SECTIONS ===
+// Consolidated to 5 main sections for premium sports game navigation
 export type AppTab = 
-  | 'Dashboard' // Home
-  | 'Play' // Dedicated Play center (Matchday, Quick Match, Moments, Schedule)
+  | 'Home'        // Franchise hub, dashboard, overview
+  | 'Play'        // Matchday, moments, schedule, quick match, challenges
+  | 'Squad'       // Playing XI, squad management, player development
+  | 'Auction'     // Auction arena, scouting, market
+  | 'Club';       // Franchise, trophy room, stadium, rivalries, legacy
+
+// === LEGACY TAB SUPPORT ===
+// These are mapped to primary sections for backward compatibility
+export type LegacyAppTab = 
+  | 'Dashboard'
   | 'PlayingXI'
-  | 'Squad' // Dedicated Squad & Development
-  | 'FCEvolutions' // FC 26 Wonderkid Evolutions Academy
-  | 'TacticsRadar' // FC IQ 3D Tactical Field & Pitch Radar
-  | 'AuctionLive' // Dedicated Auction
-  | 'MultiplayerAuction' // Real-time live multiplayer auction war rooms
-  | 'Scout' // Dedicated Scout department
+  | 'Squad'
+  | 'AuctionLive'
+  | 'Scout'
   | 'YouthAcademy'
-  | 'TradeCenter' // Market & Transfers
+  | 'TradeCenter'
   | 'Market'
-  | 'Club' // Facilities & Staff & Finances
-  | 'Standings' // League & Table
+  | 'Standings'
   | 'League'
-  | 'Schedule' // Fixtures
-  | 'Profile' // Legacy & Trophies & Records
-  | 'Rewards' // Objectives & Reward Center
+  | 'Schedule'
+  | 'Profile'
+  | 'Rewards'
   | 'Challenges'
   | 'WhatIfSimulator'
-  | 'MatchLive'
-  | 'News' // Newsroom & ticker
-  | 'SeasonRecap' // End-of-season awards & recap
-  | 'OffSeason'; // Retain / release / pre-season prep
+  | 'MatchLive';
 
-export type ScreenView = 'MainMenu' | 'Dashboard' | 'Auction' | 'MultiplayerAuction' | 'MatchLive' | 'PressConference' | 'PostMatchPresentation';
+// === TAB MAPPING FOR BACKWARD COMPATIBILITY ===
+export function mapLegacyTabToPrimary(legacyTab: LegacyAppTab): AppTab {
+  const mapping: Record<LegacyAppTab, AppTab> = {
+    'Dashboard': 'Home',
+    'PlayingXI': 'Squad',
+    'Squad': 'Squad',
+    'AuctionLive': 'Auction',
+    'Scout': 'Auction',
+    'YouthAcademy': 'Squad',
+    'TradeCenter': 'Auction',
+    'Market': 'Auction',
+    'Standings': 'Club',
+    'League': 'Club',
+    'Schedule': 'Play',
+    'Profile': 'Club',
+    'Rewards': 'Club',
+    'Challenges': 'Play',
+    'WhatIfSimulator': 'Play',
+    'MatchLive': 'Play'
+  };
+  return mapping[legacyTab] || 'Home';
+}
+
+export type ScreenView = 'MainMenu' | 'Dashboard' | 'Auction' | 'MatchLive' | 'PressConference' | 'PostMatchPresentation';
 export type GameScreen = ScreenView;
 
 export interface NewsArticle {
@@ -124,25 +134,7 @@ export interface SeasonHistoryRecord {
   userRecord: string;
 }
 
-export type FCThemeMode = 
-  | 'fc_neon_dark' 
-  | 'royal_gold' 
-  | 'emerald_stadium' 
-  | 'cyberpunk_crimson' 
-  | 'champions_cyan' 
-  | 'stealth_carbon';
-
-export interface GoogleAccountProfile {
-  id: string;
-  email: string;
-  name: string;
-  avatarUrl: string;
-  isLoggedIn: boolean;
-  lastCloudSyncedAt: number;
-}
-
 export interface GameSave {
-  saveVersion?: number;
   id?: string;
   saveId?: string;
   saveName: string;
@@ -153,8 +145,6 @@ export interface GameSave {
   managerName: string;
   userTeamId: string;
   userRole?: string;
-  themeMode?: FCThemeMode;
-  googleProfile?: GoogleAccountProfile | null;
   teams: Record<string, Team>;
   allPlayers: Record<string, Player>;
   standings: StandingsRow[];
@@ -168,8 +158,6 @@ export interface GameSave {
   progression?: FranchiseProgressionState;
   retiredPlayers?: Player[];
   seasonHistory?: SeasonHistoryRecord[];
-  seasonSummary?: SeasonSummary | null;
-  rivalTeamIds?: string[];
   auctionState?: AuctionState | null;
   currentMatchState?: MatchState | null;
   pressConferenceState?: PressConferenceState | null;

@@ -1,25 +1,20 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useGame } from '../context/GameContext';
-import { FCPlayerCard } from './fc26/FCPlayerCard';
-import { FCPackOpeningModal } from './fc26/FCPackOpeningModal';
-import { getPlayerPlayStylePlus } from '../engine/fc26Engine';
-import { computeTeamChemistry } from '../engine/chemistryEngine';
-import {
-  Trophy, Zap, Shield, Sparkles, ShoppingBag, Users, MapPin,
-  Dumbbell, Gift, ArrowRight, Radio, Gavel, TrendingUp, HeartPulse, Layers, Newspaper, ChevronRight
+import { 
+  Zap, Trophy, Flame, Users, Calendar, MapPin, 
+  Target, Gift, Award, Newspaper, ArrowRight, Crown, Shield
 } from 'lucide-react';
 import { getFranchiseLevelInfo, INITIAL_OBJECTIVES } from '../engine/progressionEngine';
+import { TOKENS } from '../utils/themeTokens';
 
 export const DashboardView: React.FC = () => {
-  const {
-    gameState,
-    setActiveTab,
-    setCurrentScreen,
-    prepareMatch,
-    setSelectedPlayerForModal
+  const { 
+    gameState, 
+    setActiveTab, 
+    setCurrentScreen, 
+    prepareMatch, 
+    setSelectedPlayerForModal 
   } = useGame();
-
-  const [walkoutPlayer, setWalkoutPlayer] = useState<any | null>(null);
 
   if (!gameState) return null;
 
@@ -28,22 +23,27 @@ export const DashboardView: React.FC = () => {
   const nextFixture = schedule[gameState.currentFixtureIndex];
   const fixtureTeamA = nextFixture ? gameState.teams[nextFixture.teamAId] : null;
   const fixtureTeamB = nextFixture ? gameState.teams[nextFixture.teamBId] : null;
+  const isUserInNextMatch = nextFixture 
+    ? (nextFixture.teamAId === gameState.userTeamId || nextFixture.teamBId === gameState.userTeamId) 
+    : false;
+  
+  const fixtureOpponentTeam = isUserInNextMatch 
+    ? (fixtureTeamA?.id === gameState.userTeamId ? fixtureTeamB : fixtureTeamA)
+    : (fixtureTeamB || fixtureTeamA);
 
   const rosterIds = userTeam?.rosterPlayerIds || [];
   const userPlayers = rosterIds.map(id => gameState.allPlayers[id]).filter(Boolean);
-
-  // Squad OVR & Chemistry (real engine values)
-  const xiIds = userTeam?.playingXI?.playingXIIds?.length ? userTeam.playingXI.playingXIIds : rosterIds.slice(0, 11);
-  const xiPlayers = xiIds.map(id => gameState.allPlayers[id]).filter(Boolean);
-  const squadOVR = xiPlayers.length > 0
-    ? Math.round(xiPlayers.reduce((sum, p) => sum + p.overall, 0) / xiPlayers.length)
+  
+  // Calculate squad OVR
+  const squadOvr = userPlayers.length > 0 
+    ? Math.round(userPlayers.reduce((sum, p) => sum + p.overall, 0) / userPlayers.length)
     : 0;
-  const chemistry = computeTeamChemistry(xiPlayers);
-  const injured = userPlayers.filter(p => p.injuryStatus && p.injuryStatus !== 'Fit').length;
 
   const standingsList = gameState.standings || [];
   const userStanding = standingsList.find(s => s.teamId === gameState.userTeamId);
   const userRank = standingsList.findIndex(s => s.teamId === gameState.userTeamId) + 1;
+
+  // Ordinal Rank Formatting
   const rankOrdinal = (n: number) => {
     const s = ['th', 'st', 'nd', 'rd'];
     const v = n % 100;
@@ -56,332 +56,317 @@ export const DashboardView: React.FC = () => {
   const objectives = progression?.objectives || INITIAL_OBJECTIVES;
   const completedObjs = objectives.filter(o => o.isCompleted).length;
   const totalObjs = objectives.length || 5;
+  const unclaimedRewards = progression?.unclaimedRewardsCount || 0;
 
-  const captainPlayer = userTeam?.captainId ? gameState.allPlayers[userTeam.captainId] : userPlayers[0];
-  const captainPlayStyle = captainPlayer ? getPlayerPlayStylePlus(captainPlayer) : null;
-  const youthProspects = userPlayers.filter(p => p.isYouthProspect || p.age <= 23);
+  // News snippet
   const latestNews = gameState.newsFeed && gameState.newsFeed.length > 0 ? gameState.newsFeed[0] : null;
 
-  const isSeasonEnd = !!gameState.seasonSummary || gameState.seasonStage === 'SeasonEnd';
-  const rosterEmpty = userPlayers.length === 0;
-  const nextThree = schedule.slice(gameState.currentFixtureIndex, gameState.currentFixtureIndex + 3).filter(f => !f.isPlayed);
-  const nextUserFixture = schedule.find(f => !f.isPlayed && (f.teamAId === gameState.userTeamId || f.teamBId === gameState.userTeamId));
-
   return (
-    <div className="space-y-6 pb-14 animate-fadeIn font-sans select-none">
-      {/* ============ FC 26 HERO: NEXT MATCHDAY ============ */}
-      <section className="relative overflow-hidden rounded-[28px] border border-[#101B2E] fc-glow-volt">
-        {/* Hero backdrop: brand gradient + stadium light */}
-        <div className="absolute inset-0 bg-[linear-gradient(115deg,#0B1220_0%,#0E1B2E_45%,#0A101C_100%)]" />
-        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-[#00FF87]/10 blur-[100px]" />
-        <div className="absolute -bottom-32 -left-20 w-96 h-96 rounded-full bg-[#00E5FF]/10 blur-[100px]" />
-        <div className="absolute inset-0 opacity-[0.35]" style={{
-          backgroundImage: 'radial-gradient(circle at 50% 120%, rgba(0,255,135,.18), transparent 55%)'
-        }} />
+    <div className="space-y-6 pb-20 animate-fadeIn max-w-7xl mx-auto font-sans">
+      
+      {/* === CINEMATIC HERO SECTION === */}
+      <div className="relative bg-gradient-to-br from-[#0a0c12] via-[#070b14] to-[#030712] rounded-3xl border border-[#1e293b] overflow-hidden shadow-2xl">
+        {/* Ambient Team Color Glow */}
+        <div 
+          className="absolute inset-0 opacity-15"
+          style={{
+            background: `radial-gradient(circle at 30% 50%, ${userTeam?.primaryColor || '#D4AF37'} 0%, transparent 50%), 
+                        radial-gradient(circle at 70% 50%, ${userTeam?.secondaryColor || '#1e3a8a'} 0%, transparent 50%)`
+          }}
+        />
 
-        <div className="relative p-5 sm:p-8">
-          {/* Top row */}
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-            <div className="flex items-center gap-2.5">
-              <span className="px-3 py-1 rounded-full bg-[#00FF87]/15 border border-[#00FF87]/40 text-[#00FF87] text-[9px] font-black uppercase tracking-[0.2em] flex items-center gap-1.5">
-                <Zap className="w-3 h-3 fill-current" /> MATCHDAY {nextFixture ? nextFixture.matchNumber : 1}
-              </span>
-              <span className="text-[10px] font-mono text-slate-400">
-                SEASON {gameState.currentSeason} • {nextFixture?.stage || 'League'}
-              </span>
+        <div className="relative z-10 p-6 sm:p-8 lg:p-12">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
+            
+            {/* LEFT: MASSIVE TEAM VISUAL */}
+            <div className="flex-1 text-center lg:text-left">
+              <div className="flex items-center justify-center lg:justify-start gap-4 mb-4">
+                <div 
+                  className="w-20 h-20 sm:w-24 sm:h-24 lg:w-32 lg:h-32 rounded-2xl flex items-center justify-center font-black text-3xl sm:text-4xl lg:text-5xl shadow-2xl border-2"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${userTeam?.primaryColor || '#D4AF37'}, ${userTeam?.secondaryColor || '#1e3a8a'})`,
+                    color: '#ffffff',
+                    borderColor: 'rgba(255,255,255,0.2)'
+                  }}
+                >
+                  {userTeam?.shortName}
+                </div>
+                <div>
+                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white uppercase italic tracking-tight">
+                    {userTeam?.name}
+                  </h1>
+                  <div className="flex items-center gap-2 mt-2 justify-center lg:justify-start">
+                    <span className="px-3 py-1 rounded-full bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/40 text-xs font-black uppercase tracking-wider">
+                      SEASON {gameState.currentSeason}
+                    </span>
+                    <span className="text-xs text-[#64748b] font-medium">
+                      {userTeam?.city}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* KEY STATS ROW */}
+              <div className="flex items-center justify-center lg:justify-start gap-6 sm:gap-8 mt-6">
+                <div className="text-center">
+                  <p className="text-[10px] uppercase font-bold tracking-widest text-[#64748b]">OVR</p>
+                  <p className="text-2xl sm:text-3xl font-black font-mono text-[#D4AF37]">{squadOvr}</p>
+                </div>
+                <div className="h-8 w-px bg-[#1e293b]" />
+                <div className="text-center">
+                  <p className="text-[10px] uppercase font-bold tracking-widest text-[#64748b]">PURSE</p>
+                  <p className="text-xl sm:text-2xl font-black font-mono text-[#D4AF37]">₹{userTeam?.purseCr.toFixed(1)} Cr</p>
+                </div>
+                <div className="h-8 w-px bg-[#1e293b]" />
+                <div className="text-center">
+                  <p className="text-[10px] uppercase font-bold tracking-widest text-[#64748b]">STANDING</p>
+                  <p className="text-xl sm:text-2xl font-black font-mono text-blue-400">{userStanding ? rankOrdinal(userRank) : '—'}</p>
+                </div>
+              </div>
             </div>
-            <span className="text-[10px] font-mono text-slate-500 flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-[#D4AF37]" /> {nextFixture?.venue || 'Stadium'}
-            </span>
+
+            {/* RIGHT: PRIMARY CTA */}
+            <div className="flex-shrink-0">
+              {nextFixture && fixtureTeamA && fixtureTeamB ? (
+                <div className="text-center">
+                  <div className="mb-4">
+                    <p className="text-[10px] uppercase font-bold tracking-widest text-[#64748b] mb-2">NEXT MATCH</p>
+                    <div className="flex items-center justify-center gap-3">
+                      <div 
+                        className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg shadow-lg"
+                        style={{ backgroundColor: fixtureTeamA.primaryColor, color: fixtureTeamA.secondaryColor }}
+                      >
+                        {fixtureTeamA.shortName}
+                      </div>
+                      <span className="text-lg font-black text-[#94a3b8]">VS</span>
+                      <div 
+                        className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg shadow-lg"
+                        style={{ backgroundColor: fixtureTeamB.primaryColor, color: fixtureTeamB.secondaryColor }}
+                      >
+                        {fixtureTeamB.shortName}
+                      </div>
+                    </div>
+                    <p className="text-xs text-[#94a3b8] mt-2 flex items-center justify-center gap-1">
+                      <MapPin className="w-3 h-3" /> {nextFixture.venue}
+                    </p>
+                  </div>
+
+                  <button
+                    id="btn-play-match-hero"
+                    onClick={() => prepareMatch(nextFixture.id)}
+                    className="w-full py-4 px-8 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-amber-400 to-amber-300 text-black font-black text-sm sm:text-base uppercase tracking-widest hover:scale-105 active:scale-95 transition-transform flex items-center justify-center gap-3 shadow-xl shadow-[#D4AF37]/30 cursor-pointer"
+                  >
+                    <Zap className="w-5 h-5 fill-black" />
+                    <span>{isUserInNextMatch ? 'PLAY NEXT MATCH' : 'SIMULATE MATCH'}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <Trophy className="w-16 h-16 text-[#D4AF37] mx-auto mb-4" />
+                  <h3 className="text-lg font-black text-white uppercase tracking-tight">Season Complete</h3>
+                  <p className="text-xs text-[#94a3b8] mt-2">Final standings available in Club section</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* === SECONDARY CONTENT GRID === */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        {/* SUPER OVER H2H */}
+        <div className="bg-gradient-to-br from-[#0c1220] to-[#090e1a] rounded-2xl p-5 border border-[#1e293b] shadow-lg hover:border-red-500/40 transition group cursor-pointer">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Flame className="w-5 h-5 text-red-400" />
+              <span className="text-[10px] uppercase font-black tracking-widest text-red-400">LIVE 1v1</span>
+            </div>
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          </div>
+          <h3 className="text-sm font-black text-white uppercase tracking-tight mb-1">Super Over H2H</h3>
+          <p className="text-xs text-[#94a3b8] mb-4">Quick 1-over showdowns</p>
+          <div className="flex items-center gap-2 text-[#D4AF37] text-xs font-black uppercase tracking-wider">
+            <span>Play Now</span>
+            <ArrowRight className="w-3 h-3" />
+          </div>
+        </div>
+
+        {/* DAILY OBJECTIVE */}
+        <div className="bg-gradient-to-br from-[#0c1220] to-[#090e1a] rounded-2xl p-5 border border-[#1e293b] shadow-lg hover:border-blue-500/40 transition group cursor-pointer" onClick={() => setActiveTab('Club')}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-blue-400" />
+              <span className="text-[10px] uppercase font-black tracking-widest text-blue-400">DAILY</span>
+            </div>
+            <span className="text-xs font-mono font-bold text-blue-400">{completedObjs}/{totalObjs}</span>
+          </div>
+          <h3 className="text-sm font-black text-white uppercase tracking-tight mb-1">Daily Objective</h3>
+          <p className="text-xs text-[#94a3b8] mb-4">Win 1 match today</p>
+          <div className="w-full bg-[#05070a] rounded-full h-1.5 overflow-hidden border border-[#1e293b]">
+            <div 
+              className="bg-blue-500 h-1.5 rounded-full transition-all duration-500" 
+              style={{ width: `${Math.min(100, (completedObjs / Math.max(1, totalObjs)) * 100)}%` }} 
+            />
+          </div>
+        </div>
+
+        {/* LIVE EVENT */}
+        <div className="bg-gradient-to-br from-[#0c1220] to-[#090e1a] rounded-2xl p-5 border border-[#1e293b] shadow-lg hover:border-amber-500/40 transition group cursor-pointer">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Award className="w-5 h-5 text-amber-400" />
+              <span className="text-[10px] uppercase font-black tracking-widest text-amber-400">EVENT</span>
+            </div>
+            <span className="text-[10px] font-bold text-amber-400">2h 14m</span>
+          </div>
+          <h3 className="text-sm font-black text-white uppercase tracking-tight mb-1">Live Event</h3>
+          <p className="text-xs text-[#94a3b8] mb-4">Rivalry Night bonus</p>
+          <div className="flex items-center gap-2 text-[#D4AF37] text-xs font-black uppercase tracking-wider">
+            <span>Join Event</span>
+            <ArrowRight className="w-3 h-3" />
+          </div>
+        </div>
+
+        {/* SEASON PROGRESS */}
+        <div className="bg-gradient-to-br from-[#0c1220] to-[#090e1a] rounded-2xl p-5 border border-[#1e293b] shadow-lg hover:border-emerald-500/40 transition group cursor-pointer" onClick={() => setActiveTab('Club')}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-emerald-400" />
+              <span className="text-[10px] uppercase font-black tracking-widest text-emerald-400">SEASON</span>
+            </div>
+            <span className="text-[10px] font-bold text-emerald-400">{userStanding?.won || 0}W</span>
+          </div>
+          <h3 className="text-sm font-black text-white uppercase tracking-tight mb-1">Playoffs Race</h3>
+          <p className="text-xs text-[#94a3b8] mb-4">2 matches to clinch spot</p>
+          <div className="flex items-center gap-2 text-[#D4AF37] text-xs font-black uppercase tracking-wider">
+            <span>View Table</span>
+            <ArrowRight className="w-3 h-3" />
+          </div>
+        </div>
+      </div>
+
+      {/* === PROGRESSION & REWARDS === */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        
+        {/* FRANCHISE LEVEL */}
+        <div className="bg-[#0c1220] rounded-2xl p-5 border border-[#1e293b] shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Crown className="w-5 h-5 text-[#D4AF37]" />
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-tight">Franchise Level</h3>
+                <p className="text-[10px] text-[#64748b]">Dynasty Progression</p>
+              </div>
+            </div>
+            <span className="text-2xl font-black font-mono text-[#D4AF37]">LV {levelInfo.level}</span>
+          </div>
+          
+          <div className="mb-4">
+            <div className="flex justify-between text-xs mb-2">
+              <span className="text-[#64748b]">{progression?.xp || 450} XP</span>
+              <span className="text-[#64748b]">{levelInfo.nextLevelXp} XP</span>
+            </div>
+            <div className="w-full bg-[#05070a] rounded-full h-2 overflow-hidden border border-[#1e293b]">
+              <div 
+                className="bg-gradient-to-r from-[#D4AF37] to-amber-300 h-2 rounded-full transition-all duration-500" 
+                style={{ width: `${Math.min(100, levelInfo.progressPercent)}%` }} 
+              />
+            </div>
           </div>
 
-          {rosterEmpty ? (
-            /* First-run: no squad yet */
-            <div className="text-center py-8 sm:py-12">
-              <div className="mx-auto w-20 h-20 rounded-3xl bg-gradient-to-br from-[#D4AF37]/30 to-[#D4AF37]/5 border border-[#D4AF37]/40 flex items-center justify-center mb-5 shadow-2xl fc-pulse">
-                <Gavel className="w-10 h-10 text-[#D4AF37]" />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#94a3b8]">{unclaimedRewards} rewards available</span>
+            <button
+              onClick={() => setActiveTab('Club')}
+              className="px-4 py-2 rounded-xl bg-[#1e293b] hover:bg-[#334155] text-xs font-black uppercase tracking-wider text-[#D4AF37] border border-[#D4AF37]/30 transition cursor-pointer"
+            >
+              Claim Rewards
+            </button>
+          </div>
+        </div>
+
+        {/* RECENT NEWS */}
+        <div className="bg-[#0c1220] rounded-2xl p-5 border border-[#1e293b] shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Newspaper className="w-5 h-5 text-emerald-400" />
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-tight">Franchise Wire</h3>
+                <p className="text-[10px] text-[#64748b]">Latest Updates</p>
               </div>
-              <h2 className="gradient-text-gold text-2xl sm:text-4xl font-black uppercase italic tracking-tight">Your Dynasty Starts At The Auction</h2>
-              <p className="text-xs sm:text-sm text-slate-400 mt-3 max-w-lg mx-auto leading-relaxed">
-                No squad yet. Enter the Mega Auction Arena, outbid 9 rival franchises and assemble your first XI.
+            </div>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          </div>
+          
+          {latestNews ? (
+            <div>
+              <h4 className="text-xs font-bold text-white uppercase tracking-tight mb-2 line-clamp-1">
+                {latestNews.title}
+              </h4>
+              <p className="text-xs text-[#94a3b8] line-clamp-2 mb-4">
+                {latestNews.summary}
               </p>
               <button
-                onClick={() => { setCurrentScreen('Auction'); setActiveTab('AuctionLive'); window.history.pushState({}, '', '/auction'); }}
-                className="btn-gold mt-6 px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] cursor-pointer inline-flex items-center gap-2"
+                onClick={() => setActiveTab('Club')}
+                className="w-full py-2 rounded-xl bg-[#1e293b] hover:bg-emerald-600 hover:text-white text-xs font-black uppercase tracking-wider text-emerald-300 transition cursor-pointer flex items-center justify-center gap-2"
               >
-                <Gavel className="w-4 h-4" /> ENTER THE MEGA AUCTION
+                <span>Read More</span>
+                <ArrowRight className="w-3 h-3" />
               </button>
             </div>
-          ) : nextFixture && fixtureTeamA && fixtureTeamB ? (
-            <>
-              {/* Big matchup */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-10 py-2">
-                {[
-                  { t: fixtureTeamA, tag: fixtureTeamA.id === gameState.userTeamId ? 'YOUR CLUB' : 'HOME' },
-                  { t: fixtureTeamB, tag: fixtureTeamB.id === gameState.userTeamId ? 'YOUR CLUB' : 'AWAY' }
-                ].map(({ t, tag }) => (
-                  <button
-                    key={t.id}
-                    onClick={() => setActiveTab('PlayingXI')}
-                    className="group flex flex-col items-center cursor-pointer"
-                  >
-                    <div
-                      className="w-20 h-20 sm:w-28 sm:h-28 rounded-[22px] flex items-center justify-center font-black text-xl sm:text-3xl shadow-2xl border-2 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-2 relative overflow-hidden"
-                      style={{
-                        backgroundColor: t.primaryColor,
-                        color: t.secondaryColor,
-                        borderColor: t.id === gameState.userTeamId ? '#00FF87' : 'rgba(255,255,255,.15)'
-                      }}
-                    >
-                      <span className="absolute inset-0 bg-gradient-to-br from-white/25 via-transparent to-black/20 pointer-events-none" />
-                      {t.shortName}
-                    </div>
-                    <p className="text-xs sm:text-sm font-black text-white mt-2.5 group-hover:text-[#00FF87] transition">{t.name}</p>
-                    <span className={`text-[9px] font-black uppercase tracking-[0.2em] mt-0.5 ${t.id === gameState.userTeamId ? 'text-[#00FF87]' : 'text-slate-500'}`}>{tag}</span>
-                  </button>
-                ))}
-                <div className="hidden sm:flex flex-col items-center px-2">
-                  <span className="fc-display text-5xl text-white/90">VS</span>
-                  <span className="text-[9px] font-mono text-[#D4AF37] uppercase tracking-[0.3em] mt-1">T20 • 20/20</span>
-                </div>
-                <div className="sm:hidden text-[#D4AF37] font-black text-lg tracking-widest">VS</div>
-              </div>
-
-              {/* CTA row */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-7">
-                <button
-                  onClick={() => prepareMatch(nextFixture.id)}
-                  className="btn-volt w-full sm:w-auto px-10 py-3.5 rounded-2xl font-black text-sm uppercase tracking-[0.18em] cursor-pointer inline-flex items-center justify-center gap-2"
-                >
-                  <Zap className="w-4 h-4 fill-current" /> PLAY MATCHDAY
-                </button>
-                <button
-                  onClick={() => setActiveTab('PlayingXI')}
-                  className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/15 text-white font-black text-xs uppercase tracking-[0.18em] cursor-pointer inline-flex items-center justify-center gap-2 transition hover:border-[#00FF87]/40"
-                >
-                  <Layers className="w-4 h-4 text-[#00E5FF]" /> SET UP XI
-                </button>
-              </div>
-            </>
           ) : (
-            <div className="text-center py-10 text-slate-400 text-sm">Season fixture grid is being built…</div>
+            <div className="text-center py-4">
+              <p className="text-xs text-[#64748b]">No recent news</p>
+            </div>
           )}
         </div>
-      </section>
+      </div>
 
-      {/* ============ CLUB IDENTITY STRIP ============ */}
-      <section className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2.5 fc-pop-1">
-        {[
-          { label: 'SQUAD OVR', value: squadOVR || '—', color: 'text-[#00FF87]' },
-          { label: 'CHEMISTRY', value: xiPlayers.length ? `${chemistry.score}` : '—', color: 'text-[#00E5FF]' },
-          { label: 'LEAGUE RANK', value: userRank > 0 ? rankOrdinal(userRank) : '—', color: 'text-[#D4AF37]' },
-          { label: 'RECORD', value: userStanding ? `${userStanding.won}W-${userStanding.lost}L` : '0-0', color: 'text-white' },
-          { label: 'INJURIES', value: injured, color: injured > 0 ? 'text-red-400' : 'text-white' },
-          { label: 'PURSE', value: `₹${(userTeam?.purseCr || 0).toFixed(0)}`, color: 'text-[#D4AF37]' },
-          { label: 'MANAGER LV', value: levelInfo.level, color: 'text-purple-300' }
-        ].map(stat => (
-          <div key={stat.label} className="glass-panel rounded-2xl px-3 py-3 text-center">
-            <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">{stat.label}</p>
-            <p className={`text-lg font-black font-mono ${stat.color} mt-0.5`}>{stat.value}</p>
-          </div>
-        ))}
-      </section>
-
-      {/* ============ FC 26 ACTION TILES ============ */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 fc-pop-2">
-        {[
-          {
-            key: 'auction',
-            icon: <Gavel className="w-4 h-4" />,
-            title: 'Live Auction',
-            sub: `₹${(userTeam?.purseCr || 0).toFixed(1)} Cr remaining`,
-            desc: 'Outbid 9 distinct AI franchises and build your championship roster.',
-            color: 'text-[#D4AF37]', bg: 'from-[#D4AF37]/15 to-transparent',
-            action: () => { setCurrentScreen('Auction'); setActiveTab('AuctionLive'); window.history.pushState({}, '', '/auction'); }
-          },
-          {
-            key: 'squad',
-            icon: <Users className="w-4 h-4" />,
-            title: 'Squad Builder',
-            sub: `${userPlayers.length} players`,
-            desc: 'Chemistry room, matchday readiness, training & fitness pulse.',
-            color: 'text-[#00E5FF]', bg: 'from-[#00E5FF]/15 to-transparent',
-            action: () => setActiveTab('PlayingXI')
-          },
-          {
-            key: 'cards',
-            icon: <Layers className="w-4 h-4" />,
-            title: 'Card Binder',
-            sub: `${youthProspects.length} youth`,
-            desc: 'Holographic FC-style cards, evolutions and skill upgrades.',
-            color: 'text-[#00FF87]', bg: 'from-[#00FF87]/15 to-transparent',
-            action: () => setActiveTab('Squad')
-          },
-          {
-            key: 'league',
-            icon: <Trophy className="w-4 h-4" />,
-            title: 'League Table',
-            sub: userStanding ? `${userStanding.points} pts` : '—',
-            desc: 'Points, NRR and the road through Qualifiers to the Final.',
-            color: 'text-cyan-300', bg: 'from-cyan-400/15 to-transparent',
-            action: () => setActiveTab('Standings')
-          }
-        ].map(tile => (
-          <button
-            key={tile.key}
-            onClick={tile.action}
-            className={`glass-panel fc-lift rounded-2xl p-4 text-left bg-gradient-to-br ${tile.bg} cursor-pointer group`}
-          >
-            <div className="flex items-center justify-between">
-              <span className={`w-9 h-9 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center ${tile.color}`}>{tile.icon}</span>
-              <ArrowRight className="w-4 h-4 text-slate-600 group-hover:text-white group-hover:translate-x-1 transition-all" />
-            </div>
-            <h3 className="text-sm font-black text-white uppercase tracking-wide mt-3">{tile.title}</h3>
-            <p className={`text-[10px] font-mono font-bold mt-0.5 ${tile.color}`}>{tile.sub}</p>
-            <p className="text-[10px] text-slate-500 leading-relaxed mt-1.5">{tile.desc}</p>
-          </button>
-        ))}
-      </section>
-
-      {/* ============ STAR + NEXT FIXTURES ============ */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-4 fc-pop-3">
-        {/* Star player */}
-        <div className="lg:col-span-4 glass-panel rounded-3xl p-5 flex flex-col items-center text-center">
-          <div className="w-full flex items-center justify-between mb-2">
-            <span className="text-[10px] uppercase tracking-[0.25em] font-black text-amber-400 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" /> STAR PLAYER
-            </span>
-            {captainPlayer && (
-              <button onClick={() => setWalkoutPlayer(captainPlayer)} className="text-[10px] font-mono text-amber-400 hover:text-amber-200 cursor-pointer">
-                WALKOUT ✨
-              </button>
-            )}
-          </div>
-          {captainPlayer ? (
-            <div className="cursor-pointer transition-transform duration-200 hover:scale-105" onClick={() => setSelectedPlayerForModal(captainPlayer)}>
-              <FCPlayerCard player={captainPlayer} size="md" />
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-center text-xs text-slate-500 font-mono">No captain assigned yet</div>
-          )}
-          <div className="w-full mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
-            <div className="text-left">
-              <span className="text-[9px] text-slate-500 uppercase font-bold">Signature PlayStyle</span>
-              <p className="text-xs font-black text-amber-300">{captainPlayStyle ? captainPlayStyle.name : '—'}</p>
-            </div>
-            <button onClick={() => setActiveTab('YouthAcademy')} className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[#00FF87] text-[10px] font-bold cursor-pointer flex items-center gap-1">
-              <Dumbbell className="w-3 h-3" /> EVO
-            </button>
-          </div>
-        </div>
-
-        {/* Next fixtures */}
-        <div className="lg:col-span-8 glass-panel rounded-3xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] uppercase tracking-[0.25em] font-black text-white flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5 text-[#00FF87]" /> ROAD AHEAD
-            </span>
-            <button onClick={() => setActiveTab('Schedule')} className="text-[10px] font-bold text-slate-400 hover:text-white cursor-pointer flex items-center gap-1">
-              FULL FIXTURES <ChevronRight className="w-3 h-3" />
-            </button>
-          </div>
-          {nextUserFixture || nextThree.length > 0 ? (
-            <div className="space-y-2">
-              {(nextThree.length ? nextThree : [nextUserFixture].filter(Boolean)).slice(0, 4).map(f => {
-                const a = gameState.teams[f.teamAId];
-                const b = gameState.teams[f.teamBId];
-                const isUser = f.teamAId === gameState.userTeamId || f.teamBId === gameState.userTeamId;
-                return (
-                  <div key={f.id} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border ${isUser ? 'bg-[#00FF87]/8 border-[#00FF87]/25' : 'bg-black/20 border-white/5'}`}>
-                    <span className="text-[9px] font-mono text-slate-500 w-8">M{f.matchNumber}</span>
-                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                      <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[8px] font-black" style={{ backgroundColor: a?.primaryColor, color: a?.secondaryColor }}>{a?.shortName}</span>
-                      <span className="text-[10px] text-slate-600 font-black">v</span>
-                      <span className="w-6 h-6 rounded-lg flex items-center justify-center text-[8px] font-black" style={{ backgroundColor: b?.primaryColor, color: b?.secondaryColor }}>{b?.shortName}</span>
-                      <span className="text-[10px] font-bold text-white truncate hidden sm:inline ml-1">{a?.shortName} vs {b?.shortName}</span>
-                    </div>
-                    <span className="text-[9px] font-mono text-slate-500 hidden md:inline">{f.stage}</span>
-                    {isUser && <span className="text-[8px] font-black uppercase text-[#00FF87] px-1.5 py-0.5 rounded bg-[#00FF87]/15">YOU</span>}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-xs text-slate-500">Season complete — check the recap!</p>
-          )}
-          <button
-            onClick={() => setActiveTab('Play')}
-            className="w-full mt-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-black uppercase tracking-widest text-slate-300 cursor-pointer transition"
-          >
-            Open Match Center →
-          </button>
-        </div>
-      </section>
-
-      {/* ============ SEASON END / NEWS ============ */}
-      {isSeasonEnd && (
-        <section className="glass-panel fc-glow-gold rounded-3xl p-5 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Trophy className="w-9 h-9 text-[#D4AF37]" />
-            <div>
-              <h3 className="text-sm font-black uppercase tracking-widest text-[#D4AF37]">Season {gameState.currentSeason} Complete</h3>
-              <p className="text-xs text-slate-300">Awards are in — recap the season or start the off-season retentions.</p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setActiveTab('SeasonRecap')} className="btn-gold px-4 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest cursor-pointer">Season Recap</button>
-            <button onClick={() => setActiveTab('OffSeason')} className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-white text-[10px] font-black uppercase tracking-widest cursor-pointer transition">Off-Season</button>
-          </div>
-        </section>
-      )}
-
-      {/* Objectives strip */}
-      <section className="glass-panel rounded-3xl p-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-300 shrink-0">
-            <Gift className="w-4 h-4" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-widest text-white">Objectives & Rewards</p>
-            <p className="text-[10px] text-slate-500 truncate">{completedObjs}/{totalObjs} complete • {levelInfo.title}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="fc-bar w-28 sm:w-40 h-2 rounded-full">
-            <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-[#00E5FF]" style={{ width: `${(completedObjs / (totalObjs || 1)) * 100}%` }} />
-          </div>
-          <button onClick={() => setActiveTab('Rewards')} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-black uppercase tracking-widest text-slate-300 cursor-pointer transition">
-            Claim
-          </button>
-        </div>
-      </section>
-
-      {/* News wire */}
-      {(latestNews || gameState.newsFeed?.length > 0) && (
+      {/* === QUICK ACCESS GRID === */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <button
-          onClick={() => setActiveTab('News')}
-          className="w-full glass-panel rounded-2xl p-3 flex items-center justify-between gap-3 cursor-pointer hover:border-[#00E5FF]/40 transition group"
+          onClick={() => setActiveTab('Squad')}
+          className="bg-[#0c1220] hover:bg-[#131d35] rounded-xl p-4 border border-[#1e293b] hover:border-[#D4AF37]/40 transition text-center group"
         >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="px-2 py-1 rounded-lg bg-red-500/15 border border-red-500/30 text-red-400 text-[9px] font-black uppercase tracking-widest shrink-0 flex items-center gap-1">
-              <Radio className="w-3 h-3" /> NEWS
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-white truncate group-hover:text-[#00E5FF] transition">{latestNews?.title}</p>
-              <p className="text-[10px] text-slate-500 truncate">{latestNews?.summary}</p>
-            </div>
-          </div>
-          <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-white group-hover:translate-x-1 transition-all shrink-0" />
+          <Users className="w-6 h-6 text-[#94a3b8] group-hover:text-[#D4AF37] mx-auto mb-2" />
+          <span className="text-xs font-black uppercase tracking-wider text-white">Squad</span>
         </button>
-      )}
+        
+        <button
+          onClick={() => setActiveTab('Auction')}
+          className="bg-[#0c1220] hover:bg-[#131d35] rounded-xl p-4 border border-[#1e293b] hover:border-[#D4AF37]/40 transition text-center group"
+        >
+          <Award className="w-6 h-6 text-[#94a3b8] group-hover:text-[#D4AF37] mx-auto mb-2" />
+          <span className="text-xs font-black uppercase tracking-wider text-white">Auction</span>
+        </button>
+        
+        <button
+          onClick={() => setActiveTab('Club')}
+          className="bg-[#0c1220] hover:bg-[#131d35] rounded-xl p-4 border border-[#1e293b] hover:border-[#D4AF37]/40 transition text-center group"
+        >
+          <Shield className="w-6 h-6 text-[#94a3b8] group-hover:text-[#D4AF37] mx-auto mb-2" />
+          <span className="text-xs font-black uppercase tracking-wider text-white">Club</span>
+        </button>
+        
+        <button
+          onClick={() => setActiveTab('Play')}
+          className="bg-[#0c1220] hover:bg-[#131d35] rounded-xl p-4 border border-[#1e293b] hover:border-[#D4AF37]/40 transition text-center group"
+        >
+          <Calendar className="w-6 h-6 text-[#94a3b8] group-hover:text-[#D4AF37] mx-auto mb-2" />
+          <span className="text-xs font-black uppercase tracking-wider text-white">Schedule</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
 
-      {/* WALKOUT MODAL */}
-      {walkoutPlayer && (
-        <FCPackOpeningModal
-          player={walkoutPlayer}
-          onClose={() => setWalkoutPlayer(null)}
-        />
-      )}
+      </div>
+
     </div>
   );
 };

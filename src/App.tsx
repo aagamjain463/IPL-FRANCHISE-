@@ -6,7 +6,6 @@ import { AuctionLayout } from './layouts/AuctionLayout';
 import { MatchLayout } from './layouts/MatchLayout';
 import { DashboardView } from './components/DashboardView';
 import { AuctionView } from './components/AuctionView';
-import { MultiplayerAuctionHome } from './components/multiplayer/MultiplayerAuctionHome';
 import { PlayCenterView } from './components/PlayCenterView';
 import { PlayingXIView } from './components/PlayingXIView';
 import { SquadManagementView } from './components/SquadManagementView';
@@ -15,23 +14,16 @@ import { YouthAcademyView } from './components/YouthAcademyView';
 import { ScoutDepartmentView } from './components/ScoutDepartmentView';
 import { TradeCenterView } from './components/TradeCenterView';
 import { StandingsView } from './components/StandingsView';
-import { LeagueCenterView } from './components/LeagueCenterView';
 import { FixturesScheduleView } from './components/FixturesScheduleView';
 import { RewardsCenterView } from './components/RewardsCenterView';
 import { ChallengesView } from './components/ChallengesView';
 import { WhatIfView } from './components/WhatIfView';
 import { ProfileLegacyView } from './components/ProfileLegacyView';
-import { FCEvolutionView } from './components/fc26/FCEvolutionView';
-import { FCIQTacticsRadar } from './components/fc26/FCIQTacticsRadar';
 import { MatchLiveView } from './components/MatchLiveView';
 import { PressConferenceView } from './components/PressConferenceView';
 import { PostMatchPresentationView } from './components/PostMatchPresentationView';
 import { SEOLandingPage } from './components/SEOLandingPage';
 import { IPLAuctionSimulatorPage } from './components/IPLAuctionSimulatorPage';
-import { GlobalToast } from './components/GlobalToast';
-import { SeasonRecapView } from './components/SeasonRecapView';
-import { OffSeasonView } from './components/OffSeasonView';
-import { NewsRoomView } from './components/NewsRoomView';
 import { parseCurrentPath } from './utils/router';
 
 const GameContent: React.FC = () => {
@@ -61,10 +53,10 @@ const GameContent: React.FC = () => {
       const { screen, tab } = parseCurrentPath(window.location.pathname);
       if (screen === 'Auction' && currentScreen !== 'Auction') {
         setCurrentScreen('Auction');
-        setActiveTab('AuctionLive');
+        setActiveTab('Auction');
       } else if (screen === 'MatchLive' && currentScreen !== 'MatchLive') {
         setCurrentScreen('MatchLive');
-        setActiveTab('MatchLive');
+        setActiveTab('Play');
       }
     }
   }, [gameState]);
@@ -74,7 +66,7 @@ const GameContent: React.FC = () => {
   }
 
   // 1. DEDICATED FULL-SCREEN SEPARATE AUCTION GAME MODE
-  if (currentScreen === 'Auction' || activeTab === 'AuctionLive') {
+  if (currentScreen === 'Auction' || activeTab === 'Auction') {
     return (
       <AuctionLayout>
         <AuctionView />
@@ -82,17 +74,8 @@ const GameContent: React.FC = () => {
     );
   }
 
-  // 2. DEDICATED LIVE MULTIPLAYER AUCTION WAR ROOM
-  if (currentScreen === 'MultiplayerAuction' || activeTab === 'MultiplayerAuction') {
-    return (
-      <MainAppLayout>
-        <MultiplayerAuctionHome />
-      </MainAppLayout>
-    );
-  }
-
-  // 3. DEDICATED LIVE MATCH ARENA
-  if (currentScreen === 'MatchLive' || activeTab === 'MatchLive') {
+  // 2. DEDICATED LIVE MATCH ARENA
+  if (currentScreen === 'MatchLive' || activeTab === 'Play') {
     return (
       <MatchLayout>
         <MatchLiveView />
@@ -100,7 +83,7 @@ const GameContent: React.FC = () => {
     );
   }
 
-  // 4. PRESS CONFERENCE & POST-MATCH PRESENTATION MODES
+  // 3. PRESS CONFERENCE & POST-MATCH PRESENTATION MODES
   if (currentScreen === 'PressConference' || currentScreen === 'PostMatchPresentation') {
     return (
       <MainAppLayout>
@@ -109,31 +92,14 @@ const GameContent: React.FC = () => {
     );
   }
 
-  // 5. STANDARD FRANCHISE HOME SHELL (MainAppLayout with Navbar & Global Tabs)
+  // 4. STANDARD FRANCHISE HOME SHELL (MainAppLayout with Navbar & Global Tabs)
   return (
     <MainAppLayout>
-      {activeTab === 'Dashboard' && <DashboardView />}
+      {activeTab === 'Home' && <DashboardView />}
       {activeTab === 'Play' && <PlayCenterView />}
-      {activeTab === 'PlayingXI' && <PlayingXIView />}
       {activeTab === 'Squad' && <SquadManagementView />}
+      {activeTab === 'Auction' && <AuctionView />}
       {activeTab === 'Club' && <ClubFranchiseView />}
-      {activeTab === 'YouthAcademy' && <YouthAcademyView />}
-      {activeTab === 'Scout' && <ScoutDepartmentView />}
-      {activeTab === 'TradeCenter' && <TradeCenterView />}
-      {activeTab === 'Market' && <TradeCenterView />}
-      {activeTab === 'Standings' && <LeagueCenterView />}
-      {activeTab === 'League' && <LeagueCenterView />}
-      {activeTab === 'Schedule' && <FixturesScheduleView />}
-      {activeTab === 'Rewards' && <RewardsCenterView />}
-      {activeTab === 'Challenges' && <ChallengesView />}
-      {activeTab === 'WhatIfSimulator' && <WhatIfView />}
-      {activeTab === 'Profile' && <ProfileLegacyView />}
-      {activeTab === 'FCEvolutions' && <FCEvolutionView />}
-      {activeTab === 'TacticsRadar' && <FCIQTacticsRadar />}
-      {activeTab === 'MultiplayerAuction' && <MultiplayerAuctionHome />}
-      {activeTab === 'SeasonRecap' && <SeasonRecapView />}
-      {activeTab === 'OffSeason' && <OffSeasonView />}
-      {activeTab === 'News' && <NewsRoomView />}
     </MainAppLayout>
   );
 };
@@ -152,7 +118,6 @@ export default function App() {
   return (
     <GameProvider>
       <GameContent />
-      <GlobalToast />
     </GameProvider>
   );
 }
