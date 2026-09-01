@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { LeaderboardCategory, LeaderboardProfile, LeaderboardResultUpdate, LeaderboardSnapshot, LEADERBOARD_CONFIG } from '../src/types/leaderboard';
+import { LeaderboardCategory, LeaderboardProfile, LeaderboardResultUpdate, LeaderboardSnapshot, LEADERBOARD_CONFIG } from '../src/types/leaderboard.js';
 
 interface StoreShape {
   profiles: Record<string, LeaderboardProfile>;
