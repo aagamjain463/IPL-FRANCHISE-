@@ -77,7 +77,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
 
   useEffect(() => {
     loadOpenRooms();
-    const refreshInterval = window.setInterval(loadOpenRooms, 5000);
+    const refreshInterval = window.setInterval(loadOpenRooms, 2500);
     return () => window.clearInterval(refreshInterval);
   }, []);
 
@@ -86,8 +86,9 @@ export const MultiplayerAuctionHome: React.FC = () => {
   };
 
   const handleInstantJoin = async (code: string) => {
-    setInputRoomCode(code);
-    await joinRoom(code);
+    const cleanCode = code.trim().toUpperCase();
+    setInputRoomCode(cleanCode);
+    await joinRoom(cleanCode);
   };
 
   const filteredRooms = publicRooms.filter(r => {

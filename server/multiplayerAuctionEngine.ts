@@ -851,12 +851,17 @@ export const MultiplayerAuctionEngine = {
     return { success: true };
   },
 
-  // Public lobby browser: only real rooms that currently exist and have not started yet.
+  // Public lobby browser: real rooms that currently exist and are in lobby status
   listOpenRooms() {
     return Array.from(rooms.values())
       .filter(room => {
-        const liveConnections = sseClients.get(room.roomCode)?.size || 0;
-        return room.status === 'lobby' && liveConnections > 0 && room.participants.length > 0 && room.participants.length < room.config.maxPlayers;
+        return Boolean(
+          room &&
+          room.status === 'lobby' &&
+          Array.isArray(room.participants) &&
+          room.participants.length > 0 &&
+          room.participants.length < room.config.maxPlayers
+        );
       })
       .map(room => {
         const host = room.participants.find(p => p.id === room.hostId) || room.participants[0];
@@ -879,12 +884,13 @@ export const MultiplayerAuctionEngine = {
 
   // Get Room State
   getRoomState(roomCode: string): MultiplayerRoomState | null {
-    return rooms.get(roomCode.toUpperCase()) || null;
+    if (!roomCode) return null;
+    return rooms.get(roomCode.trim().toUpperCase()) || null;
   },
 
   // Subscribe SSE stream
   subscribeSSE(roomCode: string, res: Response): () => void {
-    const code = roomCode.toUpperCase();
+    const code = roomCode.trim().toUpperCase();
     if (!sseClients.has(code)) {
       sseClients.set(code, new Set());
     }

@@ -1,44 +1,9 @@
 import { 
   MultiplayerRoomState, 
   MultiplayerAuctionConfig, 
-  MultiplayerClientEvent,
-  MultiplayerParticipant,
-  MultiplayerSoldRecord
+  MultiplayerClientEvent
 } from '../types/multiplayerAuction';
 import { safeFetchJson } from '../utils/safeFetch';
-import { INITIAL_PLAYERS } from '../data/players';
-import { INITIAL_TEAMS } from '../data/teams';
-
-// Local storage key for offline/hybrid room fallback
-const LOCAL_ROOMS_KEY = 'ipl_multiplayer_local_rooms';
-
-function getLocalRooms(): Record<string, MultiplayerRoomState> {
-  try {
-    const raw = localStorage.getItem(LOCAL_ROOMS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveLocalRoom(room: MultiplayerRoomState) {
-  try {
-    const all = getLocalRooms();
-    all[room.roomCode] = room;
-    localStorage.setItem(LOCAL_ROOMS_KEY, JSON.stringify(all));
-  } catch {
-    // ignore
-  }
-}
-
-function generateLocalRoomCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
 
 // Audio feedback synthesizers
 class AuctionAudioEngine {
@@ -134,20 +99,19 @@ export function saveManagerName(name: string) {
   localStorage.setItem('ipl_multiplayer_manager_name', name.trim());
 }
 
-// Multiplayer API Client
+// Multiplayer Server-Authoritative API Client
 export const MultiplayerAuctionClient = {
   // Create Room
   async createRoom(hostName: string, config?: Partial<MultiplayerAuctionConfig>): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
     const { playerId } = getOrCreatePlayerIdentity();
     
-    // Attempt 1 with API
     let res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hostPlayerId: playerId, hostName, config })
     });
 
-    // Retry once if error occurred
+    // Retry once if there was a network glitch
     if (!res.ok) {
       await new Promise(r => setTimeout(r, 400));
       res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/create', {
@@ -158,79 +122,10 @@ export const MultiplayerAuctionClient = {
     }
 
     if (res.ok && res.data?.success && res.data.state) {
-      saveLocalRoom(res.data.state);
       return { success: true, state: res.data.state };
     }
 
-    // Seamless Local Room Fallback (Ensures user is NEVER blocked by HTTP 404 or proxy delay)
-    try {
-      const roomCode = generateLocalRoomCode();
-      const resolvedConfig: MultiplayerAuctionConfig = {
-        format: config?.format || 'Mega Auction',
-        startingPurseCr: config?.startingPurseCr || 100,
-        minPlayers: config?.minPlayers || 2,
-        maxPlayers: config?.maxPlayers || 8,
-        poolType: config?.poolType || 'Full Draft Pool',
-        minSquadSize: 15,
-        maxSquadSize: 25,
-        overseasLimit: 8,
-        timerSeconds: config?.timerSeconds || 15
-      };
-
-      const sorted = [...INITIAL_PLAYERS].sort((a, b) => b.overall - a.overall);
-      let pool = sorted.slice(0, 80);
-      if (resolvedConfig.poolType === 'Top 15 Accelerated') pool = sorted.slice(0, 15);
-      else if (resolvedConfig.poolType === 'Top 30 Marquee & Stars') pool = sorted.slice(0, 30);
-
-      const hostParticipant: MultiplayerParticipant = {
-        id: playerId,
-        name: hostName || 'Host Manager',
-        isHost: true,
-        franchiseId: null,
-        isReady: false,
-        purseCr: resolvedConfig.startingPurseCr,
-        squadPlayerIds: [],
-        squadPlayers: [],
-        isConnected: true,
-        disconnectedAt: null,
-        isAI: false,
-        lastBidCr: null
-      };
-
-      const fallbackState: MultiplayerRoomState = {
-        roomCode,
-        roomName: `${hostName || 'Tactician'}'s IPL War Room`,
-        hostId: playerId,
-        status: 'lobby',
-        config: resolvedConfig,
-        participants: [hostParticipant],
-        playerPool: pool,
-        currentLotIndex: 0,
-        totalLots: pool.length,
-        currentLotPlayer: pool[0] || null,
-        currentHighBidCr: pool[0]?.basePriceCr || 2.0,
-        currentHighBidderId: null,
-        currentHighBidderFranchiseId: null,
-        hammerSecondsRemaining: resolvedConfig.timerSeconds,
-        hammerCall: 'Opening Bid',
-        isPaused: false,
-        pausedByHostId: null,
-        bidHistory: [],
-        soldRecords: [],
-        unsoldPlayerIds: [],
-        rankings: [],
-        awards: [],
-        deadlineEpochMs: null,
-        serverSequence: 1,
-        leaderboardApplied: false,
-        version: 1
-      };
-
-      saveLocalRoom(fallbackState);
-      return { success: true, state: fallbackState };
-    } catch {
-      return { success: false, error: res.data?.error || res.error || 'Failed to create room' };
-    }
+    return { success: false, error: res.data?.error || res.error || 'Failed to create room on server' };
   },
 
   // Join Room
@@ -245,37 +140,7 @@ export const MultiplayerAuctionClient = {
     });
 
     if (res.ok && res.data?.success && res.data.state) {
-      saveLocalRoom(res.data.state);
       return { success: true, state: res.data.state };
-    }
-
-    // Local fallback check
-    const localRooms = getLocalRooms();
-    const localRoom = localRooms[code];
-    if (localRoom) {
-      const existing = localRoom.participants.find(p => p.id === playerId);
-      if (existing) {
-        existing.name = playerName || existing.name;
-        existing.isConnected = true;
-      } else if (localRoom.participants.length < localRoom.config.maxPlayers) {
-        localRoom.participants.push({
-          id: playerId,
-          name: playerName || `Manager ${localRoom.participants.length + 1}`,
-          isHost: false,
-          franchiseId: null,
-          isReady: false,
-          purseCr: localRoom.config.startingPurseCr,
-          squadPlayerIds: [],
-          squadPlayers: [],
-          isConnected: true,
-          disconnectedAt: null,
-          isAI: false,
-          lastBidCr: null
-        });
-      }
-      localRoom.version++;
-      saveLocalRoom(localRoom);
-      return { success: true, state: localRoom };
     }
 
     return { success: false, error: res.data?.error || res.error || `Room ${code} not found` };
@@ -292,25 +157,7 @@ export const MultiplayerAuctionClient = {
     });
 
     if (res.ok && res.data?.success && res.data.state) {
-      saveLocalRoom(res.data.state);
       return { success: true, state: res.data.state };
-    }
-
-    // Local fallback
-    const localRooms = getLocalRooms();
-    const localRoom = localRooms[code];
-    if (localRoom) {
-      const taken = localRoom.participants.find(p => p.franchiseId === franchiseId && p.id !== playerId);
-      if (taken) {
-        return { success: false, error: `${INITIAL_TEAMS[franchiseId]?.name || 'Franchise'} has already been selected.` };
-      }
-      const participant = localRoom.participants.find(p => p.id === playerId);
-      if (participant) {
-        participant.franchiseId = franchiseId;
-        localRoom.version++;
-        saveLocalRoom(localRoom);
-        return { success: true, state: localRoom };
-      }
     }
 
     return { success: false, error: res.data?.error || res.error || 'Failed to select franchise' };
@@ -327,23 +174,7 @@ export const MultiplayerAuctionClient = {
     });
 
     if (res.ok && res.data?.success && res.data.state) {
-      saveLocalRoom(res.data.state);
       return { success: true, state: res.data.state };
-    }
-
-    const localRooms = getLocalRooms();
-    const localRoom = localRooms[code];
-    if (localRoom) {
-      const participant = localRoom.participants.find(p => p.id === playerId);
-      if (participant) {
-        if (!participant.franchiseId) {
-          return { success: false, error: 'Please choose an IPL franchise first before readying up.' };
-        }
-        participant.isReady = !participant.isReady;
-        localRoom.version++;
-        saveLocalRoom(localRoom);
-        return { success: true, state: localRoom };
-      }
     }
 
     return { success: false, error: res.data?.error || res.error || 'Failed to update ready status' };
@@ -360,18 +191,7 @@ export const MultiplayerAuctionClient = {
     });
 
     if (res.ok && res.data?.success && res.data.state) {
-      saveLocalRoom(res.data.state);
       return { success: true, state: res.data.state };
-    }
-
-    const localRooms = getLocalRooms();
-    const localRoom = localRooms[code];
-    if (localRoom && localRoom.hostId === playerId) {
-      localRoom.config = { ...localRoom.config, ...config };
-      localRoom.participants.forEach(p => { p.purseCr = localRoom.config.startingPurseCr; });
-      localRoom.version++;
-      saveLocalRoom(localRoom);
-      return { success: true, state: localRoom };
     }
 
     return { success: false, error: res.data?.error || res.error || 'Failed to update room config' };
@@ -388,19 +208,7 @@ export const MultiplayerAuctionClient = {
     });
 
     if (res.ok && res.data?.success && res.data.state) {
-      saveLocalRoom(res.data.state);
       return { success: true, state: res.data.state };
-    }
-
-    const localRooms = getLocalRooms();
-    const localRoom = localRooms[code];
-    if (localRoom && localRoom.hostId === playerId) {
-      localRoom.status = 'in_progress';
-      localRoom.hammerSecondsRemaining = localRoom.config.timerSeconds;
-      localRoom.deadlineEpochMs = Date.now() + localRoom.config.timerSeconds * 1000;
-      localRoom.version++;
-      saveLocalRoom(localRoom);
-      return { success: true, state: localRoom };
     }
 
     return { success: false, error: res.data?.error || res.error || 'Failed to start auction' };
@@ -418,37 +226,7 @@ export const MultiplayerAuctionClient = {
 
     if (res.ok && res.data?.success && res.data.state) {
       auctionAudio.playBidPaddleSound();
-      saveLocalRoom(res.data.state);
       return { success: true, state: res.data.state };
-    }
-
-    const localRooms = getLocalRooms();
-    const localRoom = localRooms[code];
-    if (localRoom) {
-      const participant = localRoom.participants.find(p => p.id === playerId);
-      if (participant && participant.purseCr >= bidAmountCr) {
-        localRoom.currentHighBidCr = bidAmountCr;
-        localRoom.currentHighBidderId = playerId;
-        localRoom.currentHighBidderFranchiseId = participant.franchiseId;
-        localRoom.hammerSecondsRemaining = localRoom.config.timerSeconds;
-        localRoom.deadlineEpochMs = Date.now() + localRoom.config.timerSeconds * 1000;
-        const team = participant.franchiseId ? INITIAL_TEAMS[participant.franchiseId] : null;
-        localRoom.bidHistory.unshift({
-          id: `bid_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          participantId: playerId,
-          participantName: participant.name,
-          franchiseId: participant.franchiseId || 'csk',
-          franchiseShort: team?.shortName || 'IPL',
-          franchisePrimaryColor: team?.primaryColor || '#FDB913',
-          franchiseSecondaryColor: team?.secondaryColor || '#000000',
-          bidAmountCr: bidAmountCr,
-          timestamp: Date.now()
-        });
-        localRoom.version++;
-        saveLocalRoom(localRoom);
-        auctionAudio.playBidPaddleSound();
-        return { success: true, state: localRoom };
-      }
     }
 
     return { success: false, error: res.data?.error || res.error || 'Bid rejected' };
@@ -456,12 +234,14 @@ export const MultiplayerAuctionClient = {
 
   // Pause Auction (Host only)
   async pauseAuction(roomCode: string): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
+    const code = roomCode.trim().toUpperCase();
     const { playerId } = getOrCreatePlayerIdentity();
     const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/pause', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), hostPlayerId: playerId })
+      body: JSON.stringify({ roomCode: code, hostPlayerId: playerId })
     });
+
     if (!res.ok || !res.data?.success) {
       return { success: false, error: res.data?.error || res.error || 'Failed to pause auction' };
     }
@@ -470,12 +250,14 @@ export const MultiplayerAuctionClient = {
 
   // Resume Auction (Host only)
   async resumeAuction(roomCode: string): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
+    const code = roomCode.trim().toUpperCase();
     const { playerId } = getOrCreatePlayerIdentity();
     const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/resume', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), hostPlayerId: playerId })
+      body: JSON.stringify({ roomCode: code, hostPlayerId: playerId })
     });
+
     if (!res.ok || !res.data?.success) {
       return { success: false, error: res.data?.error || res.error || 'Failed to resume auction' };
     }
@@ -496,7 +278,7 @@ export const MultiplayerAuctionClient = {
     }
   },
 
-  // Public room browser: server returns only real lobby rooms that have not started.
+  // Public room browser: server returns all real lobby rooms that have not started.
   async getOpenRooms(): Promise<any[]> {
     const res = await safeFetchJson<{ success: boolean; rooms?: any[] }>('/api/multiplayer/rooms', { cache: 'no-store' });
     if (res.ok && res.data?.rooms && Array.isArray(res.data.rooms)) {
@@ -510,11 +292,9 @@ export const MultiplayerAuctionClient = {
     const code = roomCode.trim().toUpperCase();
     const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>(`/api/multiplayer/room/${code}`);
     if (res.ok && res.data?.state) {
-      saveLocalRoom(res.data.state);
       return res.data.state;
     }
-    const localRooms = getLocalRooms();
-    return localRooms[code] || null;
+    return null;
   },
 
   // Subscribe to SSE Events stream with automatic fallback polling
@@ -572,14 +352,14 @@ export const MultiplayerAuctionClient = {
 
     connectSSE();
 
-    // Secondary state sync fallback every 4 seconds to guarantee consistency
+    // Active state sync polling every 3 seconds to guarantee consistency across all devices
     fallbackInterval = setInterval(async () => {
       if (isCleanedUp) return;
       const state = await MultiplayerAuctionClient.getRoomState(code);
       if (state) {
         onEvent({ type: 'STATE_UPDATE', state });
       }
-    }, 4000);
+    }, 3000);
 
     return () => {
       isCleanedUp = true;
@@ -589,6 +369,7 @@ export const MultiplayerAuctionClient = {
       }
       if (fallbackInterval) {
         clearInterval(fallbackInterval);
+        fallbackInterval = null;
       }
     };
   }
