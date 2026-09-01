@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useMultiplayerAuction } from '../../hooks/useMultiplayerAuction';
 import { MultiplayerAuctionClient } from '../../services/multiplayerAuctionClient';
 import { MultiplayerLobbyView } from './MultiplayerLobbyView';
@@ -71,6 +71,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
   const [isRefreshingRooms, setIsRefreshingRooms] = useState(false);
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [supabaseActive, setSupabaseActive] = useState(isSupabaseConfigured());
+  const hasAttemptedInviteJoinRef = useRef(false);
 
   const loadOpenRooms = async () => {
     setIsRefreshingRooms(true);
@@ -89,6 +90,19 @@ export const MultiplayerAuctionHome: React.FC = () => {
     const refreshInterval = window.setInterval(loadOpenRooms, 2500);
     return () => window.clearInterval(refreshInterval);
   }, []);
+
+  // Invite links look like /multiplayer-auction?room=ABC123 and auto-open the lobby.
+  useEffect(() => {
+    if (hasAttemptedInviteJoinRef.current || roomState) return;
+    const params = new URLSearchParams(window.location.search);
+    const inviteCode = (params.get('room') || params.get('join') || params.get('code') || '').trim().toUpperCase();
+    if (!inviteCode) return;
+    hasAttemptedInviteJoinRef.current = true;
+    setInputRoomCode(inviteCode.slice(0, 6));
+    fetchServerSupabaseConfig()
+      .catch(() => {})
+      .finally(() => joinRoom(inviteCode.slice(0, 6)));
+  }, [joinRoom, roomState]);
 
   const handleRefreshRooms = () => {
     loadOpenRooms();

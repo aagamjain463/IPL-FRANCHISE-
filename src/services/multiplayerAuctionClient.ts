@@ -107,6 +107,22 @@ export function saveManagerName(name: string) {
   localStorage.setItem('ipl_multiplayer_manager_name', name.trim());
 }
 
+async function withTimeout<T>(promise: Promise<T>, fallback: T, ms = 3500): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallback), ms);
+      })
+    ]);
+  } catch {
+    return fallback;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 // Helper to broadcast state changes across all available transports (Supabase, Cloud Relay, Express, Local)
 async function syncRoomStateAcrossTransports(state: MultiplayerRoomState, options?: { skipSupabase?: boolean }) {
   if (!state?.roomCode) return;
@@ -115,10 +131,17 @@ async function syncRoomStateAcrossTransports(state: MultiplayerRoomState, option
   // 1. Local Engine
   localMultiplayerEngine.setRoom(state);
 
-  // 2. Global Cloud Relay
+  // 2. Same-origin backend relay (keeps Express/serverless instances hydrated from browser-side Supabase joins)
+  safeFetchJson('/api/multiplayer/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: { ...state, roomCode: code } })
+  }).catch(() => {});
+
+  // 3. Global Cloud Relay
   CloudRelayService.publishRoomState(state).catch(() => {});
 
-  // 3. Supabase (if configured)
+  // 4. Supabase (if configured)
   if (!options?.skipSupabase && isSupabaseConfigured()) {
     try {
       await SupabaseAuctionService.saveRoom(state);
@@ -141,9 +164,12 @@ export const MultiplayerAuctionClient = {
     const localState = localMultiplayerEngine.createRoom(playerId, cleanHostName, config);
     const code = localState.roomCode.trim().toUpperCase();
 
+    let backendSynced = false;
+    let supabaseSynced = !isSupabaseConfigured();
+
     // 1. Sync to Express Backend API with matching roomCode & state
     try {
-      await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>('/api/multiplayer/create', {
+      const apiResult = await withTimeout(safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>('/api/multiplayer/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -153,7 +179,8 @@ export const MultiplayerAuctionClient = {
           roomCode: code,
           state: localState 
         })
-      });
+      }), { ok: false, status: 0 } as any);
+      backendSynced = Boolean(apiResult.ok && apiResult.data?.success);
     } catch {
       // ignore
     }
@@ -161,15 +188,25 @@ export const MultiplayerAuctionClient = {
     // 2. Sync to Supabase (if configured)
     if (isSupabaseConfigured()) {
       try {
-        await SupabaseAuctionService.saveRoom(localState);
-        await SupabaseAuctionService.broadcastState(localState);
+        supabaseSynced = await withTimeout(SupabaseAuctionService.saveRoom(localState), false);
+        if (supabaseSynced) {
+          await SupabaseAuctionService.broadcastState(localState);
+        }
       } catch (err: any) {
+        supabaseSynced = false;
         console.warn('[MultiplayerClient] Supabase create error:', err);
       }
     }
 
     // 3. Sync to Cloud Relay immediately
     CloudRelayService.publishRoomState(localState).catch(() => {});
+
+    if (!backendSynced && !supabaseSynced && isSupabaseConfigured()) {
+      return {
+        success: false,
+        error: 'Room was created locally, but it could not be published to Supabase or the server. Please re-run the Supabase SQL schema, verify public read/write policies on ipl_auction_rooms, then try again.'
+      };
+    }
 
     return { success: true, state: localState };
   },
@@ -187,7 +224,7 @@ export const MultiplayerAuctionClient = {
     // 1. Try Supabase Mode First (Global Cloud Database)
     if (isSupabaseConfigured()) {
       try {
-        const remoteRoom = await SupabaseAuctionService.getRoom(code);
+        const remoteRoom = await withTimeout(SupabaseAuctionService.getRoom(code), null);
         if (remoteRoom) {
           localMultiplayerEngine.setRoom(remoteRoom);
           const joinRes = localMultiplayerEngine.joinRoom(code, playerId, cleanPlayerName);
@@ -222,7 +259,7 @@ export const MultiplayerAuctionClient = {
 
     // 3. Try Cloud Relay Mode (Global peer discovery)
     try {
-      const cloudRoom = await CloudRelayService.fetchRoomState(code);
+      const cloudRoom = await withTimeout(CloudRelayService.fetchRoomState(code), null);
       if (cloudRoom) {
         localMultiplayerEngine.setRoom(cloudRoom);
         const joinRes = localMultiplayerEngine.joinRoom(code, playerId, cleanPlayerName);
@@ -438,76 +475,76 @@ export const MultiplayerAuctionClient = {
     await fetchServerSupabaseConfig().catch(() => {});
     const roomsMap = new Map<string, any>();
 
-    // 1. Fetch from Supabase (if configured) - Primary Cloud Source
-    if (isSupabaseConfigured()) {
-      try {
-        const supRooms = await SupabaseAuctionService.listRooms();
-        if (Array.isArray(supRooms)) {
-          supRooms.filter(r => r.status === 'lobby').forEach(room => {
-            const host = room.participants.find(p => p.id === room.hostId);
-            const code = room.roomCode.toUpperCase();
-            roomsMap.set(code, {
-              code,
-              name: room.roomName || `${host?.name || 'Manager'}'s War Room`,
-              hostName: host?.name || 'Host',
-              purseCr: room.config.startingPurseCr,
-              poolType: room.config.poolType,
-              playerCount: room.participants.length,
-              maxPlayers: room.config.maxPlayers,
-              status: 'In Lobby',
-              timerSeconds: room.config.timerSeconds,
-              tag: room.config.startingPurseCr >= 120 ? 'High Stakes' : (room.config.timerSeconds <= 10 ? 'Speed' : 'Featured')
-            });
-          });
-        }
-      } catch (err) {
-        console.warn('[MultiplayerClient] Supabase open rooms error:', err);
-      }
-    }
 
-    // 2. Fetch from Express Backend API
-    try {
-      const res = await safeFetchJson<{ success: boolean; rooms?: any[] }>('/api/multiplayer/rooms', { cache: 'no-store' });
-      if (res.ok && Array.isArray(res.data?.rooms)) {
-        res.data.rooms.forEach(r => {
-          if (r?.code && !roomsMap.has(r.code.toUpperCase())) {
-            roomsMap.set(r.code.toUpperCase(), r);
-          }
+    const addRoom = (room: any) => {
+      const rawCode = room?.code || room?.roomCode;
+      if (!rawCode) return;
+      const code = String(rawCode).trim().toUpperCase();
+      if (!code || roomsMap.has(code)) return;
+
+      // Raw MultiplayerRoomState from Supabase/local engine
+      if (room.roomCode && room.config && Array.isArray(room.participants)) {
+        if (room.status !== 'lobby') return;
+        if (room.participants.length >= room.config.maxPlayers) return;
+        const host = room.participants.find((p: any) => p.id === room.hostId) || room.participants[0];
+        roomsMap.set(code, {
+          code,
+          name: room.roomName || `${host?.name || 'Manager'}'s War Room`,
+          hostName: host?.name || 'Host',
+          purseCr: room.config.startingPurseCr,
+          poolType: room.config.poolType,
+          playerCount: room.participants.length,
+          maxPlayers: room.config.maxPlayers,
+          status: 'In Lobby',
+          timerSeconds: room.config.timerSeconds,
+          tag: room.config.startingPurseCr >= 120 ? 'High Stakes' : (room.config.timerSeconds <= 10 ? 'Speed' : 'Featured')
+        });
+        return;
+      }
+
+      // Already-normalized public room item from API/relay
+      if (room.status && String(room.status).toLowerCase().includes('lobby')) {
+        roomsMap.set(code, {
+          ...room,
+          code,
+          status: 'In Lobby'
         });
       }
-    } catch {
-      // ignore
-    }
+    };
 
-    // 3. Fetch from Global Cloud Relay
-    try {
-      const relayRooms = await CloudRelayService.listOpenRooms();
-      if (Array.isArray(relayRooms)) {
-        relayRooms.forEach(r => {
-          if (r?.code && !roomsMap.has(r.code.toUpperCase())) {
-            roomsMap.set(r.code.toUpperCase(), r);
-          }
-        });
+    const supabaseRoomsPromise = isSupabaseConfigured()
+      ? withTimeout(SupabaseAuctionService.listRooms(), [] as any[])
+      : Promise.resolve([] as any[]);
+
+    const apiRoomsPromise = withTimeout(
+      safeFetchJson<{ success: boolean; rooms?: any[] }>('/api/multiplayer/rooms', { cache: 'no-store' })
+        .then(res => (res.ok && Array.isArray(res.data?.rooms)) ? res.data.rooms : []),
+      [] as any[]
+    );
+
+    const relayRoomsPromise = withTimeout(CloudRelayService.listOpenRooms(), [] as any[]);
+
+    const localRoomsPromise = Promise.resolve().then(() => localMultiplayerEngine.getOpenRooms()).catch(() => [] as any[]);
+
+    const results = await Promise.allSettled([
+      supabaseRoomsPromise,
+      apiRoomsPromise,
+      relayRoomsPromise,
+      localRoomsPromise
+    ]);
+
+    results.forEach(result => {
+      if (result.status === 'fulfilled' && Array.isArray(result.value)) {
+        result.value.forEach(addRoom);
       }
-    } catch {
-      // ignore
-    }
+    });
 
-    // 4. Fetch from Local Engine & LocalStorage
-    try {
-      const localRooms = localMultiplayerEngine.getOpenRooms();
-      if (Array.isArray(localRooms)) {
-        localRooms.forEach(r => {
-          if (r?.code && !roomsMap.has(r.code.toUpperCase())) {
-            roomsMap.set(r.code.toUpperCase(), r);
-          }
-        });
-      }
-    } catch {
-      // ignore
-    }
-
-    return Array.from(roomsMap.values());
+    return Array.from(roomsMap.values()).sort((a, b) => {
+      const aPlayers = Number(a.playerCount || 0);
+      const bPlayers = Number(b.playerCount || 0);
+      if (bPlayers !== aPlayers) return bPlayers - aPlayers;
+      return String(a.name || a.code).localeCompare(String(b.name || b.code));
+    });
   },
 
   // Get Room State Snapshot
@@ -518,7 +555,7 @@ export const MultiplayerAuctionClient = {
 
     // 1. Supabase Mode
     if (isSupabaseConfigured()) {
-      const supabaseState = await SupabaseAuctionService.getRoom(code);
+      const supabaseState = await withTimeout(SupabaseAuctionService.getRoom(code), null);
       if (supabaseState) {
         localMultiplayerEngine.setRoom(supabaseState);
         return supabaseState;
@@ -538,7 +575,7 @@ export const MultiplayerAuctionClient = {
 
     // 3. Cloud Relay Mode
     try {
-      const cloudState = await CloudRelayService.fetchRoomState(code);
+      const cloudState = await withTimeout(CloudRelayService.fetchRoomState(code), null);
       if (cloudState) {
         localMultiplayerEngine.setRoom(cloudState);
         return cloudState;
@@ -630,7 +667,7 @@ export const MultiplayerAuctionClient = {
 
     // 4. Express SSE connection (if backend available)
     const connectSSE = () => {
-      if (isCleanedUp || isSupabaseConfigured()) return;
+      if (isCleanedUp) return;
       try {
         if (eventSource) {
           eventSource.close();
