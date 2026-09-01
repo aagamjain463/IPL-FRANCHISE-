@@ -10,6 +10,7 @@ import {
   getSupabaseClient, 
   SupabaseAuctionService 
 } from './supabaseClient';
+import { CloudRelayService } from './cloudRelayService';
 
 // Audio feedback synthesizers
 class AuctionAudioEngine {
@@ -105,97 +106,147 @@ export function saveManagerName(name: string) {
   localStorage.setItem('ipl_multiplayer_manager_name', name.trim());
 }
 
-// Multiplayer Client supporting Supabase Realtime + Express Backend + Local Engine Fallback
+// Helper to broadcast state changes across all available transports (Supabase, Cloud Relay, Express, Local)
+async function syncRoomStateAcrossTransports(state: MultiplayerRoomState, options?: { skipSupabase?: boolean }) {
+  if (!state?.roomCode) return;
+  const code = state.roomCode.trim().toUpperCase();
+
+  // 1. Local Engine
+  localMultiplayerEngine.setRoom(state);
+
+  // 2. Global Cloud Relay
+  CloudRelayService.publishRoomState(state).catch(() => {});
+
+  // 3. Supabase (if configured)
+  if (!options?.skipSupabase && isSupabaseConfigured()) {
+    try {
+      await SupabaseAuctionService.saveRoom(state);
+      await SupabaseAuctionService.broadcastState(state);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+// Multiplayer Client supporting Cloud Relay + Supabase Realtime + Express Backend + Local Engine Fallback
 export const MultiplayerAuctionClient = {
   // Create Room
   async createRoom(hostName: string, config?: Partial<MultiplayerAuctionConfig>): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
     const { playerId } = getOrCreatePlayerIdentity();
+    const cleanHostName = hostName?.trim() || 'Tactician';
 
-    // 1. Supabase Mode (Direct Cloud Persistence & Realtime)
-    if (isSupabaseConfigured()) {
-      try {
-        const localState = localMultiplayerEngine.createRoom(playerId, hostName, config);
-        await SupabaseAuctionService.saveRoom(localState);
-        await SupabaseAuctionService.broadcastState(localState);
-        return { success: true, state: localState };
-      } catch (err: any) {
-        console.error('[MultiplayerClient] Supabase create error:', err);
-      }
-    }
-    
-    // 2. Express Backend API Mode
+    // Initialize local state
+    const localState = localMultiplayerEngine.createRoom(playerId, cleanHostName, config);
+
+    // Sync to Cloud Relay immediately
+    CloudRelayService.publishRoomState(localState).catch(() => {});
+
+    // Try Express Backend API
     try {
-      const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/create', {
+      safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>('/api/multiplayer/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostPlayerId: playerId, hostName, config })
-      });
-
-      if (res.ok && res.data?.success && res.data.state) {
-        return { success: true, state: res.data.state };
-      }
-      if (res.data?.error) {
-        return { success: false, error: res.data.error };
-      }
-      if (!res.ok && res.status !== 0 && res.status !== 404 && res.status !== 405) {
-        return { success: false, error: res.data?.error || `Failed to create room (HTTP ${res.status})` };
-      }
+        body: JSON.stringify({ hostPlayerId: playerId, hostName: cleanHostName, config })
+      }).then(res => {
+        if (res.ok && res.data?.state) {
+          syncRoomStateAcrossTransports(res.data.state);
+        }
+      }).catch(() => {});
     } catch {
-      // offline fallback
+      // ignore
     }
 
-    // 3. Fallback to client-side auction room engine
-    const localState = localMultiplayerEngine.createRoom(playerId, hostName, config);
+    // Try Supabase (if configured)
+    if (isSupabaseConfigured()) {
+      try {
+        await SupabaseAuctionService.saveRoom(localState);
+        await SupabaseAuctionService.broadcastState(localState);
+      } catch (err: any) {
+        console.warn('[MultiplayerClient] Supabase create error:', err);
+      }
+    }
+
     return { success: true, state: localState };
   },
 
   // Join Room
   async joinRoom(roomCode: string, playerName: string): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
+    if (!roomCode || !roomCode.trim()) {
+      return { success: false, error: 'Please enter a valid room code.' };
+    }
     const code = roomCode.trim().toUpperCase();
     const { playerId } = getOrCreatePlayerIdentity();
+    const cleanPlayerName = playerName?.trim() || 'Manager';
 
-    // 1. Supabase Mode
-    if (isSupabaseConfigured()) {
-      try {
-        const remoteRoom = await SupabaseAuctionService.getRoom(code);
-        if (!remoteRoom) {
-          return { success: false, error: `Room "${code}" not found on Supabase. Please verify the code.` };
-        }
-        localMultiplayerEngine.setRoom(remoteRoom);
-        const joinRes = localMultiplayerEngine.joinRoom(code, playerId, playerName);
-        if (joinRes.success && joinRes.state) {
-          await SupabaseAuctionService.saveRoom(joinRes.state);
-          await SupabaseAuctionService.broadcastState(joinRes.state);
-          return { success: true, state: joinRes.state };
-        }
-        return joinRes;
-      } catch (err: any) {
-        console.error('[MultiplayerClient] Supabase join error:', err);
-      }
-    }
-
-    // 2. Express Backend API Mode
+    // 1. Try Express Backend API Mode
     try {
       const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode: code, playerId, playerName })
+        body: JSON.stringify({ roomCode: code, playerId, playerName: cleanPlayerName })
       });
 
       if (res.ok && res.data?.success && res.data.state) {
+        await syncRoomStateAcrossTransports(res.data.state);
         return { success: true, state: res.data.state };
-      }
-      if (res.data?.error) {
-        return { success: false, error: res.data.error };
-      }
-      if (!res.ok && res.status !== 0 && res.status !== 404 && res.status !== 405) {
-        return { success: false, error: res.data?.error || `Room "${code}" not found. Please verify the 6-character code.` };
       }
     } catch {
       // offline fallback
     }
 
-    return localMultiplayerEngine.joinRoom(code, playerId, playerName);
+    // 2. Try Supabase Mode
+    if (isSupabaseConfigured()) {
+      try {
+        const remoteRoom = await SupabaseAuctionService.getRoom(code);
+        if (remoteRoom) {
+          localMultiplayerEngine.setRoom(remoteRoom);
+          const joinRes = localMultiplayerEngine.joinRoom(code, playerId, cleanPlayerName);
+          if (joinRes.success && joinRes.state) {
+            await syncRoomStateAcrossTransports(joinRes.state);
+            return { success: true, state: joinRes.state };
+          }
+          if (!joinRes.success && joinRes.error) {
+            return joinRes;
+          }
+        }
+      } catch (err: any) {
+        console.warn('[MultiplayerClient] Supabase join check error:', err);
+      }
+    }
+
+    // 3. Try Cloud Relay Mode (Global peer discovery)
+    try {
+      const cloudRoom = await CloudRelayService.fetchRoomState(code);
+      if (cloudRoom) {
+        localMultiplayerEngine.setRoom(cloudRoom);
+        const joinRes = localMultiplayerEngine.joinRoom(code, playerId, cleanPlayerName);
+        if (joinRes.success && joinRes.state) {
+          await syncRoomStateAcrossTransports(joinRes.state);
+          return { success: true, state: joinRes.state };
+        }
+        if (!joinRes.success && joinRes.error) {
+          return joinRes;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // 4. Try Local Engine / LocalStorage / BroadcastChannel
+    const localRoom = localMultiplayerEngine.getRoom(code);
+    if (localRoom) {
+      const joinRes = localMultiplayerEngine.joinRoom(code, playerId, cleanPlayerName);
+      if (joinRes.success && joinRes.state) {
+        await syncRoomStateAcrossTransports(joinRes.state);
+        return { success: true, state: joinRes.state };
+      }
+      return joinRes;
+    }
+
+    return { 
+      success: false, 
+      error: `Room "${code}" does not exist or has finished. Please double check the 6-character room code or ask the host for the active code.` 
+    };
   },
 
   // Select Franchise
@@ -203,33 +254,24 @@ export const MultiplayerAuctionClient = {
     const code = roomCode.trim().toUpperCase();
     const { playerId } = getOrCreatePlayerIdentity();
 
-    if (isSupabaseConfigured()) {
-      const res = localMultiplayerEngine.selectFranchise(code, playerId, franchiseId);
-      if (res.success && res.state) {
-        await SupabaseAuctionService.saveRoom(res.state);
-        await SupabaseAuctionService.broadcastState(res.state);
-      }
-      return res;
+    // Update local engine first for instant UI response
+    const localRes = localMultiplayerEngine.selectFranchise(code, playerId, franchiseId);
+    if (localRes.success && localRes.state) {
+      syncRoomStateAcrossTransports(localRes.state);
     }
 
+    // Also notify Express backend if available
     try {
-      const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/select-franchise', {
+      safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>('/api/multiplayer/select-franchise', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomCode: code, playerId, franchiseId })
-      });
-
-      if (res.ok && res.data?.success && res.data.state) {
-        return { success: true, state: res.data.state };
-      }
-      if (res.data?.error) {
-        return { success: false, error: res.data.error };
-      }
+      }).catch(() => {});
     } catch {
-      // fallback
+      // ignore
     }
 
-    return localMultiplayerEngine.selectFranchise(code, playerId, franchiseId);
+    return localRes;
   },
 
   // Toggle Ready
@@ -237,33 +279,22 @@ export const MultiplayerAuctionClient = {
     const code = roomCode.trim().toUpperCase();
     const { playerId } = getOrCreatePlayerIdentity();
 
-    if (isSupabaseConfigured()) {
-      const res = localMultiplayerEngine.toggleReady(code, playerId);
-      if (res.success && res.state) {
-        await SupabaseAuctionService.saveRoom(res.state);
-        await SupabaseAuctionService.broadcastState(res.state);
-      }
-      return res;
+    const localRes = localMultiplayerEngine.toggleReady(code, playerId);
+    if (localRes.success && localRes.state) {
+      syncRoomStateAcrossTransports(localRes.state);
     }
 
     try {
-      const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/ready', {
+      safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>('/api/multiplayer/ready', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomCode: code, playerId })
-      });
-
-      if (res.ok && res.data?.success && res.data.state) {
-        return { success: true, state: res.data.state };
-      }
-      if (res.data?.error) {
-        return { success: false, error: res.data.error };
-      }
+      }).catch(() => {});
     } catch {
-      // fallback
+      // ignore
     }
 
-    return localMultiplayerEngine.toggleReady(code, playerId);
+    return localRes;
   },
 
   // Update Config (Host only)
@@ -271,33 +302,22 @@ export const MultiplayerAuctionClient = {
     const code = roomCode.trim().toUpperCase();
     const { playerId } = getOrCreatePlayerIdentity();
 
-    if (isSupabaseConfigured()) {
-      const res = localMultiplayerEngine.updateConfig(code, playerId, config);
-      if (res.success && res.state) {
-        await SupabaseAuctionService.saveRoom(res.state);
-        await SupabaseAuctionService.broadcastState(res.state);
-      }
-      return res;
+    const localRes = localMultiplayerEngine.updateConfig(code, playerId, config);
+    if (localRes.success && localRes.state) {
+      syncRoomStateAcrossTransports(localRes.state);
     }
 
     try {
-      const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/config', {
+      safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>('/api/multiplayer/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomCode: code, hostPlayerId: playerId, config })
-      });
-
-      if (res.ok && res.data?.success && res.data.state) {
-        return { success: true, state: res.data.state };
-      }
-      if (res.data?.error) {
-        return { success: false, error: res.data.error };
-      }
+      }).catch(() => {});
     } catch {
-      // fallback
+      // ignore
     }
 
-    return localMultiplayerEngine.updateConfig(code, playerId, config);
+    return localRes;
   },
 
   // Start Auction (Host only)
@@ -305,33 +325,22 @@ export const MultiplayerAuctionClient = {
     const code = roomCode.trim().toUpperCase();
     const { playerId } = getOrCreatePlayerIdentity();
 
-    if (isSupabaseConfigured()) {
-      const res = localMultiplayerEngine.startAuction(code, playerId);
-      if (res.success && res.state) {
-        await SupabaseAuctionService.saveRoom(res.state);
-        await SupabaseAuctionService.broadcastState(res.state);
-      }
-      return res;
+    const localRes = localMultiplayerEngine.startAuction(code, playerId);
+    if (localRes.success && localRes.state) {
+      syncRoomStateAcrossTransports(localRes.state);
     }
 
     try {
-      const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/start', {
+      safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>('/api/multiplayer/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomCode: code, hostPlayerId: playerId })
-      });
-
-      if (res.ok && res.data?.success && res.data.state) {
-        return { success: true, state: res.data.state };
-      }
-      if (res.data?.error) {
-        return { success: false, error: res.data.error };
-      }
+      }).catch(() => {});
     } catch {
-      // fallback
+      // ignore
     }
 
-    return localMultiplayerEngine.startAuction(code, playerId);
+    return localRes;
   },
 
   // Place Bid
@@ -339,36 +348,23 @@ export const MultiplayerAuctionClient = {
     const code = roomCode.trim().toUpperCase();
     const { playerId } = getOrCreatePlayerIdentity();
 
-    if (isSupabaseConfigured()) {
-      const res = localMultiplayerEngine.placeBid(code, playerId, bidAmountCr);
-      if (res.success && res.state) {
-        auctionAudio.playBidPaddleSound();
-        await SupabaseAuctionService.saveRoom(res.state);
-        await SupabaseAuctionService.broadcastState(res.state);
-      }
-      return res;
+    const localRes = localMultiplayerEngine.placeBid(code, playerId, bidAmountCr);
+    if (localRes.success && localRes.state) {
+      auctionAudio.playBidPaddleSound();
+      syncRoomStateAcrossTransports(localRes.state);
     }
 
     try {
-      const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/bid', {
+      safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>('/api/multiplayer/bid', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomCode: code, playerId, bidAmountCr })
-      });
-
-      if (res.ok && res.data?.success && res.data.state) {
-        auctionAudio.playBidPaddleSound();
-        return { success: true, state: res.data.state };
-      }
-      if (res.data?.error) {
-        return { success: false, error: res.data.error };
-      }
+      }).catch(() => {});
     } catch {
-      // fallback
+      // ignore
     }
 
-    auctionAudio.playBidPaddleSound();
-    return localMultiplayerEngine.placeBid(code, playerId, bidAmountCr);
+    return localRes;
   },
 
   // Pause Auction (Host only)
@@ -376,33 +372,22 @@ export const MultiplayerAuctionClient = {
     const code = roomCode.trim().toUpperCase();
     const { playerId } = getOrCreatePlayerIdentity();
 
-    if (isSupabaseConfigured()) {
-      const res = localMultiplayerEngine.pauseAuction(code, playerId);
-      if (res.success && res.state) {
-        await SupabaseAuctionService.saveRoom(res.state);
-        await SupabaseAuctionService.broadcastState(res.state);
-      }
-      return res;
+    const localRes = localMultiplayerEngine.pauseAuction(code, playerId);
+    if (localRes.success && localRes.state) {
+      syncRoomStateAcrossTransports(localRes.state);
     }
 
     try {
-      const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/pause', {
+      safeFetchJson('/api/multiplayer/pause', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomCode: code, hostPlayerId: playerId })
-      });
-
-      if (res.ok && res.data?.success && res.data.state) {
-        return { success: true, state: res.data.state };
-      }
-      if (res.data?.error) {
-        return { success: false, error: res.data.error };
-      }
+      }).catch(() => {});
     } catch {
-      // fallback
+      // ignore
     }
 
-    return localMultiplayerEngine.pauseAuction(code, playerId);
+    return localRes;
   },
 
   // Resume Auction (Host only)
@@ -410,33 +395,22 @@ export const MultiplayerAuctionClient = {
     const code = roomCode.trim().toUpperCase();
     const { playerId } = getOrCreatePlayerIdentity();
 
-    if (isSupabaseConfigured()) {
-      const res = localMultiplayerEngine.resumeAuction(code, playerId);
-      if (res.success && res.state) {
-        await SupabaseAuctionService.saveRoom(res.state);
-        await SupabaseAuctionService.broadcastState(res.state);
-      }
-      return res;
+    const localRes = localMultiplayerEngine.resumeAuction(code, playerId);
+    if (localRes.success && localRes.state) {
+      syncRoomStateAcrossTransports(localRes.state);
     }
 
     try {
-      const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/resume', {
+      safeFetchJson('/api/multiplayer/resume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomCode: code, hostPlayerId: playerId })
-      });
-
-      if (res.ok && res.data?.success && res.data.state) {
-        return { success: true, state: res.data.state };
-      }
-      if (res.data?.error) {
-        return { success: false, error: res.data.error };
-      }
+      }).catch(() => {});
     } catch {
-      // fallback
+      // ignore
     }
 
-    return localMultiplayerEngine.resumeAuction(code, playerId);
+    return localRes;
   },
 
   // Leave Room
@@ -453,17 +427,32 @@ export const MultiplayerAuctionClient = {
     }
   },
 
-  // Public room browser
+  // Public room browser: collects rooms from all transports and merges deduplicated
   async getOpenRooms(): Promise<any[]> {
-    // 1. Supabase Mode
+    const roomsMap = new Map<string, any>();
+
+    // 1. Fetch from Express Backend API
+    try {
+      const res = await safeFetchJson<{ success: boolean; rooms?: any[] }>('/api/multiplayer/rooms', { cache: 'no-store' });
+      if (res.ok && Array.isArray(res.data?.rooms)) {
+        res.data.rooms.forEach(r => {
+          if (r?.code) roomsMap.set(r.code.toUpperCase(), r);
+        });
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Fetch from Supabase (if configured)
     if (isSupabaseConfigured()) {
       try {
-        const rooms = await SupabaseAuctionService.listRooms();
-        if (Array.isArray(rooms) && rooms.length > 0) {
-          return rooms.filter(r => r.status === 'lobby').map(room => {
+        const supRooms = await SupabaseAuctionService.listRooms();
+        if (Array.isArray(supRooms)) {
+          supRooms.filter(r => r.status === 'lobby').forEach(room => {
             const host = room.participants.find(p => p.id === room.hostId);
-            return {
-              code: room.roomCode,
+            const code = room.roomCode.toUpperCase();
+            roomsMap.set(code, {
+              code,
               name: room.roomName || `${host?.name || 'Manager'}'s War Room`,
               hostName: host?.name || 'Host',
               purseCr: room.config.startingPurseCr,
@@ -473,7 +462,7 @@ export const MultiplayerAuctionClient = {
               status: 'In Lobby',
               timerSeconds: room.config.timerSeconds,
               tag: room.config.startingPurseCr >= 120 ? 'High Stakes' : (room.config.timerSeconds <= 10 ? 'Speed' : 'Featured')
-            };
+            });
           });
         }
       } catch (err) {
@@ -481,23 +470,43 @@ export const MultiplayerAuctionClient = {
       }
     }
 
-    // 2. Express Backend API Mode
+    // 3. Fetch from Global Cloud Relay
     try {
-      const res = await safeFetchJson<{ success: boolean; rooms?: any[] }>('/api/multiplayer/rooms', { cache: 'no-store' });
-      if (res.ok && res.data?.rooms && Array.isArray(res.data.rooms)) {
-        return res.data.rooms;
+      const relayRooms = await CloudRelayService.listOpenRooms();
+      if (Array.isArray(relayRooms)) {
+        relayRooms.forEach(r => {
+          if (r?.code && !roomsMap.has(r.code.toUpperCase())) {
+            roomsMap.set(r.code.toUpperCase(), r);
+          }
+        });
       }
     } catch {
-      // fallback
+      // ignore
     }
 
-    return localMultiplayerEngine.getOpenRooms();
+    // 4. Fetch from Local Engine & LocalStorage
+    try {
+      const localRooms = localMultiplayerEngine.getOpenRooms();
+      if (Array.isArray(localRooms)) {
+        localRooms.forEach(r => {
+          if (r?.code && !roomsMap.has(r.code.toUpperCase())) {
+            roomsMap.set(r.code.toUpperCase(), r);
+          }
+        });
+      }
+    } catch {
+      // ignore
+    }
+
+    return Array.from(roomsMap.values());
   },
 
-  // Get Room State
+  // Get Room State Snapshot
   async getRoomState(roomCode: string): Promise<MultiplayerRoomState | null> {
+    if (!roomCode) return null;
     const code = roomCode.trim().toUpperCase();
 
+    // 1. Supabase Mode
     if (isSupabaseConfigured()) {
       const supabaseState = await SupabaseAuctionService.getRoom(code);
       if (supabaseState) {
@@ -506,18 +515,32 @@ export const MultiplayerAuctionClient = {
       }
     }
 
+    // 2. Express Backend API Mode
     try {
       const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>(`/api/multiplayer/room/${code}`);
       if (res.ok && res.data?.state) {
+        localMultiplayerEngine.setRoom(res.data.state);
         return res.data.state;
       }
     } catch {
       // fallback
     }
+
+    // 3. Cloud Relay Mode
+    try {
+      const cloudState = await CloudRelayService.fetchRoomState(code);
+      if (cloudState) {
+        localMultiplayerEngine.setRoom(cloudState);
+        return cloudState;
+      }
+    } catch {
+      // ignore
+    }
+
     return localMultiplayerEngine.getRoom(code);
   },
 
-  // Subscribe to Room Events (Supabase Realtime + SSE fallback + Local engine listeners)
+  // Subscribe to Room Events (Multi-channel: Local + Cloud Relay + Supabase Realtime + Express SSE)
   subscribeRoomEvents(
     roomCode: string, 
     onEvent: (event: MultiplayerClientEvent) => void,
@@ -529,7 +552,7 @@ export const MultiplayerAuctionClient = {
     let reconnectTimeout: NodeJS.Timeout | null = null;
     let isCleanedUp = false;
 
-    // Listen to local engine events
+    // 1. Listen to Local Engine Events (including BroadcastChannel)
     const unsubscribeLocal = localMultiplayerEngine.subscribe(code, (ev) => {
       if (isCleanedUp) return;
       if (ev.type === 'BID_PLACED') {
@@ -543,7 +566,22 @@ export const MultiplayerAuctionClient = {
       onEvent(ev);
     });
 
-    // If Supabase is active, subscribe to Supabase Realtime Channel
+    // 2. Subscribe to Global Cloud Relay
+    const unsubscribeCloudRelay = CloudRelayService.subscribe(
+      code,
+      (state) => {
+        if (isCleanedUp) return;
+        localMultiplayerEngine.setRoom(state);
+        onEvent({ type: 'STATE_UPDATE', state });
+        onConnectionChange?.(true);
+      },
+      (event) => {
+        if (isCleanedUp) return;
+        onEvent(event);
+      }
+    );
+
+    // 3. If Supabase is active, subscribe to Supabase Realtime Channel
     let supabaseChannel: any = null;
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -580,7 +618,7 @@ export const MultiplayerAuctionClient = {
       }
     }
 
-    // Express SSE connection (if backend available)
+    // 4. Express SSE connection (if backend available)
     const connectSSE = () => {
       if (isCleanedUp || isSupabaseConfigured()) return;
       try {
@@ -641,6 +679,7 @@ export const MultiplayerAuctionClient = {
     return () => {
       isCleanedUp = true;
       unsubscribeLocal();
+      unsubscribeCloudRelay();
       if (supabaseChannel && supabase) {
         try {
           supabase.removeChannel(supabaseChannel);

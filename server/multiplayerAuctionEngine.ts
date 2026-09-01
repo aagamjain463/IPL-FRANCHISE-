@@ -899,6 +899,13 @@ export const MultiplayerAuctionEngine = {
     return rooms.get(roomCode.trim().toUpperCase()) || null;
   },
 
+  // Set / Sync Room State from external transport (Supabase/Cloud)
+  setRoomState(room: MultiplayerRoomState): void {
+    if (!room?.roomCode) return;
+    const code = room.roomCode.trim().toUpperCase();
+    rooms.set(code, room);
+  },
+
   // Subscribe SSE stream
   subscribeSSE(roomCode: string, res: Response): () => void {
     const code = roomCode.trim().toUpperCase();

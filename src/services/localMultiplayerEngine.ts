@@ -147,6 +147,8 @@ function computeRankings(room: MultiplayerRoomState): MultiplayerRanking[] {
   }));
 }
 
+const LOCAL_STORAGE_ROOMS_KEY = 'ipl_active_local_rooms_v2';
+
 class LocalMultiplayerEngine {
   private rooms = new Map<string, MultiplayerRoomState>();
   private timers = new Map<string, any>();
@@ -155,17 +157,52 @@ class LocalMultiplayerEngine {
   private broadcastChannel: BroadcastChannel | null = null;
 
   constructor() {
+    this.loadRoomsFromStorage();
+
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
         this.broadcastChannel = new BroadcastChannel('ipl_multiplayer_channel');
         this.broadcastChannel.onmessage = (ev) => {
           if (ev.data?.roomCode && ev.data?.event) {
+            if (ev.data.event.type === 'STATE_UPDATE' && ev.data.event.state) {
+              this.rooms.set(ev.data.roomCode.toUpperCase(), ev.data.event.state);
+              this.saveRoomsToStorage();
+            }
             this.notifyListeners(ev.data.roomCode, ev.data.event);
           }
         };
       } catch {
         // ignore
       }
+    }
+  }
+
+  private loadRoomsFromStorage() {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(LOCAL_STORAGE_ROOMS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((room: MultiplayerRoomState) => {
+            if (room?.roomCode) {
+              this.rooms.set(room.roomCode.toUpperCase(), room);
+            }
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  private saveRoomsToStorage() {
+    if (typeof window === 'undefined') return;
+    try {
+      const list = Array.from(this.rooms.values()).slice(-20);
+      localStorage.setItem(LOCAL_STORAGE_ROOMS_KEY, JSON.stringify(list));
+    } catch {
+      // ignore
     }
   }
 
@@ -189,6 +226,8 @@ class LocalMultiplayerEngine {
 
   private broadcastState(room: MultiplayerRoomState) {
     room.version++;
+    this.rooms.set(room.roomCode.toUpperCase(), room);
+    this.saveRoomsToStorage();
     this.broadcast(room.roomCode, {
       type: 'STATE_UPDATE',
       state: { ...room }
@@ -211,6 +250,7 @@ class LocalMultiplayerEngine {
   }
 
   getOpenRooms(): any[] {
+    this.loadRoomsFromStorage();
     const list: any[] = [];
     this.rooms.forEach((room) => {
       if (room.status === 'lobby') {
@@ -233,18 +273,27 @@ class LocalMultiplayerEngine {
   }
 
   getRoom(roomCode: string): MultiplayerRoomState | null {
+    if (!roomCode) return null;
     const code = roomCode.trim().toUpperCase();
+    if (!this.rooms.has(code)) {
+      this.loadRoomsFromStorage();
+    }
     return this.rooms.get(code) || null;
   }
 
   hasRoom(roomCode: string): boolean {
+    if (!roomCode) return false;
     const code = roomCode.trim().toUpperCase();
+    if (!this.rooms.has(code)) {
+      this.loadRoomsFromStorage();
+    }
     return this.rooms.has(code);
   }
 
   setRoom(room: MultiplayerRoomState): void {
     const code = room.roomCode.trim().toUpperCase();
     this.rooms.set(code, room);
+    this.saveRoomsToStorage();
   }
 
   createRoom(hostPlayerId: string, hostName: string, config?: Partial<MultiplayerAuctionConfig>): MultiplayerRoomState {
@@ -298,6 +347,7 @@ class LocalMultiplayerEngine {
     };
 
     this.rooms.set(code, roomState);
+    this.saveRoomsToStorage();
     return roomState;
   }
 

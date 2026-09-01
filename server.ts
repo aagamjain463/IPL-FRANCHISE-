@@ -278,6 +278,19 @@ async function startServer() {
     }
   });
 
+  // Sync Room from client/external transport
+  app.post('/api/multiplayer/sync', (req: Request, res: Response) => {
+    try {
+      const { state } = req.body || {};
+      if (state && state.roomCode) {
+        MultiplayerAuctionEngine.setRoomState(state);
+      }
+      res.json({ success: true });
+    } catch {
+      res.json({ success: false });
+    }
+  });
+
   // 12. Get Room State Snapshot
   app.get('/api/multiplayer/room/:roomCode', (req: Request, res: Response) => {
     try {
