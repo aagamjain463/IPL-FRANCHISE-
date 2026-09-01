@@ -29,6 +29,68 @@ async function startServer() {
   app.get('/api/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', hasGeminiKey: Boolean(process.env.GEMINI_API_KEY) });
   });
+  // ============================================================
+  // GOOGLE SIGN-IN + CLOUD SAVE API
+  // ============================================================
+  app.post('/api/auth/google', async (req: Request, res: Response) => {
+    try {
+      const { credential, currentSave } = req.body;
+      if (!credential || typeof credential !== 'string') {
+        return res.status(400).json({ error: 'Google credential is required' });
+      }
+      const tokenInfo = await cloudSaveStore.verifyGoogleCredential(credential);
+      const record = cloudSaveStore.upsertFromGoogle(tokenInfo, currentSave || null);
+      const sessionToken = cloudSaveStore.createSessionToken(tokenInfo.sub);
+      res.json({ success: true, profile: record.profile, cloudSave: record.save, sessionToken, updatedAt: record.updatedAt });
+    } catch (err) {
+      res.status(401).json({ error: err instanceof Error ? err.message : 'Google sign-in failed' });
+    }
+  });
+
+  const getCloudSessionSub = (req: Request): string | null => {
+    const auth = req.headers.authorization || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length) : undefined;
+    return cloudSaveStore.verifySessionToken(token);
+  };
+
+  app.get('/api/cloud-save', (req: Request, res: Response) => {
+    const sub = getCloudSessionSub(req);
+    if (!sub) return res.status(401).json({ error: 'Not signed in' });
+    const record = cloudSaveStore.getSave(sub);
+    if (!record) return res.status(404).json({ error: 'Cloud profile not found' });
+    res.json({ success: true, profile: record.profile, cloudSave: record.save, updatedAt: record.updatedAt });
+  });
+
+  app.post('/api/cloud-save', (req: Request, res: Response) => {
+    try {
+      const sub = getCloudSessionSub(req);
+      if (!sub) return res.status(401).json({ error: 'Not signed in' });
+      if (!req.body?.save || typeof req.body.save !== 'object') return res.status(400).json({ error: 'save payload is required' });
+      const record = cloudSaveStore.writeSave(sub, req.body.save);
+      res.json({ success: true, profile: record.profile, cloudSave: record.save, updatedAt: record.updatedAt });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : 'Cloud save failed' });
+    }
+  });
+
+  // ============================================================
+  // GLOBAL LEADERBOARD API — server-backed, never localStorage-only
+  // ============================================================
+  app.get('/api/leaderboard/:category?', (req: Request, res: Response) => {
+    const category = (req.params.category || 'global') as LeaderboardCategory;
+    const allowed: LeaderboardCategory[] = ['global', 'friends', 'weekly', 'season', 'highest_ovr', 'auction_master'];
+    if (!allowed.includes(category)) {
+      return res.status(400).json({ error: 'Invalid leaderboard category' });
+    }
+    res.json({ success: true, snapshot: LeaderboardStore.snapshot(category, String(req.query.playerId || '')) });
+  });
+
+  app.post('/api/leaderboard/profile', (req: Request, res: Response) => {
+    const { playerId, displayName } = req.body;
+    if (!playerId) return res.status(400).json({ error: 'playerId is required' });
+    res.json({ success: true, profile: LeaderboardStore.upsertProfile(playerId, displayName) });
+  });
+
 
   // ============================================================
   // MULTIPLAYER AUCTION API & SSE REALTIME STREAM
