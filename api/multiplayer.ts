@@ -1,6 +1,6 @@
-import { MultiplayerAuctionEngine } from '../../server/multiplayerAuctionEngine.js';
-import { SupabaseAuctionStore } from '../../server/supabaseAuctionStore.js';
-import { MultiplayerRoomState } from '../../src/types/multiplayerAuction';
+import { MultiplayerAuctionEngine } from '../server/multiplayerAuctionEngine.js';
+import { SupabaseAuctionStore } from '../server/supabaseAuctionStore.js';
+import { MultiplayerRoomState } from '../src/types/multiplayerAuction';
 
 function normalizeRoomCode(roomCode: string): string {
   return String(roomCode || '').trim().toUpperCase();
