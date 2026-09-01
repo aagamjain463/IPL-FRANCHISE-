@@ -217,6 +217,13 @@ async function startServer() {
     }
     res.json({ success: true });
   });
+   // 11. Get Room State Snapshot
+  // 11. Public Open Rooms Browser — only actual existing lobby rooms, never fake/AI rooms
+  app.get('/api/multiplayer/rooms', (req: Request, res: Response) => {
+    res.json({ success: true, rooms: MultiplayerAuctionEngine.listOpenRooms() });
+  });
+
+  // 12. Get Room State Snapshot
 
   // 11. Get Room State Snapshot
   app.get('/api/multiplayer/room/:roomCode', (req: Request, res: Response) => {
