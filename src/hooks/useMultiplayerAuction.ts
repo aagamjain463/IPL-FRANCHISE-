@@ -51,6 +51,11 @@ export function useMultiplayerAuction() {
           hammerSecondsRemaining: event.hammerSecondsRemaining
         };
       });
+    } else if (event.type === 'TIMER_EXTENDED') {
+      setCountdownSeconds(event.hammerSecondsRemaining);
+      setHammerCall('Active Bidding');
+    } else if (event.type === 'BID_REJECTED') {
+      if (event.playerId === identity.playerId) setErrorMessage(event.message);
     } else if (event.type === 'LOT_SOLD') {
       setHammerCall('Sold!');
       setRoomState(prev => {
@@ -105,7 +110,18 @@ export function useMultiplayerAuction() {
         };
       });
     }
-  }, [roomState?.config.timerSeconds]);
+  }, [identity.playerId, roomState?.config.timerSeconds]);
+
+  // Restore room on refresh/reconnect without destroying server auction state.
+  useEffect(() => {
+    const savedRoom = localStorage.getItem('ipl_multiplayer_room_code');
+    if (!savedRoom || roomState) return;
+    let cancelled = false;
+    MultiplayerAuctionClient.joinRoom(savedRoom, identity.playerName).then(result => {
+      if (!cancelled && result.success && result.state) setRoomState(result.state);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [identity.playerName, roomState]);
 
   // Subscribe to SSE whenever in a room
   useEffect(() => {
@@ -142,6 +158,7 @@ export function useMultiplayerAuction() {
       return false;
     }
     setRoomState(result.state);
+    localStorage.setItem('ipl_multiplayer_room_code', result.state.roomCode);
     return true;
   };
 
@@ -155,6 +172,7 @@ export function useMultiplayerAuction() {
       return false;
     }
     setRoomState(result.state);
+    localStorage.setItem('ipl_multiplayer_room_code', result.state.roomCode);
     return true;
   };
 
@@ -248,6 +266,7 @@ export function useMultiplayerAuction() {
     if (roomState) {
       await MultiplayerAuctionClient.leaveRoom(roomState.roomCode);
     }
+    localStorage.removeItem('ipl_multiplayer_room_code');
     setRoomState(null);
     setErrorMessage(null);
   };

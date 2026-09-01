@@ -60,6 +60,17 @@ export const SCREEN_ROUTES: ScreenRouteMeta[] = [
     loadingMessages: ['Preparing Auction Room', 'Loading Player Pool', 'Synchronizing Franchises']
   },
   {
+    path: '/multiplayer-auction',
+    screen: 'MultiplayerAuction',
+    tab: 'MultiplayerAuction',
+    title: 'Live Multiplayer Auction',
+    eyebrow: 'Online War Room',
+    subtitle: 'Host or join real public auction rooms with live participants only.',
+    variant: 'auction',
+    isStandaloneMode: false,
+    loadingMessages: ['Opening Multiplayer Auction', 'Fetching Live Rooms', 'Syncing Real-Time Lobby']
+  },
+  {
     path: '/squad',
     screen: 'Dashboard',
     tab: 'Squad',
@@ -201,6 +212,7 @@ export const SCREEN_ROUTES: ScreenRouteMeta[] = [
   { path: '/market', screen: 'Dashboard', tab: 'TradeCenter', title: 'Trade Center', eyebrow: 'Market Room', subtitle: 'Negotiate squad upgrades.', variant: 'franchise', isStandaloneMode: false, loadingMessages: ['Opening Trade Center', 'Contacting Rival Front Offices', 'Evaluating Market Values'] },
   { path: '/profile', screen: 'Dashboard', tab: 'Profile', title: 'Settings & Legacy', eyebrow: 'Manager Profile', subtitle: 'Profile and records.', variant: 'settings', isStandaloneMode: false, loadingMessages: ['Opening Settings', 'Loading Manager Profile', 'Syncing Legacy Records'] },
   { path: '/rewards', screen: 'Dashboard', tab: 'Rewards', title: 'Objectives Vault', eyebrow: 'Rewards', subtitle: 'Claim objectives and progression rewards.', variant: 'hub', isStandaloneMode: false, loadingMessages: ['Opening Rewards Vault', 'Checking Objectives', 'Syncing Prize Ledger'] },
+  { path: '/leaderboard', screen: 'Dashboard', tab: 'Leaderboard', title: 'World Rankings', eyebrow: 'Global Leaderboard', subtitle: 'Competitive auction rankings backed by server-confirmed results.', variant: 'hub', isStandaloneMode: false, loadingMessages: ['Loading World Rankings', 'Validating Server Results', 'Preparing Rank Table'] },
   { path: '/whatif', screen: 'Dashboard', tab: 'WhatIfSimulator', title: 'What-If Lab', eyebrow: 'Simulation', subtitle: 'Run alternative cricket futures.', variant: 'scouting', isStandaloneMode: false, loadingMessages: ['Opening Simulation Lab', 'Loading Tactical Models', 'Preparing What-If Engine'] },
   { path: '/offseason', screen: 'Dashboard', tab: 'OffSeason', title: 'Off-Season', eyebrow: 'Dynasty Reset', subtitle: 'Retentions, pitch planning and next auction preparation.', variant: 'franchise', isStandaloneMode: false, loadingMessages: ['Opening Off-Season Room', 'Loading Retention Board', 'Preparing Next Season'] },
   { path: '/recap', screen: 'Dashboard', tab: 'SeasonRecap', title: 'Season Recap', eyebrow: 'Awards Night', subtitle: 'Awards, champions and campaign history.', variant: 'tournament', isStandaloneMode: false, loadingMessages: ['Opening Awards Stage', 'Loading Season History', 'Preparing Trophy Presentation'] }
@@ -229,10 +241,11 @@ const PREFERRED_TAB_ROUTES: Partial<Record<AppTab, string>> = {
   Profile: '/settings',
   News: '/news',
   Rewards: '/rewards',
+  Leaderboard: '/leaderboard',
   WhatIfSimulator: '/whatif',
   OffSeason: '/offseason',
   SeasonRecap: '/recap',
-  MultiplayerAuction: '/auction'
+  MultiplayerAuction: '/multiplayer-auction'
 };
 
 export const getRouteMetaByPath = (pathname: string): ScreenRouteMeta => {
@@ -241,6 +254,7 @@ export const getRouteMetaByPath = (pathname: string): ScreenRouteMeta => {
 };
 
 export const getRouteMetaForState = (screen: GameScreen, tab: AppTab): ScreenRouteMeta => {
+  if (screen === 'MultiplayerAuction' || tab === 'MultiplayerAuction') return ROUTE_BY_PATH['/multiplayer-auction'];
   if (screen === 'Auction' || tab === 'AuctionLive') return ROUTE_BY_PATH['/auction'];
   if (screen === 'MatchLive' || tab === 'MatchLive') return ROUTE_BY_PATH['/match'];
   if (screen === 'PressConference' || screen === 'PostMatchPresentation') return ROUTE_BY_PATH['/press-conference'];

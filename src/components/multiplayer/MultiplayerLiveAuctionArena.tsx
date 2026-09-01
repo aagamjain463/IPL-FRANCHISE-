@@ -10,6 +10,8 @@ import {
   Users, CheckCircle2, AlertCircle, ArrowLeft, Trophy, Sparkles, X, ChevronRight
 } from 'lucide-react';
 import { Player } from '../../types/cricket';
+import { getMultiplayerBidIncrement, normalizeCr } from '../../multiplayer/auctionRules';
+import { LeaderboardMiniPanel } from '../LeaderboardMiniPanel';
 
 interface MultiplayerLiveAuctionArenaProps {
   roomState: MultiplayerRoomState;
@@ -49,17 +51,8 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
   const isUserLeading = roomState.currentHighBidderId === currentUserId;
   const myPurse = currentParticipant?.purseCr || 0;
 
-  // Next standard bid increment calculation
-  const getNextIncrement = (currentBid: number): number => {
-    if (currentBid < 1.0) return 0.10;
-    if (currentBid < 2.0) return 0.20;
-    if (currentBid < 5.0) return 0.25;
-    if (currentBid < 10.0) return 0.50;
-    return 1.00;
-  };
-
-  const nextIncrement = currentLot ? getNextIncrement(roomState.currentHighBidCr) : 0.20;
-  const standardNextBid = Number((roomState.currentHighBidCr + nextIncrement).toFixed(2));
+  const nextIncrement = currentLot ? getMultiplayerBidIncrement(roomState.currentHighBidCr) : 0.25;
+  const standardNextBid = normalizeCr(roomState.currentHighBidCr + nextIncrement);
   const canAffordStandard = myPurse >= standardNextBid;
 
   // Inspect participant squad
@@ -153,6 +146,8 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
       </div>
 
       {/* PAUSED BANNER (When Host pauses auction) */}
+      <LeaderboardMiniPanel title="Live Rank Table" compact />
+
       {roomState.isPaused && (
         <div className="bg-amber-950/80 border-2 border-amber-500 p-4 rounded-2xl flex items-center justify-between gap-3 shadow-2xl animate-pulse">
           <div className="flex items-center gap-3">
@@ -337,8 +332,8 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
                 {/* Quick Increment Paddles */}
                 {canPlaceAnyBid && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {[0.20, 0.50, 1.00, 2.00].map(inc => {
-                      const bidVal = Number((roomState.currentHighBidCr + inc).toFixed(2));
+                    {[nextIncrement, 0.50, 1.00, 2.00].filter((inc, index, arr) => arr.indexOf(inc) === index).map(inc => {
+                      const bidVal = normalizeCr(roomState.currentHighBidCr + inc);
                       const canAfford = myPurse >= bidVal;
 
                       return (

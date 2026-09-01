@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useMultiplayerAuction } from '../../hooks/useMultiplayerAuction';
+import { MultiplayerAuctionClient } from '../../services/multiplayerAuctionClient';
 import { MultiplayerLobbyView } from './MultiplayerLobbyView';
 import { MultiplayerLiveAuctionArena } from './MultiplayerLiveAuctionArena';
 import { MultiplayerCompletedView } from './MultiplayerCompletedView';
 import { MultiplayerAuctionConfig } from '../../types/multiplayerAuction';
+import { LeaderboardMiniPanel } from '../LeaderboardMiniPanel';
 import { 
   Users, Plus, LogIn, Shield, Sparkles, Gavel, 
   Zap, Clock, Award, AlertCircle, Edit2, Check,
@@ -18,73 +20,13 @@ interface PublicRoomItem {
   poolType: string;
   playerCount: number;
   maxPlayers: number;
-  status: 'In Lobby' | 'Bidding Live';
-  pingMs: number;
+  status: 'In Lobby';
+  timerSeconds?: number;
   tag: 'Featured' | 'High Stakes' | 'Speed' | 'Casual';
 }
 
-const DEFAULT_PUBLIC_ROOMS: PublicRoomItem[] = [
-  {
-    code: 'IPL777',
-    name: 'IPL 2026 Official Mega Auction Arena',
-    hostName: 'FranchiseDirector',
-    purseCr: 120,
-    poolType: 'Full Draft Pool',
-    playerCount: 6,
-    maxPlayers: 10,
-    status: 'In Lobby',
-    pingMs: 24,
-    tag: 'Featured'
-  },
-  {
-    code: 'WAR888',
-    name: 'Marquee Masters & Elite Stars Bidding War',
-    hostName: 'AuctionKing_Rohit',
-    purseCr: 100,
-    poolType: 'Top 30 Marquee & Stars',
-    playerCount: 4,
-    maxPlayers: 8,
-    status: 'In Lobby',
-    pingMs: 31,
-    tag: 'High Stakes'
-  },
-  {
-    code: 'BLZ240',
-    name: 'Speed Blitz War Room (10s Clock)',
-    hostName: 'CaptainCool_7',
-    purseCr: 100,
-    poolType: 'Full Draft Pool',
-    playerCount: 7,
-    maxPlayers: 10,
-    status: 'Bidding Live',
-    pingMs: 18,
-    tag: 'Speed'
-  },
-  {
-    code: 'RCB100',
-    name: 'Challengers Dynasty High Rollers',
-    hostName: 'KingKohli_18',
-    purseCr: 120,
-    poolType: 'Top 30 Marquee & Stars',
-    playerCount: 5,
-    maxPlayers: 10,
-    status: 'In Lobby',
-    pingMs: 29,
-    tag: 'Featured'
-  },
-  {
-    code: 'MI999',
-    name: '5-Time Champions Tactical Draft',
-    hostName: 'HitmanSquad',
-    purseCr: 75,
-    poolType: 'Full Draft Pool',
-    playerCount: 3,
-    maxPlayers: 8,
-    status: 'In Lobby',
-    pingMs: 42,
-    tag: 'Casual'
-  }
-];
+const DEFAULT_PUBLIC_ROOMS: PublicRoomItem[] = [];
+
 
 export const MultiplayerAuctionHome: React.FC = () => {
   const {
@@ -116,6 +58,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
 
   // Config setup state for creating room
   const [customStartingPurse, setCustomStartingPurse] = useState<number>(100);
+  const [customMaxPlayers, setCustomMaxPlayers] = useState<number>(8);
   const [customPoolType, setCustomPoolType] = useState<MultiplayerAuctionConfig['poolType']>('Full Draft Pool');
   const [customTimer, setCustomTimer] = useState<number>(15);
 
@@ -125,11 +68,21 @@ export const MultiplayerAuctionHome: React.FC = () => {
   const [publicRooms, setPublicRooms] = useState<PublicRoomItem[]>(DEFAULT_PUBLIC_ROOMS);
   const [isRefreshingRooms, setIsRefreshingRooms] = useState(false);
 
-  const handleRefreshRooms = () => {
+  const loadOpenRooms = async () => {
     setIsRefreshingRooms(true);
-    setTimeout(() => {
-      setIsRefreshingRooms(false);
-    }, 500);
+    const rooms = await MultiplayerAuctionClient.getOpenRooms();
+    setPublicRooms(rooms as PublicRoomItem[]);
+    setIsRefreshingRooms(false);
+  };
+
+  useEffect(() => {
+    loadOpenRooms();
+    const refreshInterval = window.setInterval(loadOpenRooms, 5000);
+    return () => window.clearInterval(refreshInterval);
+  }, []);
+
+  const handleRefreshRooms = () => {
+    loadOpenRooms();
   };
 
   const handleInstantJoin = async (code: string) => {
@@ -155,6 +108,8 @@ export const MultiplayerAuctionHome: React.FC = () => {
   const handleCreateRoomSubmit = async () => {
     await createRoom({
       startingPurseCr: customStartingPurse,
+      minPlayers: Math.min(2, customMaxPlayers),
+      maxPlayers: customMaxPlayers,
       poolType: customPoolType,
       timerSeconds: customTimer
     });
@@ -218,9 +173,9 @@ export const MultiplayerAuctionHome: React.FC = () => {
 
   // Otherwise, render the Multiplayer Auction Lounge Entry Screen
   return (
-    <div className="space-y-8 max-w-5xl mx-auto animate-fadeIn font-sans pb-16">
+    <div className="multiplayer-auction-home space-y-8 max-w-6xl mx-auto animate-fadeIn font-sans pb-16">
       {/* Hero Banner */}
-      <div className="bg-gradient-to-br from-[#0f172a] via-[#172554]/40 to-[#05070a] p-8 rounded-3xl border border-[#1e293b] shadow-2xl relative overflow-hidden">
+      <div className="multiplayer-auction-hero bg-gradient-to-br from-[#0f172a] via-[#172554]/40 to-[#05070a] p-8 rounded-3xl border border-[#1e293b] shadow-2xl relative overflow-hidden">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#D4AF37]/15 text-[#D4AF37] text-xs font-black uppercase tracking-widest border border-[#D4AF37]/30 shadow">
@@ -272,6 +227,8 @@ export const MultiplayerAuctionHome: React.FC = () => {
         </div>
       </div>
 
+      <LeaderboardMiniPanel title="Live Multiplayer Leaderboard" />
+
       {/* Error Message Toast */}
       {errorMessage && (
         <div className="bg-red-500/15 border border-red-500/40 p-4 rounded-2xl flex items-center gap-3 text-xs text-red-300 animate-shake shadow-lg">
@@ -281,7 +238,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
       )}
 
       {/* Action Cards: Create Room & Join Room */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="multiplayer-action-grid grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* CREATE ROOM CARD */}
         <div className="bg-[#0f172a] p-6 sm:p-8 rounded-3xl border border-[#1e293b] flex flex-col justify-between space-y-6 shadow-2xl hover:border-[#D4AF37]/40 transition">
           <div className="space-y-4">
@@ -312,6 +269,26 @@ export const MultiplayerAuctionHome: React.FC = () => {
                       }`}
                     >
                       ₹{p} Cr
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-bold mb-1 uppercase tracking-wider">Managers</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[4, 6, 8, 10].map(count => (
+                    <button
+                      key={count}
+                      type="button"
+                      onClick={() => setCustomMaxPlayers(count)}
+                      className={`py-2 rounded-xl border font-mono font-bold transition ${
+                        customMaxPlayers === count
+                          ? 'border-[#00FF87] bg-[#00FF87]/15 text-[#00FF87]'
+                          : 'border-[#1e293b] bg-[#05070a] text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {count}
                     </button>
                   ))}
                 </div>
@@ -405,7 +382,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
       </div>
 
       {/* LIVE PUBLIC ROOMS BROWSER */}
-      <div className="bg-[#0f172a] p-6 sm:p-8 rounded-3xl border border-[#1e293b] space-y-6 shadow-2xl">
+      <div className="multiplayer-live-rooms bg-[#0f172a] p-6 sm:p-8 rounded-3xl border border-[#1e293b] space-y-6 shadow-2xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -418,7 +395,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
               </h3>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Select any active room to join immediately or spectate live bidding wars.
+              Only real host-created lobby rooms appear here. Started auctions are hidden so every room shown is joinable.
             </p>
           </div>
 
@@ -479,15 +456,11 @@ export const MultiplayerAuctionHome: React.FC = () => {
                     <span className="font-mono font-black text-xs px-2 py-0.5 rounded-md bg-[#D4AF37]/15 text-[#D4AF37] border border-[#D4AF37]/30">
                       {room.code}
                     </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
-                      room.status === 'Bidding Live'
-                        ? 'bg-red-500/15 text-red-400 border border-red-500/30 animate-pulse'
-                        : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                    }`}>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                       {room.status}
                     </span>
                     <span className="text-[10px] text-slate-400 font-mono">
-                      ⚡ {room.pingMs}ms
+                      ⏱ {room.timerSeconds || 15}s
                     </span>
                   </div>
                   <h4 className="font-black text-sm text-white group-hover:text-[#D4AF37] transition">
@@ -531,7 +504,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
 
           {filteredRooms.length === 0 && (
             <div className="col-span-full py-8 text-center text-slate-500 text-xs">
-              No matching auction rooms found. Try clearing your search query or create your own room above!
+No open live rooms right now. Create a room above and share the code — it will appear here for other real users until the host starts the auction.
             </div>
           )}
         </div>

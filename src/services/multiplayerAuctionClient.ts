@@ -286,6 +286,18 @@ export const MultiplayerAuctionClient = {
     }
   },
 
+  // Public room browser: server returns only real lobby rooms that have not started.
+  async getOpenRooms(): Promise<any[]> {
+    try {
+      const res = await fetch('/api/multiplayer/rooms', { cache: 'no-store' });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data.rooms) ? data.rooms : [];
+    } catch {
+      return [];
+    }
+  },
+
   // Get Room State
   async getRoomState(roomCode: string): Promise<MultiplayerRoomState | null> {
     try {

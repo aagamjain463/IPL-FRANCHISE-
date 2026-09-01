@@ -13,6 +13,8 @@ import {
 import { INITIAL_PLAYERS } from '../src/data/players';
 import { INITIAL_TEAMS } from '../src/data/teams';
 import { Player } from '../src/types/cricket';
+import { calculateAuctionPerformanceScore, getMultiplayerBidIncrement, isValidBidIncrement, MULTIPLAYER_AUCTION_RULES, normalizeCr } from '../src/multiplayer/auctionRules';
+import { LeaderboardStore } from './leaderboardStore';
 
 // Default config
 const DEFAULT_CONFIG: MultiplayerAuctionConfig = {
@@ -24,7 +26,7 @@ const DEFAULT_CONFIG: MultiplayerAuctionConfig = {
   minSquadSize: 15,
   maxSquadSize: 25,
   overseasLimit: 8,
-  timerSeconds: 15
+  timerSeconds: MULTIPLAYER_AUCTION_RULES.defaultTimerSeconds
 };
 
 // Memory store for active multiplayer rooms
@@ -32,6 +34,13 @@ const rooms = new Map<string, MultiplayerRoomState>();
 const roomTimers = new Map<string, NodeJS.Timeout>();
 const roomBreakTimers = new Map<string, NodeJS.Timeout>();
 const sseClients = new Map<string, Set<Response>>();
+
+function getRoomTag(config: MultiplayerAuctionConfig): 'Featured' | 'High Stakes' | 'Speed' | 'Casual' {
+  if (config.timerSeconds <= 10) return 'Speed';
+  if (config.startingPurseCr >= 120 || config.poolType === 'Top 30 Marquee & Stars') return 'High Stakes';
+  if (config.format === 'Mega Auction') return 'Featured';
+  return 'Casual';
+}
 
 // Helper to generate 6-character room code
 function generateRoomCode(): string {
@@ -174,6 +183,10 @@ function computeRankings(room: MultiplayerRoomState): MultiplayerRanking[] {
     const overseasCount = p.squadPlayers.filter(pl => pl.isOverseas).length;
     const spentPurseCr = Number((room.config.startingPurseCr - p.purseCr).toFixed(2));
     const remainingPurseCr = Number(p.purseCr.toFixed(2));
+    const auctionScore = calculateAuctionPerformanceScore(p, room.config.startingPurseCr);
+    const purchases = room.soldRecords.filter(r => r.winningParticipantId === p.id);
+    const bestPurchase = purchases.slice().sort((a, b) => (b.player.overall / Math.max(0.25, b.sellingPriceCr)) - (a.player.overall / Math.max(0.25, a.sellingPriceCr)))[0];
+    const biggestOverpay = purchases.slice().sort((a, b) => b.sellingPriceCr - a.sellingPriceCr)[0];
 
     return {
       rank: 1,
@@ -188,9 +201,13 @@ function computeRankings(room: MultiplayerRoomState): MultiplayerRanking[] {
       squadCount,
       overseasCount,
       spentPurseCr,
-      remainingPurseCr
+      remainingPurseCr,
+      auctionScore,
+      bestPurchaseName: bestPurchase?.player.name,
+      biggestOverpayName: biggestOverpay?.player.name
     };
   }).sort((a, b) => {
+    if (b.auctionScore !== a.auctionScore) return b.auctionScore - a.auctionScore;
     if (b.squadOvr !== a.squadOvr) return b.squadOvr - a.squadOvr;
     return b.squadCount - a.squadCount;
   }).map((r, index) => ({
@@ -203,20 +220,31 @@ function computeRankings(room: MultiplayerRoomState): MultiplayerRanking[] {
 function resolveCurrentLot(room: MultiplayerRoomState) {
   const currentLot = room.currentLotPlayer;
   if (!currentLot) return;
+  if (room.soldRecords.some(record => record.player.id === currentLot.id)) return;
+  room.deadlineEpochMs = null;
 
   if (room.currentHighBidderId) {
     const winningParticipant = room.participants.find(p => p.id === room.currentHighBidderId);
     if (winningParticipant) {
       const winningFranchise = winningParticipant.franchiseId ? INITIAL_TEAMS[winningParticipant.franchiseId] : null;
       
-      // Deduct purse and add player
-      winningParticipant.purseCr = Number((winningParticipant.purseCr - room.currentHighBidCr).toFixed(2));
-      winningParticipant.squadPlayerIds.push(currentLot.id);
-      winningParticipant.squadPlayers.push({
-        ...currentLot,
-        salaryCr: room.currentHighBidCr,
-        currentTeamId: winningParticipant.franchiseId
-      });
+      if (winningParticipant.purseCr < room.currentHighBidCr) {
+        room.currentHighBidderId = null;
+        room.currentHighBidderFranchiseId = null;
+        resolveCurrentLot(room);
+        return;
+      }
+
+      // Deduct purse and add player; server enforces single ownership per room.
+      winningParticipant.purseCr = Math.max(0, Number((winningParticipant.purseCr - room.currentHighBidCr).toFixed(2)));
+      if (!winningParticipant.squadPlayerIds.includes(currentLot.id)) winningParticipant.squadPlayerIds.push(currentLot.id);
+      if (!winningParticipant.squadPlayers.some(player => player.id === currentLot.id)) {
+        winningParticipant.squadPlayers.push({
+          ...currentLot,
+          salaryCr: room.currentHighBidCr,
+          currentTeamId: winningParticipant.franchiseId
+        });
+      }
 
       const soldRecord: MultiplayerSoldRecord = {
         player: currentLot,
@@ -257,6 +285,7 @@ function resolveCurrentLot(room: MultiplayerRoomState) {
   const breakTimer = setTimeout(() => {
     advanceToNextLot(room.roomCode);
   }, 3200);
+  breakTimer.unref?.();
 
   roomBreakTimers.set(room.roomCode, breakTimer);
 }
@@ -275,6 +304,7 @@ function advanceToNextLot(roomCode: string) {
     room.currentHighBidderId = null;
     room.currentHighBidderFranchiseId = null;
     room.hammerSecondsRemaining = room.config.timerSeconds;
+    room.deadlineEpochMs = Date.now() + room.config.timerSeconds * 1000;
     room.hammerCall = 'Opening Bid';
     room.status = 'in_progress';
 
@@ -291,6 +321,19 @@ function advanceToNextLot(roomCode: string) {
     room.currentLotPlayer = null;
     room.rankings = computeRankings(room);
     room.awards = computeAwards(room);
+    if (!room.leaderboardApplied) {
+      LeaderboardStore.recordAuctionResults(room.rankings.map(ranking => ({
+        playerId: ranking.participantId,
+        displayName: ranking.participantName,
+        rank: ranking.rank,
+        totalParticipants: room.rankings.length,
+        spentPurseCr: ranking.spentPurseCr,
+        squadOvr: ranking.squadOvr,
+        auctionScore: ranking.auctionScore,
+        trophies: ranking.rank === 1 ? 1 : 0
+      })));
+      room.leaderboardApplied = true;
+    }
 
     // Stop timer
     const timer = roomTimers.get(roomCode);
@@ -327,15 +370,16 @@ function startRoomTimer(roomCode: string) {
       return;
     }
 
-    room.hammerSecondsRemaining--;
+    const msRemaining = Math.max(0, (room.deadlineEpochMs || Date.now()) - Date.now());
+    room.hammerSecondsRemaining = Math.ceil(msRemaining / 1000);
 
-    // Update hammer state description
+    // Update hammer state description from server deadline, not client time
     if (room.hammerSecondsRemaining <= 3) {
       room.hammerCall = 'Going Twice';
     } else if (room.hammerSecondsRemaining <= 7) {
       room.hammerCall = 'Going Once';
     } else {
-      room.hammerCall = 'Active Bidding';
+      room.hammerCall = room.currentHighBidderId ? 'Active Bidding' : 'Opening Bid';
     }
 
     // Broadcast tick
@@ -351,6 +395,7 @@ function startRoomTimer(roomCode: string) {
     }
   }, 1000);
 
+  timer.unref?.();
   roomTimers.set(roomCode, timer);
 }
 
@@ -380,6 +425,8 @@ export const MultiplayerAuctionEngine = {
       squadPlayerIds: [],
       squadPlayers: [],
       isConnected: true,
+      disconnectedAt: null,
+      isAI: false,
       lastBidCr: null
     };
 
@@ -408,6 +455,9 @@ export const MultiplayerAuctionEngine = {
       unsoldPlayerIds: [],
       rankings: [],
       awards: [],
+      deadlineEpochMs: null,
+      serverSequence: 1,
+      leaderboardApplied: false,
       version: 1
     };
 
@@ -425,6 +475,7 @@ export const MultiplayerAuctionEngine = {
     const existingParticipant = room.participants.find(p => p.id === playerId);
     if (existingParticipant) {
       existingParticipant.isConnected = true;
+      existingParticipant.disconnectedAt = null;
       existingParticipant.name = playerName || existingParticipant.name;
       broadcastState(room);
       return { success: true, state: room };
@@ -432,6 +483,11 @@ export const MultiplayerAuctionEngine = {
 
     if (room.status !== 'lobby') {
       return { success: false, error: 'Auction is already in progress in this room.' };
+    }
+
+    const liveConnections = sseClients.get(room.roomCode)?.size || 0;
+    if (liveConnections === 0) {
+      return { success: false, error: 'Room host is no longer connected. Please join an active lobby or create a new room.' };
     }
 
     if (room.participants.length >= room.config.maxPlayers) {
@@ -448,6 +504,8 @@ export const MultiplayerAuctionEngine = {
       squadPlayerIds: [],
       squadPlayers: [],
       isConnected: true,
+      disconnectedAt: null,
+      isAI: false,
       lastBidCr: null
     };
 
@@ -579,6 +637,7 @@ export const MultiplayerAuctionEngine = {
     room.currentHighBidderId = null;
     room.currentHighBidderFranchiseId = null;
     room.hammerSecondsRemaining = room.config.timerSeconds;
+    room.deadlineEpochMs = Date.now() + room.config.timerSeconds * 1000;
     room.hammerCall = 'Opening Bid';
     room.status = 'in_progress';
     room.isPaused = false;
@@ -611,8 +670,16 @@ export const MultiplayerAuctionEngine = {
       return { success: false, error: 'Auction is currently paused by host.' };
     }
 
+    const serverSecondsRemaining = Math.ceil(Math.max(0, (room.deadlineEpochMs || Date.now()) - Date.now()) / 1000);
+    room.hammerSecondsRemaining = serverSecondsRemaining;
+    if (serverSecondsRemaining <= 0) {
+      resolveCurrentLot(room);
+      return { success: false, error: 'Timer expired before this bid reached the auction server.' };
+    }
+
     const participant = room.participants.find(p => p.id === playerId);
     if (!participant) return { success: false, error: 'Participant not in room.' };
+    if (!participant.isConnected && !participant.isAI) return { success: false, error: 'Participant is disconnected.' };
 
     if (!participant.franchiseId) {
       return { success: false, error: 'No franchise chosen.' };
@@ -637,10 +704,14 @@ export const MultiplayerAuctionEngine = {
       }
     }
 
-    // Bid must be higher than current bid
-    const roundedBid = Number(bidAmountCr.toFixed(2));
+    // Bid must be higher and follow centralized increments
+    const roundedBid = normalizeCr(bidAmountCr);
+    const minNextBid = normalizeCr(room.currentHighBidCr + getMultiplayerBidIncrement(room.currentHighBidCr));
     if (roundedBid <= room.currentHighBidCr) {
       return { success: false, error: `Bid must be higher than current bid (₹${room.currentHighBidCr.toFixed(2)} Cr).` };
+    }
+    if (!isValidBidIncrement(room.currentHighBidCr, roundedBid)) {
+      return { success: false, error: `Invalid bid increment. Next valid bid is at least ₹${minNextBid.toFixed(2)} Cr.` };
     }
 
     // Check purse
@@ -657,9 +728,15 @@ export const MultiplayerAuctionEngine = {
     room.currentHighBidderFranchiseId = participant.franchiseId;
     participant.lastBidCr = roundedBid;
 
-    // Reset countdown timer on valid bid
-    room.hammerSecondsRemaining = room.config.timerSeconds;
+    // Anti-snipe: only extend near deadline; otherwise keep the server deadline authoritative.
+    let extendedBy = 0;
+    if (room.hammerSecondsRemaining <= MULTIPLAYER_AUCTION_RULES.antiSnipeThresholdSeconds) {
+      extendedBy = MULTIPLAYER_AUCTION_RULES.antiSnipeExtensionSeconds;
+      room.deadlineEpochMs = Date.now() + extendedBy * 1000;
+      room.hammerSecondsRemaining = extendedBy;
+    }
     room.hammerCall = 'Active Bidding';
+    room.serverSequence += 1;
 
     const franchise = INITIAL_TEAMS[participant.franchiseId];
 
@@ -683,6 +760,13 @@ export const MultiplayerAuctionEngine = {
       currentHighBidCr: roundedBid,
       hammerSecondsRemaining: room.hammerSecondsRemaining
     });
+    if (extendedBy > 0) {
+      broadcastToRoom(room.roomCode, {
+        type: 'TIMER_EXTENDED',
+        hammerSecondsRemaining: room.hammerSecondsRemaining,
+        extensionSeconds: extendedBy
+      });
+    }
 
     broadcastState(room);
     return { success: true, state: room };
@@ -756,11 +840,46 @@ export const MultiplayerAuctionEngine = {
       const p = room.participants.find(part => part.id === playerId);
       if (p) {
         p.isConnected = false;
+        p.disconnectedAt = Date.now();
+        if (room.hostId === playerId) {
+          const nextHost = room.participants.find(part => part.isConnected && part.id !== playerId) || room.participants.find(part => part.id !== playerId);
+          if (nextHost) {
+            p.isHost = false;
+            nextHost.isHost = true;
+            room.hostId = nextHost.id;
+          }
+        }
         broadcastState(room);
       }
     }
 
     return { success: true };
+  },
+
+  // Public lobby browser: only real rooms that currently exist and have not started yet.
+  listOpenRooms() {
+    return Array.from(rooms.values())
+      .filter(room => {
+        const liveConnections = sseClients.get(room.roomCode)?.size || 0;
+        return room.status === 'lobby' && liveConnections > 0 && room.participants.length > 0 && room.participants.length < room.config.maxPlayers;
+      })
+      .map(room => {
+        const host = room.participants.find(p => p.id === room.hostId) || room.participants[0];
+        return {
+          code: room.roomCode,
+          name: room.roomName,
+          hostName: host?.name || 'Host Manager',
+          purseCr: room.config.startingPurseCr,
+          poolType: room.config.poolType,
+          playerCount: room.participants.length,
+          maxPlayers: room.config.maxPlayers,
+          status: 'In Lobby' as const,
+          tag: getRoomTag(room.config),
+          timerSeconds: room.config.timerSeconds,
+          createdVersion: room.version
+        };
+      })
+      .sort((a, b) => b.playerCount - a.playerCount || a.name.localeCompare(b.name));
   },
 
   // Get Room State
