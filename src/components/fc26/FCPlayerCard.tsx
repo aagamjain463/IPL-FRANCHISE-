@@ -295,10 +295,10 @@ export const FCPlayerCard: React.FC<FCPlayerCardProps> = ({
 
   // 3. STANDARD, MEDIUM, LARGE & HERO 3D FOIL CARDS
   const sizeClasses = {
-    sm: 'w-[182px] h-[274px] text-[10px]',
-    md: 'w-[215px] h-[335px] text-xs',
-    lg: 'w-[275px] h-[425px] text-sm',
-    hero: 'w-[325px] h-[495px] text-base',
+    sm: 'w-[200px] h-[325px] text-[10px]',
+    md: 'w-[245px] h-[395px] text-xs',
+    lg: 'w-[305px] h-[485px] text-sm',
+    hero: 'w-[355px] h-[560px] text-base',
     mini: '',
     compact: ''
   };
@@ -331,7 +331,7 @@ export const FCPlayerCard: React.FC<FCPlayerCardProps> = ({
         <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.15)_0%,transparent_40%,rgba(0,0,0,0.3)_100%)] pointer-events-none z-10" />
 
         {/* TOP SECTION: OVR, Position, Rank Diamonds, Flag, Skill Boost */}
-        <div className="relative p-3 z-20 flex flex-col justify-between flex-1">
+        <div className="relative p-3 z-20 flex flex-col justify-between flex-1 gap-2">
           
           {/* Top Header Row */}
           <div className="flex items-start justify-between">
@@ -411,7 +411,7 @@ export const FCPlayerCard: React.FC<FCPlayerCardProps> = ({
           </div>
 
           {/* Player Portrait Avatar Center Piece */}
-          <div className="relative flex-1 flex items-center justify-center my-1">
+          <div className="relative flex-1 flex items-center justify-center my-1.5">
             <div className="relative w-20 h-20 md:w-24 md:h-24 rounded-full bg-black/20 backdrop-blur-xs flex items-center justify-center border-2 border-white/30 shadow-inner">
               <div 
                 className="w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center font-black text-2xl text-white shadow-xl"
@@ -428,11 +428,11 @@ export const FCPlayerCard: React.FC<FCPlayerCardProps> = ({
           </div>
 
           {/* Player Name Banner with FC Mobile Style Bar */}
-          <div className="fc-player-card__name-plate text-center bg-black/40 py-1 px-2 rounded-xl backdrop-blur-xs border border-white/10">
-            <h4 className={`fc-player-card__name font-black text-xs md:text-sm uppercase tracking-tight ${theme.textColor} drop-shadow font-heading`}>
+          <div className="fc-player-card__name-plate text-center bg-black/40 py-1.5 px-2.5 rounded-xl backdrop-blur-xs border border-white/10 mt-auto">
+            <h4 className={`fc-player-card__name font-black text-xs md:text-sm uppercase tracking-tight ${theme.textColor} drop-shadow font-heading truncate`}>
               {player.name}
             </h4>
-            <div className="fc-player-card__meta flex items-center justify-center gap-1.5 text-[9px] font-bold uppercase tracking-wider opacity-80 mt-0.5">
+            <div className="fc-player-card__meta flex items-center justify-center gap-1.5 text-[9px] font-bold uppercase tracking-wider opacity-90 mt-0.5">
               <span>{player.role}</span>
               <span>•</span>
               <span>AGE {player.age}</span>
@@ -441,7 +441,7 @@ export const FCPlayerCard: React.FC<FCPlayerCardProps> = ({
         </div>
 
         {/* BOTTOM SECTION: 6 FC Mobile Core Attributes */}
-        <div className="bg-black/90 backdrop-blur-md p-2 rounded-b-[20px] border-t border-white/15 z-20 text-white">
+        <div className="bg-black/90 backdrop-blur-md p-2.5 rounded-b-[20px] border-t border-white/15 z-20 text-white">
           <div className="grid grid-cols-6 gap-0.5 text-center font-mono-sport">
             <div className="flex flex-col">
               <span className="text-[8px] md:text-[9px] font-bold text-slate-400">BAT</span>

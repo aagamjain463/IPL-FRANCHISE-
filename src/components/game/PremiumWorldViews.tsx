@@ -55,13 +55,18 @@ const EventCarousel: React.FC = () => {
           whileHover={shouldReduceMotion ? undefined : cardHoverGesture}
           whileTap={shouldReduceMotion ? undefined : tapGesture}
           style={{ '--event': item.tone } as React.CSSProperties}
+          className="flex flex-col justify-between"
         >
-          <i>{item.icon}</i>
-          <small>ENDS IN {item.timer}</small>
-          <h3>{item.title}</h3>
-          <p>{item.desc}</p>
-          <b>{item.reward}</b>
-          <span>ENTER <ArrowRight className="w-4 h-4" /></span>
+          <div className="flex flex-col">
+            <i>{item.icon}</i>
+            <small>ENDS IN {item.timer}</small>
+            <h3>{item.title}</h3>
+            <p>{item.desc}</p>
+            <b>{item.reward}</b>
+          </div>
+          <span className="mt-auto pt-3 flex items-center gap-1.5 font-bold uppercase tracking-wider text-xs">
+            ENTER <ArrowRight className="w-4 h-4" />
+          </span>
         </motion.button>
       ))}
     </motion.div>
@@ -116,14 +121,18 @@ export const PremiumPlayView: React.FC = () => {
             variants={shouldReduceMotion ? undefined : cardMotion}
             whileHover={shouldReduceMotion ? undefined : cardHoverGesture}
             whileTap={shouldReduceMotion ? undefined : tapGesture}
-            className={m.big ? 'is-featured' : ''}
+            className={`${m.big ? 'is-featured' : ''} flex flex-col justify-between`}
             style={{ '--mode': m.tone } as React.CSSProperties}
           >
-            <i>{m.icon}</i>
-            <small>{m.kicker}</small>
-            <h2>{m.title}</h2>
-            <p>{m.desc}</p>
-            <span>OPEN <ArrowRight className="w-4 h-4" /></span>
+            <div className="flex flex-col">
+              <i>{m.icon}</i>
+              <small>{m.kicker}</small>
+              <h2>{m.title}</h2>
+              <p>{m.desc}</p>
+            </div>
+            <span className="mt-auto pt-3 flex items-center gap-1.5 font-bold uppercase tracking-wider text-xs">
+              OPEN <ArrowRight className="w-4 h-4" />
+            </span>
           </motion.button>
         ))}
       </motion.section>

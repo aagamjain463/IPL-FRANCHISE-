@@ -369,7 +369,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       updatedAt: Date.now(),
       saveVersion: SAVE_VERSION,
       googleProfile: signedInProfile,
-      currentSeason: 2025,
+      currentSeason: 2026,
       seasonStage,
       userTeamId: teamId,
       rivalTeamIds: rivalMap[teamId] || [],
@@ -389,7 +389,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           title: `BREAKING: ${managerName || 'New Manager'} Appointed Head Coach & GM of ${teamsMap[teamId]?.name}!`,
           category: 'Management',
           summary: `The franchise board has officially entrusted the dynasty to the new tactician ahead of the Mega Auction. Fans are buzzing with anticipation.`,
-          timestampFormatted: 'Season 2025 Opening',
+          timestampFormatted: 'Season 2026 Opening',
           impactRating: 'High',
           teamId
         }
@@ -408,7 +408,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             playerId: 'auc_mayank_yadav',
             type: 'SCOUT_NOTE',
             message: 'IPL Scouting Network operational. Real player database loaded with verified tactical profiles.',
-            timestampFormatted: 'Season 2025 Opening',
+            timestampFormatted: 'Season 2026 Opening',
             isRead: false
           }
         ]

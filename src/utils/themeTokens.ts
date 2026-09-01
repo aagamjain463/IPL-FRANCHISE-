@@ -329,17 +329,28 @@ export function getStatusColor(status: number, type: 'form' | 'fitness' | 'moral
     morale: [80, 60, 40, 20]
   };
   
-  const colors = {
-    form: TOKENS.status.form,
-    fitness: TOKENS.status.fitness,
-    morale: TOKENS.status.morale
-  };
+  if (type === 'fitness') {
+    const [peak, good, average] = thresholds.fitness;
+    const colors = TOKENS.status.fitness;
+    if (status >= peak) return colors.peak;
+    if (status >= good) return colors.good;
+    if (status >= average) return colors.average;
+    return colors.injured;
+  }
   
-  const [excellent, good, average, poor] = thresholds[type];
-  const colorSet = colors[type];
+  if (type === 'morale') {
+    const [high, normal, low] = thresholds.morale;
+    const colors = TOKENS.status.morale;
+    if (status >= high) return colors.high;
+    if (status >= normal) return colors.normal;
+    if (status >= low) return colors.low;
+    return colors.critical;
+  }
   
-  if (status >= excellent) return colorSet.excellent;
-  if (status >= good) return colorSet.good;
-  if (status >= average) return colorSet.average;
-  return colorSet.poor;
+  const [excellent, good, average] = thresholds.form;
+  const colors = TOKENS.status.form;
+  if (status >= excellent) return colors.excellent;
+  if (status >= good) return colors.good;
+  if (status >= average) return colors.average;
+  return colors.poor;
 }

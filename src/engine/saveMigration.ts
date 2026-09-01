@@ -24,6 +24,9 @@ export function migrateSave(raw: unknown): GameSave | null {
   if (!parsed.userTeamId || !parsed.teams) return null;
 
   parsed.saveVersion = parsed.saveVersion || SAVE_VERSION;
+  if (!parsed.currentSeason || parsed.currentSeason === 2025) {
+    parsed.currentSeason = 2026;
+  }
   parsed.seasonStage = parsed.seasonStage || 'Auction';
   parsed.currentFixtureIndex = parsed.currentFixtureIndex || 0;
   parsed.newsFeed = parsed.newsFeed || [];

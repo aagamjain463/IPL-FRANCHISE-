@@ -224,7 +224,6 @@ export const DashboardView: React.FC = () => {
             >
               {userTeam?.shortName || 'XI'}
             </div>
-            <span className="ultimate-hub__live"><Radio className="w-3 h-3" /> LIVE SEASON</span>
           </div>
           <div className="ultimate-hub__copy">
             <p className="ultimate-hub__eyebrow">FRANCHISE XI 26 / CAREER HUB</p>
@@ -283,43 +282,6 @@ export const DashboardView: React.FC = () => {
       </motion.section>
 
       <section className="ultimate-hub__grid">
-        <div className="ultimate-hub__worlds">
-          <div className="ultimate-hub__section-title">
-            <div>
-              <p>Game Modes</p>
-              <h2>Enter the Cricket Universe</h2>
-            </div>
-            <span>Every tile opens a routed world with cinematic loading</span>
-          </div>
-          <motion.div className="ultimate-hub__world-grid" variants={shouldReduceMotion ? undefined : listContainerMotion}>
-            {worlds.map(world => (
-              <motion.button
-                key={world.title}
-                onClick={() => enterWorld(world.tab, world.screen || 'Dashboard')}
-                whileHover={shouldReduceMotion ? undefined : cardHoverGesture}
-                whileTap={shouldReduceMotion ? undefined : tapGesture}
-                variants={shouldReduceMotion ? undefined : cardMotion}
-                className={`ultimate-world-card ${world.className}`}
-                style={{ '--hub-tone': world.tone } as React.CSSProperties}
-              >
-                <div className="ultimate-world-card__orb" />
-                <div className="ultimate-world-card__top">
-                  <span>{world.icon}</span>
-                  <em>{world.stat}</em>
-                </div>
-                <div>
-                  <p>{world.label}</p>
-                  <h3>{world.title}</h3>
-                  <small>{world.desc}</small>
-                </div>
-                <div className="ultimate-world-card__enter">
-                  ENTER WORLD <ArrowRight className="w-4 h-4" />
-                </div>
-              </motion.button>
-            ))}
-          </motion.div>
-        </div>
-
         <aside className="ultimate-hub__side">
           <div className="ultimate-panel ultimate-panel--star">
             <div className="ultimate-panel__head">
@@ -369,6 +331,43 @@ export const DashboardView: React.FC = () => {
             </div>
           </div>
         </aside>
+
+        <div className="ultimate-hub__worlds">
+          <div className="ultimate-hub__section-title">
+            <div>
+              <p>Game Modes</p>
+              <h2>Enter the Cricket Universe</h2>
+            </div>
+            <span>Every tile opens a routed world with cinematic loading</span>
+          </div>
+          <motion.div className="ultimate-hub__world-grid" variants={shouldReduceMotion ? undefined : listContainerMotion}>
+            {worlds.map(world => (
+              <motion.button
+                key={world.title}
+                onClick={() => enterWorld(world.tab, world.screen || 'Dashboard')}
+                whileHover={shouldReduceMotion ? undefined : cardHoverGesture}
+                whileTap={shouldReduceMotion ? undefined : tapGesture}
+                variants={shouldReduceMotion ? undefined : cardMotion}
+                className={`ultimate-world-card ${world.className}`}
+                style={{ '--hub-tone': world.tone } as React.CSSProperties}
+              >
+                <div className="ultimate-world-card__orb" />
+                <div className="ultimate-world-card__top">
+                  <span>{world.icon}</span>
+                  <em>{world.stat}</em>
+                </div>
+                <div>
+                  <p>{world.label}</p>
+                  <h3>{world.title}</h3>
+                  <small>{world.desc}</small>
+                </div>
+                <div className="ultimate-world-card__enter">
+                  ENTER WORLD <ArrowRight className="w-4 h-4" />
+                </div>
+              </motion.button>
+            ))}
+          </motion.div>
+        </div>
       </section>
 
       {rewardProgression && (

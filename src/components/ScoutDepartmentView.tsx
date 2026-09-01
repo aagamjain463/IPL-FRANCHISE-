@@ -27,6 +27,7 @@ import {
   INITIAL_SCOUT_MISSIONS,
   validateRealPlayer
 } from '../engine/scoutEngine';
+import { safeFetchJson } from '../utils/safeFetch';
 import { 
   Search, 
   Sparkles, 
@@ -186,14 +187,13 @@ export const ScoutDepartmentView: React.FC = () => {
 
     // Also call server AI endpoint if available for conversational briefing
     try {
-      const res = await fetch('/api/ai/scout-query', {
+      const res = await safeFetchJson<{ scoutSummary?: string }>('/api/ai/scout-query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: queryText })
       });
-      if (res.ok) {
-        const data = await res.json();
-        setNlSummaryMessage(data.scoutSummary || `Scouting query applied: "${queryText}"`);
+      if (res.ok && res.data?.scoutSummary) {
+        setNlSummaryMessage(res.data.scoutSummary);
       } else {
         setNlSummaryMessage(`Scouting filters activated for: "${queryText}"`);
       }

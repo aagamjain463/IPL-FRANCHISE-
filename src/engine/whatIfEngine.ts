@@ -55,7 +55,7 @@ export function runMonteCarloComparison(
     // Run with Plan A
     const matchA = initMatchState(
       `sim_a_${i}`,
-      2025,
+      2026,
       userTeam.id,
       opponentTeam.id,
       userTeam.homeVenue,
@@ -76,7 +76,7 @@ export function runMonteCarloComparison(
     // Run with Plan B
     const matchB = initMatchState(
       `sim_b_${i}`,
-      2025,
+      2026,
       userTeam.id,
       opponentTeam.id,
       userTeam.homeVenue,

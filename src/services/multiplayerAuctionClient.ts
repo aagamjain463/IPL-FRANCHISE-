@@ -3,6 +3,7 @@ import {
   MultiplayerAuctionConfig, 
   MultiplayerClientEvent 
 } from '../types/multiplayerAuction';
+import { safeFetchJson } from '../utils/safeFetch';
 
 // Audio feedback synthesizers
 class AuctionAudioEngine {
@@ -102,174 +103,129 @@ export function saveManagerName(name: string) {
 export const MultiplayerAuctionClient = {
   // Create Room
   async createRoom(hostName: string, config?: Partial<MultiplayerAuctionConfig>): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
-    try {
-      const { playerId } = getOrCreatePlayerIdentity();
-      const res = await fetch('/api/multiplayer/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostPlayerId: playerId, hostName, config })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Failed to create room' };
-      }
-      return { success: true, state: data.state };
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+    const { playerId } = getOrCreatePlayerIdentity();
+    const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hostPlayerId: playerId, hostName, config })
+    });
+    if (!res.ok || !res.data?.success) {
+      return { success: false, error: res.data?.error || res.error || 'Failed to create room' };
     }
+    return { success: true, state: res.data.state };
   },
 
   // Join Room
   async joinRoom(roomCode: string, playerName: string): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
-    try {
-      const { playerId } = getOrCreatePlayerIdentity();
-      const res = await fetch('/api/multiplayer/join', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), playerId, playerName })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Failed to join room' };
-      }
-      return { success: true, state: data.state };
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+    const { playerId } = getOrCreatePlayerIdentity();
+    const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), playerId, playerName })
+    });
+    if (!res.ok || !res.data?.success) {
+      return { success: false, error: res.data?.error || res.error || 'Failed to join room' };
     }
+    return { success: true, state: res.data.state };
   },
 
   // Select Franchise
   async selectFranchise(roomCode: string, franchiseId: string): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
-    try {
-      const { playerId } = getOrCreatePlayerIdentity();
-      const res = await fetch('/api/multiplayer/select-franchise', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), playerId, franchiseId })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Failed to select franchise' };
-      }
-      return { success: true, state: data.state };
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+    const { playerId } = getOrCreatePlayerIdentity();
+    const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/select-franchise', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), playerId, franchiseId })
+    });
+    if (!res.ok || !res.data?.success) {
+      return { success: false, error: res.data?.error || res.error || 'Failed to select franchise' };
     }
+    return { success: true, state: res.data.state };
   },
 
   // Toggle Ready
   async toggleReady(roomCode: string): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
-    try {
-      const { playerId } = getOrCreatePlayerIdentity();
-      const res = await fetch('/api/multiplayer/ready', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), playerId })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Failed to update ready status' };
-      }
-      return { success: true, state: data.state };
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+    const { playerId } = getOrCreatePlayerIdentity();
+    const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/ready', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), playerId })
+    });
+    if (!res.ok || !res.data?.success) {
+      return { success: false, error: res.data?.error || res.error || 'Failed to update ready status' };
     }
+    return { success: true, state: res.data.state };
   },
 
   // Update Config (Host only)
   async updateConfig(roomCode: string, config: Partial<MultiplayerAuctionConfig>): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
-    try {
-      const { playerId } = getOrCreatePlayerIdentity();
-      const res = await fetch('/api/multiplayer/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), hostPlayerId: playerId, config })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Failed to update room config' };
-      }
-      return { success: true, state: data.state };
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+    const { playerId } = getOrCreatePlayerIdentity();
+    const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), hostPlayerId: playerId, config })
+    });
+    if (!res.ok || !res.data?.success) {
+      return { success: false, error: res.data?.error || res.error || 'Failed to update room config' };
     }
+    return { success: true, state: res.data.state };
   },
 
   // Start Auction (Host only)
   async startAuction(roomCode: string): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
-    try {
-      const { playerId } = getOrCreatePlayerIdentity();
-      const res = await fetch('/api/multiplayer/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), hostPlayerId: playerId })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Failed to start auction' };
-      }
-      return { success: true, state: data.state };
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+    const { playerId } = getOrCreatePlayerIdentity();
+    const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), hostPlayerId: playerId })
+    });
+    if (!res.ok || !res.data?.success) {
+      return { success: false, error: res.data?.error || res.error || 'Failed to start auction' };
     }
+    return { success: true, state: res.data.state };
   },
 
   // Place Bid
   async placeBid(roomCode: string, bidAmountCr: number): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
-    try {
-      const { playerId } = getOrCreatePlayerIdentity();
-      const res = await fetch('/api/multiplayer/bid', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), playerId, bidAmountCr })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Bid rejected' };
-      }
-      auctionAudio.playBidPaddleSound();
-      return { success: true, state: data.state };
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+    const { playerId } = getOrCreatePlayerIdentity();
+    const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/bid', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), playerId, bidAmountCr })
+    });
+    if (!res.ok || !res.data?.success) {
+      return { success: false, error: res.data?.error || res.error || 'Bid rejected' };
     }
+    auctionAudio.playBidPaddleSound();
+    return { success: true, state: res.data.state };
   },
 
   // Pause Auction (Host only)
   async pauseAuction(roomCode: string): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
-    try {
-      const { playerId } = getOrCreatePlayerIdentity();
-      const res = await fetch('/api/multiplayer/pause', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), hostPlayerId: playerId })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Failed to pause auction' };
-      }
-      return { success: true, state: data.state };
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+    const { playerId } = getOrCreatePlayerIdentity();
+    const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/pause', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), hostPlayerId: playerId })
+    });
+    if (!res.ok || !res.data?.success) {
+      return { success: false, error: res.data?.error || res.error || 'Failed to pause auction' };
     }
+    return { success: true, state: res.data.state };
   },
 
   // Resume Auction (Host only)
   async resumeAuction(roomCode: string): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
-    try {
-      const { playerId } = getOrCreatePlayerIdentity();
-      const res = await fetch('/api/multiplayer/resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), hostPlayerId: playerId })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Failed to resume auction' };
-      }
-      return { success: true, state: data.state };
-    } catch (err: unknown) {
-      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+    const { playerId } = getOrCreatePlayerIdentity();
+    const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState; error?: string }>('/api/multiplayer/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomCode: roomCode.trim().toUpperCase(), hostPlayerId: playerId })
+    });
+    if (!res.ok || !res.data?.success) {
+      return { success: false, error: res.data?.error || res.error || 'Failed to resume auction' };
     }
+    return { success: true, state: res.data.state };
   },
 
   // Leave Room
@@ -288,26 +244,20 @@ export const MultiplayerAuctionClient = {
 
   // Public room browser: server returns only real lobby rooms that have not started.
   async getOpenRooms(): Promise<any[]> {
-    try {
-      const res = await fetch('/api/multiplayer/rooms', { cache: 'no-store' });
-      if (!res.ok) return [];
-      const data = await res.json();
-      return Array.isArray(data.rooms) ? data.rooms : [];
-    } catch {
-      return [];
+    const res = await safeFetchJson<{ success: boolean; rooms?: any[] }>('/api/multiplayer/rooms', { cache: 'no-store' });
+    if (res.ok && res.data?.rooms && Array.isArray(res.data.rooms)) {
+      return res.data.rooms;
     }
+    return [];
   },
 
   // Get Room State
   async getRoomState(roomCode: string): Promise<MultiplayerRoomState | null> {
-    try {
-      const res = await fetch(`/api/multiplayer/room/${roomCode.trim().toUpperCase()}`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.state || null;
-    } catch {
-      return null;
+    const res = await safeFetchJson<{ success: boolean; state?: MultiplayerRoomState }>(`/api/multiplayer/room/${roomCode.trim().toUpperCase()}`);
+    if (res.ok && res.data?.state) {
+      return res.data.state;
     }
+    return null;
   },
 
   // Subscribe to SSE Events stream with automatic fallback polling

@@ -66,7 +66,7 @@ export class CloudSaveStore {
     const info = await response.json() as GoogleTokenInfo;
     if (!info.sub || !info.email) throw new Error('Google sign-in token is missing account identity.');
     if (String(info.email_verified) === 'false') throw new Error('Google account email is not verified.');
-    const configuredClientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
+    const configuredClientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '351798723783-vh6dmqgdn0unat9397b4j01thi6880gi.apps.googleusercontent.com';
     if (configuredClientId && info.aud !== configuredClientId) throw new Error('Google token audience does not match this app.');
     return info;
   }

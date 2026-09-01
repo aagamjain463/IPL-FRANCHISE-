@@ -1,40 +1,31 @@
 import { LeaderboardCategory, LeaderboardProfile, LeaderboardSnapshot } from '../types/leaderboard';
 import { getOrCreatePlayerIdentity } from './multiplayerAuctionClient';
+import { safeFetchJson } from '../utils/safeFetch';
 
 export const LeaderboardClient = {
   async getLeaderboard(category: LeaderboardCategory): Promise<{ success: boolean; snapshot?: LeaderboardSnapshot; error?: string }> {
-    try {
-      const { playerId } = getOrCreatePlayerIdentity();
-      const res = await fetch(`/api/leaderboard/${category}?playerId=${encodeURIComponent(playerId)}`, { cache: 'no-store' });
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        return { success: false, error: 'Leaderboard API is not available on this server. Restart npm run dev / deploy the Express server, not Vite preview only.' };
-      }
-      const data = await res.json();
-      if (!res.ok) return { success: false, error: data.error || 'Failed to load leaderboard' };
-      return { success: true, snapshot: data.snapshot };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+    const { playerId } = getOrCreatePlayerIdentity();
+    const res = await safeFetchJson<{ snapshot?: LeaderboardSnapshot; error?: string }>(
+      `/api/leaderboard/${category}?playerId=${encodeURIComponent(playerId)}`,
+      { cache: 'no-store' }
+    );
+    if (!res.ok || !res.data?.snapshot) {
+      return { success: false, error: res.data?.error || res.error || 'Leaderboard is loading or offline' };
     }
+    return { success: true, snapshot: res.data.snapshot };
   },
 
   async upsertProfile(displayName: string): Promise<{ success: boolean; profile?: LeaderboardProfile; error?: string }> {
-    try {
-      const { playerId } = getOrCreatePlayerIdentity();
-      const res = await fetch('/api/leaderboard/profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId, displayName })
-      });
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        return { success: false, error: 'Leaderboard API is not available on this server.' };
-      }
-      const data = await res.json();
-      if (!res.ok) return { success: false, error: data.error || 'Failed to save profile' };
-      return { success: true, profile: data.profile };
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : 'Network error' };
+    const { playerId } = getOrCreatePlayerIdentity();
+    const res = await safeFetchJson<{ profile?: LeaderboardProfile; error?: string }>('/api/leaderboard/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId, displayName })
+    });
+    if (!res.ok || !res.data?.profile) {
+      return { success: false, error: res.data?.error || res.error || 'Failed to save profile' };
     }
+    return { success: true, profile: res.data.profile };
   }
 };
+
