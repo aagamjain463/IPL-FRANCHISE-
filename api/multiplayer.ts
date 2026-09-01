@@ -1,5 +1,5 @@
+import { MultiplayerAuctionEngine } from '../server/multiplayerAuctionEngine.js';
 
-import { SupabaseAuctionStore } from '../server/supabaseAuctionStore.js';
 
 
 function normalizeRoomCode(roomCode: string): string {
