@@ -9,15 +9,14 @@ import { ScreenTransition } from './components/game/ScreenTransition';
 import { GameRoutes } from './components/game/GameRoutes';
 
 const GameContent: React.FC = () => {
-  const { gameState, currentScreen, activeTab, setCurrentScreen, setActiveTab } = useGame();
+  const { gameState, currentScreen, activeTab, syncRouteFromPath } = useGame();
 
   // Browser Back/Forward + direct route sync. GameProvider remains mounted so auction,
   // squad, match, scouting and season state survive screen changes.
   useEffect(() => {
     const syncRoute = () => {
       const { screen, tab } = parseCurrentPath(window.location.pathname);
-      setCurrentScreen(screen);
-      setActiveTab(tab);
+      syncRouteFromPath(screen, tab);
     };
 
     window.addEventListener('popstate', syncRoute);
@@ -26,13 +25,12 @@ const GameContent: React.FC = () => {
       window.removeEventListener('popstate', syncRoute);
       window.removeEventListener('ipl-franchise-location-change', syncRoute);
     };
-  }, [setCurrentScreen, setActiveTab]);
+  }, [syncRouteFromPath]);
 
   useEffect(() => {
     if (!gameState || currentScreen === 'MainMenu') return;
     const { screen, tab } = parseCurrentPath(window.location.pathname);
-    setCurrentScreen(screen);
-    setActiveTab(tab);
+    syncRouteFromPath(screen, tab);
   }, [gameState]);
 
   if (!gameState || currentScreen === 'MainMenu') {

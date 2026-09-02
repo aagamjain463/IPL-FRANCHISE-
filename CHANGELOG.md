@@ -1,5 +1,68 @@
 # Changelog
 
+## v2.1 — Matchday & Auction Control Overhaul
+
+### 🎮 Walkout Reveal (Home → Full Screen)
+- Home "Franchise Star" Walkout button now launches the real walkout reveal on its own dedicated full-viewport screen (`fixed inset-0`, `h-dvh`), fitting the device width with zero page scrolling.
+- Walkout card is auto-scaled inside a viewport-fit frame (`fc-walkout-card-frame`) so the teaser stages, card and confirm actions always fit.
+
+### 🏟️ Squad Formation Pitch
+- Matchday formation pitch moved to the top of the Playing XI screen, sitting left of the squad bench, with the team OVR header beneath.
+- Pitch canvas enlarged (640–780px tall, stadium-lit turf, centre circle, painted pitch strip) and player tokens upgraded to a new bigger `pitch` card size.
+
+### 🔨 Auction Completion Options
+- After the final lot, the user stays in the Auction Room and sees three large options: **restart auction with the same team**, **restart auction with a different team** (team picker), and **play live multiplayer** — plus a "keep this squad & enter season" link.
+- Sim-auction flows no longer auto-jump to the dashboard, so these options are always visible when the auction ends.
+
+### ⚠️ Franchise Switch = Fresh Start
+- Switching team from the top-left franchise switcher now shows a destructive confirmation popup: current progress is deleted and the new franchise starts from 0 at the first auction lot (₹120 Cr purse). Confirming runs a full fresh-campaign restart.
+- Auction-restart confirmations include the same warning before wiping progress.
+
+### 📺 Matchday Cleanup & Control Rules
+- Removed the duplicate score tile (`premium-scorebug`) that appeared above the live match scoreboard for normal, rivalry and challenge matches.
+- Managers can now only ever control **their own franchise**: opposition tactics cannot be changed (engine guard), and substitutions are limited to the user's team.
+- Neutral matches where the user's team isn't playing run in **Spectator Mode** — no Bowl Ball, no substitutes, no tactics; only watch/sim controls (Sim Over / Sim Innings / Sim Match / Auto Watch) are available.
+
+### 🛠️ Verified
+- `tsc --noEmit` clean, production build succeeds.
+
+## v2.2 — Control & Visibility Fixes
+
+### 🏟️ Squad Pitch (Playing XI)
+- The actual playing pitch strip is now a **normal-length pitch** (46px × 44% of the turf, with painted creases) — only the pitch is shortened; the ground canvas and layout stay the same.
+
+### 🔨 Auction Completion — All Options Always Visible
+- The "AUCTION FINISHED" panel now also renders whenever the auction `isCompleted` (previously it depended on the active lot being `null`, so completed/stale states could miss it).
+- The panel is **portaled to `<body>`** as a fixed full-viewport overlay (`auction-complete-overlay`) with its own scroll — no parent transform, overflow or stacking context can clip it, so **"Continue With A Different Team" is visible immediately after completion AND when re-entering the auction**.
+
+### 🎮 Matchday — Own Team Only, Per Phase
+- The FC IQ Tactics tab is now **phase-gated**: while your team bats you see only "Batting Command — [Your Team]"; while it bowls you see only "Bowling Command — [Your Team]". Opponent-phase controls never render (previously both batting and bowling controls were shown for the whole match).
+- Quick controller bar, DRS, Bowl Ball, Impact Sub remain user-match / own-phase only; neutral matches stay spectator (watch/sim only).
+
+### 🏥 Injuries in Playing XI
+- Injured players are now flagged on the pitch and bench cards with a red **🚑 injury badge**, plus a top alert banner listing every injured player and their status.
+- **Auto-Build excludes injured players** — both the in-screen auto-build and the matchday `buildValidXI` auto-fill skip any non-fit player, so injured players never get picked into an XI.
+
+### 🛠️ Verified
+- `tsc --noEmit` clean, production build succeeds; all flows verified in headless Chromium (completion panel both paths, per-phase tactics, injury badges + auto-build exclusion).
+
+## v2.3 — Post-Match Flow Fixes
+
+### 🖥️ Post-Match "Media & Ceremony" — no more black screen
+- `completeCurrentMatch` now pushes the real URL (`/post-match`) so the route-sync effect can't re-parse the stale `/match` path and blank the screen.
+- `PostMatchPresentation` has its own route (`/post-match`); the URL, screen and the route loader all agree.
+
+### 🎤 Press Q&A — every option answerable, no skipped questions
+- Fixed the double-advance bug: `answerPressQuestion` no longer auto-advances the question index. It only records the answered option, and the view calls the new `advancePressQuestion()` when the user presses **Next Question**.
+- Result: after answering Q1, Q2 loads with **all options enabled** (previously they were locked and Q2 was skipped), and the final question is answerable before concluding.
+
+### 🏠 "Conclude & Return to Hub" — actually returns home
+- `setActiveTab` now treats post-match / press conference as standalone screens and demotes them to the Dashboard hub (previously the demotion list missed them, so Conclude re-pushed `/post-match` — the loop you saw).
+- Browser route sync uses an atomic `syncRouteFromPath` (screen + tab set together) so no stale state read can downgrade the destination.
+
+### 🛠️ Verified
+- `tsc --noEmit` clean, production build succeeds; full flow verified in headless Chromium: complete match → Post-Match presentation (instant, correct screen) → Press Q1 answer → Next → Q2 options enabled → answer → Conclude → Franchise Hub home.
+
 ## v2.0 — "FC 26 of Cricket" Overhaul
 
 ### 🎨 Design — FC 26 Ultra

@@ -59,6 +59,10 @@ interface GameContextType {
   showToast: (message: string, tone?: 'info' | 'success' | 'warn' | 'danger') => void;
   setCurrentScreen: (screen: GameScreen) => void;
   setActiveTab: (tab: AppTab) => void;
+  // Atomic browser-route sync: sets both screen + tab from the URL WITHOUT the
+  // tab-demotion logic, so standalone flows (post-match, match, auction) are
+  // never downgraded to Dashboard by a stale state read during navigation.
+  syncRouteFromPath: (screen: GameScreen, tab: AppTab) => void;
   toggleMute: () => void;
   setSelectedPlayerForModal: (p: Player | null) => void;
   startNewFranchise: (teamId: string, managerName: string, autoSimulateAuction?: boolean, startMultiplayerAuction?: boolean) => void;
@@ -105,6 +109,7 @@ interface GameContextType {
   validateUserSquad: () => { valid: boolean; issues: string[] };
   submitPressAnswer: (option: { text: string; moraleChange: number; ownerTrustChange: number }) => void;
   answerPressQuestion: (optionIndex: number) => void;
+  advancePressQuestion: () => void;
   // Scouting Department
   upgradeScoutLevel: () => { success: boolean; message: string };
   addToWatchlist: (playerId: string, priority?: PriorityLevel, notes?: string) => void;
@@ -152,11 +157,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ? 'Auction'
         : tab === 'MatchLive'
           ? 'MatchLive'
-          : currentScreen === 'Auction' || currentScreen === 'MatchLive' || currentScreen === 'MultiplayerAuction'
+          : currentScreen === 'Auction' || currentScreen === 'MatchLive' || currentScreen === 'MultiplayerAuction' || currentScreen === 'Walkout' || currentScreen === 'PostMatchPresentation' || currentScreen === 'PressConference'
             ? 'Dashboard'
             : currentScreen;
     setCurrentScreenState(nextScreen);
     pushGameRoute(nextScreen, tab);
+  };
+
+  const syncRouteFromPath = (screen: GameScreen, tab: AppTab) => {
+    setCurrentScreenState(screen);
+    setActiveTabState(tab);
   };
 
   const showToast = (message: string, tone: 'info' | 'success' | 'warn' | 'danger' = 'info') => {
@@ -589,7 +599,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!nextPlayer) {
       auc.isCompleted = true;
       gameState.seasonStage = 'LeagueStage';
-      setCurrentScreen('Dashboard');
+      // Stay on the Auction Room so the completion panel with restart /
+      // team-switch / live-multiplayer options stays visible.
     }
 
     setGameState({ ...gameState, auctionState: auc });
@@ -646,7 +657,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!nextPlayer) {
       auc.isCompleted = true;
       gameState.seasonStage = 'LeagueStage';
-      setCurrentScreen('Dashboard');
+      // Stay on the Auction Room so the completion panel stays visible.
     }
 
     setGameState({ ...gameState, auctionState: auc });
@@ -688,12 +699,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       allPlayers: updatedPlayers,
       seasonStage: 'LeagueStage',
       newsFeed: updatedNews,
-      currentScreen: 'Dashboard'
+      currentScreen: 'Auction'
     };
 
     setGameState(newState);
-    setCurrentScreen('Dashboard');
-    setActiveTab('Dashboard');
+    setCurrentScreen('Auction');
+    setActiveTab('AuctionLive');
     soundFx.playCheer();
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
@@ -720,9 +731,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     if (updatedAuction.isCompleted) {
       newState.seasonStage = 'LeagueStage';
-      newState.currentScreen = 'Dashboard';
-      setCurrentScreen('Dashboard');
-      setActiveTab('Dashboard');
+      newState.currentScreen = 'Auction';
+      setCurrentScreen('Auction');
+      setActiveTab('AuctionLive');
     }
 
     setGameState(newState);
@@ -1047,6 +1058,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const executeImpactSub = (teamId: string, playerOutId: string, playerInId: string) => {
     if (!gameState || !gameState.currentMatchState) return;
+    // Managers can only substitute players from their own franchise.
+    if (teamId !== gameState.userTeamId) {
+      showToast('You can only manage substitutions for your own franchise.', 'warn');
+      return;
+    }
     const match: MatchState = JSON.parse(JSON.stringify(gameState.currentMatchState));
     const result = applyImpactSubstitution(match, teamId, playerOutId, playerInId, gameState.allPlayers);
     if (!result.ok) {
@@ -1069,7 +1085,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const buildValidXI = (team: Team, playersMap: Record<string, Player>): MatchPlayingXI => {
     const squad = (team.rosterPlayerIds || []).map(id => playersMap[id]).filter(Boolean);
     const current = team.playingXI;
-    const candidateIds = (current?.playingXIIds || []).filter(id => squad.some(p => p.id === id));
+    // Injured players are excluded from valid XIs — they cannot take the field.
+    const fitSquad = squad.filter(p => !p.injuryStatus || p.injuryStatus === 'Fit');
+    const candidateIds = (current?.playingXIIds || [])
+      .filter(id => squad.some(p => p.id === id))
+      .filter(id => !playersMap[id]?.injuryStatus || playersMap[id]?.injuryStatus === 'Fit');
     const wkInCandidate = candidateIds.some(id => playersMap[id]?.role.includes('Wicketkeeper'));
     const osInCandidate = candidateIds.filter(id => playersMap[id]?.isOverseas).length;
     const bowlersCandidate = candidateIds.filter(id => (playersMap[id]?.bowlingRating || 0) > 55).length;
@@ -1084,12 +1104,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     // Build: keeper first, then best remaining, honor 4-overseas cap, keep 4 bowlers
-    const sorted = [...squad].sort((a, b) => b.overall - a.overall);
+    const sorted = [...fitSquad].sort((a, b) => b.overall - a.overall);
     const picked: Player[] = [];
     let osCount = 0;
     const wk = sorted.find(p => p.role.includes('Wicketkeeper') && p.injuryStatus === 'Fit');
     if (wk) { picked.push(wk); if (wk.isOverseas) osCount++; }
-    const orderFallback = [...sorted.filter(p => p !== wk && p.injuryStatus === 'Fit'), ...sorted.filter(p => p !== wk && p.injuryStatus !== 'Fit')];
+    const orderFallback = sorted.filter(p => p !== wk && (!p.injuryStatus || p.injuryStatus === 'Fit'));
     orderFallback.forEach(p => {
       if (picked.length >= 11) return;
       if (p.isOverseas) {
@@ -1361,6 +1381,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const updateMatchTactics = (teamId: string, tactics: any) => {
     if (!gameState || !gameState.currentMatchState) return;
+    // HARD RULE: the manager can only ever control their own franchise.
+    // Opposition tactics are managed entirely by the AI engine.
+    if (teamId !== gameState.userTeamId) return;
     const match = { ...gameState.currentMatchState };
     if (teamId === match.teamAId) {
       match.tactics.teamATactics = { ...match.tactics.teamATactics, ...tactics };
@@ -1627,6 +1650,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setGameState(newState);
     setCurrentScreen(targetScreen);
     if (targetScreen === 'Dashboard') setActiveTab('Dashboard');
+    // Keep the URL in sync with the screen — otherwise the route-sync effect
+    // re-parses the stale /match path and yanks the user off the post-match
+    // presentation (the "black screen"), and "return to hub" never lands home.
+    pushGameRoute(targetScreen, targetScreen === 'Dashboard' ? 'Dashboard' : 'News');
     if (match.matchType === 'Final') {
       showToast(finalFixture ? '🏆 Season complete! Open the Season Recap.' : 'Match complete.', 'success');
     } else if (isUserMatch) {
@@ -1659,17 +1686,32 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
-    const nextIdx = (press.currentQuestionIndex || 0) + 1;
-    const updatedPress = {
-      ...press,
-      currentQuestionIndex: nextIdx
-    };
-
+    // Mark the answer applied WITHOUT advancing — the views own the pacing and
+    // call advancePressQuestion() when the user hits Next, so every question
+    // stays answerable and none are skipped.
     setGameState({
       ...gameState,
-      pressConferenceState: updatedPress
+      pressConferenceState: {
+        ...press,
+        answeredQuestionIds: [...(press.answeredQuestionIds || []), currentQ.id]
+      }
     });
     soundFx.playBatHit();
+    saveCurrentGame();
+  };
+
+  const advancePressQuestion = () => {
+    if (!gameState) return;
+    const press = gameState.pressConferenceState;
+    if (!press || !press.questions) return;
+    const nextIdx = Math.min((press.currentQuestionIndex || 0) + 1, press.questions.length);
+    setGameState({
+      ...gameState,
+      pressConferenceState: {
+        ...press,
+        currentQuestionIndex: nextIdx
+      }
+    });
     saveCurrentGame();
   };
 
@@ -2073,6 +2115,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         showToast,
         setCurrentScreen,
         setActiveTab,
+        syncRouteFromPath,
         toggleMute,
         setSelectedPlayerForModal,
         startNewFranchise,
@@ -2114,6 +2157,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         validateUserSquad,
         submitPressAnswer,
         answerPressQuestion,
+        advancePressQuestion,
         upgradeScoutLevel,
         addToWatchlist,
         removeFromWatchlist,

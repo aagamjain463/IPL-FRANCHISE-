@@ -39,6 +39,16 @@ export const GameRoutes: React.FC = () => {
   const route = getRouteMetaForState(currentScreen, activeTab);
   const fallback = <LoadingScreen route={route} durationMs={3600} />;
 
+  if (currentScreen === 'Walkout' || activeTab === 'Walkout') {
+    // Dedicated full-viewport reveal: fits the device width exactly, no page scrolling.
+    return (
+      <div className="fixed inset-0 z-[90] w-full h-dvh overflow-hidden bg-[#030712]">
+        <WorldScreen route={route} compact>
+          <Suspense fallback={fallback}><WalkoutRevealView /></Suspense>
+        </WorldScreen>
+      </div>
+    );
+  }
   if (currentScreen === 'MultiplayerAuction' || activeTab === 'MultiplayerAuction') {
     return (
       <MainAppLayout>

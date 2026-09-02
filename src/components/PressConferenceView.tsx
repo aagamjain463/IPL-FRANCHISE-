@@ -3,7 +3,7 @@ import { useGame } from '../context/GameContext';
 import { Mic, MessageSquare, Award, ArrowRight, ShieldCheck, Heart, AlertCircle } from 'lucide-react';
 
 export const PressConferenceView: React.FC = () => {
-  const { gameState, answerPressQuestion, setActiveTab, setCurrentScreen } = useGame();
+  const { gameState, answerPressQuestion, advancePressQuestion, setActiveTab, setCurrentScreen } = useGame();
   const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(null);
   const [hasAnswered, setHasAnswered] = useState<boolean>(false);
 
@@ -11,6 +11,13 @@ export const PressConferenceView: React.FC = () => {
 
   const press = gameState.pressConferenceState;
   const currentQuestion = press.questions[press.currentQuestionIndex];
+
+  const goToHub = () => {
+    // setActiveTab('Dashboard') demotes standalone screens (post-match, match,
+    // press) back to the hub and pushes /home, so the URL + state both land home.
+    setCurrentScreen('Dashboard');
+    setActiveTab('Dashboard');
+  };
 
   const handleSelectAnswer = (idx: number) => {
     setSelectedOptionIndex(idx);
@@ -22,8 +29,11 @@ export const PressConferenceView: React.FC = () => {
     setSelectedOptionIndex(null);
     setHasAnswered(false);
     if (press.currentQuestionIndex >= press.questions.length - 1) {
-      setCurrentScreen('Dashboard');
-      setActiveTab('Dashboard');
+      goToHub();
+      return;
+    }
+    if (advancePressQuestion) {
+      advancePressQuestion();
     }
   };
 
@@ -115,10 +125,7 @@ export const PressConferenceView: React.FC = () => {
           <ShieldCheck className="w-12 h-12 text-emerald-400 mx-auto" />
           <h3 className="text-lg font-bold text-white">Press Conference Concluded</h3>
           <button
-            onClick={() => {
-              setCurrentScreen('Dashboard');
-              setActiveTab('Dashboard');
-            }}
+            onClick={goToHub}
             className="px-8 py-3 rounded-full bg-[#D4AF37] text-black font-black text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition shadow-lg"
           >
             Return to Dashboard

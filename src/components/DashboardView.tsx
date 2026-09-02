@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react';
 import { useGame } from '../context/GameContext';
 import { FCPlayerCard } from './fc26/FCPlayerCard';
@@ -61,7 +61,8 @@ export const DashboardView: React.FC = () => {
     setActiveTab,
     setCurrentScreen,
     prepareMatch,
-    setSelectedPlayerForModal
+    setSelectedPlayerForModal,
+    triggerWalkout
   } = useGame();
   const shouldReduceMotion = useReducedMotion();
   const pointerX = useMotionValue(0);
@@ -72,7 +73,6 @@ export const DashboardView: React.FC = () => {
   const heroLightY = useTransform(smoothY, [-0.5, 0.5], [-10, 10]);
   const posterX = useTransform(smoothX, [-0.5, 0.5], [10, -10]);
   const posterY = useTransform(smoothY, [-0.5, 0.5], [5, -5]);
-  const [walkoutPlayer, setWalkoutPlayer] = useState<any | null>(null);
 
   if (!gameState) return null;
 
@@ -286,7 +286,7 @@ export const DashboardView: React.FC = () => {
           <div className="ultimate-panel ultimate-panel--star">
             <div className="ultimate-panel__head">
               <span><Flame className="w-4 h-4" /> Franchise Icon</span>
-              {captainPlayer && <button onClick={() => setWalkoutPlayer(captainPlayer)}>Walkout</button>}
+              {captainPlayer && <button id="btn-trigger-walkout-home" onClick={() => triggerWalkout(captainPlayer)}>Walkout</button>}
             </div>
             {captainPlayer ? (
               <div className="ultimate-star" onClick={() => setSelectedPlayerForModal(captainPlayer)}>
@@ -437,8 +437,6 @@ export const DashboardView: React.FC = () => {
         <button onClick={() => enterWorld('Challenges')}><Medal className="w-4 h-4" /> Challenges</button>
         <button onClick={() => enterWorld('Profile')}><Crown className="w-4 h-4" /> Settings</button>
       </section>
-
-      {walkoutPlayer && <FCPackOpeningModal player={walkoutPlayer} onClose={() => setWalkoutPlayer(null)} />}
     </motion.div>
   );
 };
