@@ -106,6 +106,7 @@ class Innings:
         # Batters numbered 0 and 1; the striker faces the next ball.
         self.striker = 0
         self.non_striker = 1
+        self.bowler = ""   # label only ("AI"/"YOU"), set by the match layer
 
     @property
     def is_complete(self) -> bool:
@@ -118,6 +119,10 @@ class Innings:
     @property
     def wickets_remaining(self) -> int:
         return max(0, self.max_wickets - self.wickets)
+
+    @property
+    def current_run_rate(self) -> float:
+        return 0.0 if self.legal_balls <= 0 else self.runs / (self.legal_balls / 6.0)
 
     def apply_outcome(self, outcome: DeliveryOutcome, innings_index: int,
                       target: Optional[int]) -> BallRecord:

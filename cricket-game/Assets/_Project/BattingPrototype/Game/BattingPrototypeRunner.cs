@@ -541,6 +541,7 @@ namespace CricketGame.BattingPrototype.Game
             hud.ShowDeliveryToast(DeliveryLabels.Name(data.Type) + "  -  " +
                                   Mathf.RoundToInt(data.SpeedKph) + " KPH");
             Events.FireBallReleased(data);
+            matchCtl.NotifyDeliveryStarted();
             AudioManager.Play(GameSound.DeliveryRelease);
             cam.OnRelease();
         }

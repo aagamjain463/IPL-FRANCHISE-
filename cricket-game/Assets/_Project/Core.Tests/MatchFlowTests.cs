@@ -377,6 +377,45 @@ namespace CricketGame.Core.Tests
             Assert.AreEqual(1, m.FirstInnings.LegalBalls);
             Assert.AreEqual(1, m.FirstInnings.Runs);
         }
+
+        [Test]
+        public void RunRateAndBowlerTracking()
+        {
+            var m = new SuperOverMatch(SuperOverConfig.Standard);
+            m.Start();
+            m.FirstInnings.BowlerLabel = "AI";
+            Assert.AreEqual(0f, m.FirstInnings.CurrentRunRate);
+            m.RecordDelivery(L(4));
+            m.RecordDelivery(L(2));
+            Assert.AreEqual(18f, m.FirstInnings.CurrentRunRate, 1e-4f); // 6 off 2
+            Assert.AreEqual("AI", m.FirstInnings.BowlerLabel);
+        }
+
+        [Test]
+        public void DebugOverrideAndReevaluateJumpToTheBreak()
+        {
+            var m = new SuperOverMatch(SuperOverConfig.Standard);
+            m.Start();
+            m.FirstInnings.DebugOverride(12, 0, 6);
+            m.DebugReevaluateAfterOverride();
+            Assert.AreEqual(MatchPhase.InningsBreak, m.Phase);
+            Assert.AreEqual(13, m.Target);
+        }
+
+        [Test]
+        public void DebugReevaluateCompletesAChase()
+        {
+            var m = new SuperOverMatch(SuperOverConfig.Standard);
+            m.Start();
+            foreach (var o in new[] { L(4), L(0), L(0), L(0), L(0), L(0) })
+                m.RecordDelivery(o);
+            m.StartSecondInnings();
+            m.SecondInnings.DebugOverride(5, 0, 4);   // target 5 reached in 4 balls
+            m.DebugReevaluateAfterOverride();
+            Assert.AreEqual(MatchPhase.Completed, m.Phase);
+            Assert.AreEqual(MatchOutcome.SecondInningsWin, m.Result.Outcome);
+            Assert.AreEqual(2, m.Result.MarginBalls);
+        }
     }
 
     [TestFixture]

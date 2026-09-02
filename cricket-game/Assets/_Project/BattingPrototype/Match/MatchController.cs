@@ -40,6 +40,15 @@ namespace CricketGame.BattingPrototype.Match
         public event System.Action TargetReached;
         public event System.Action<SuperOverMatch> MatchFinished;
 
+        /// <summary>Spec section 1 delivery-level events. The rules engine's
+        /// InningsStarted/BallCompleted/InningsCompleted/MatchCompleted remain
+        /// available on <see cref="Match"/> for deeper subscribers.</summary>
+        public event System.Action<int> DeliveryStarted;             // innings index
+        public event System.Action<BallRecord> LegalBall;
+        public event System.Action<int, int> RunsScored;             // runs, innings index
+        public event System.Action<BallRecord> WicketBall;
+        public event System.Action<Innings> OverCompleted;           // 6 legal balls
+
         public SuperOverMatch Match { get { return match; } }
         public MatchFlowState Flow { get { return flow; } }
         public bool PlayerBatsFirst { get { return true; } }
@@ -129,8 +138,22 @@ namespace CricketGame.BattingPrototype.Match
         /// <summary>Records one resolved delivery into the rules engine.</summary>
         public BallRecord RecordDelivery(DeliveryOutcome outcome)
         {
+            int inningsIndex = match.CurrentInningsIndex;
+            Innings inningsBefore = match.CurrentInnings;
             BallRecord record = match.RecordDelivery(outcome);
             RefreshHud();
+
+            if (outcome.CountsAsLegalBall && LegalBall != null) LegalBall(record);
+            if (outcome.TotalRuns > 0 && RunsScored != null)
+                RunsScored(outcome.TotalRuns, inningsIndex);
+            if (outcome.IsWicket && WicketBall != null) WicketBall(record);
+
+            // The phase may have moved on (innings/match ended), so check the
+            // innings the ball was recorded against.
+            if (inningsBefore != null
+                && inningsBefore.LegalBalls == match.Config.BallsPerInnings
+                && OverCompleted != null)
+                OverCompleted(inningsBefore);
 
             if (match.Phase == MatchPhase.SecondInnings && match.RunsRequired.HasValue
                 && match.RunsRequired.Value == 0)
@@ -138,6 +161,24 @@ namespace CricketGame.BattingPrototype.Match
                 if (TargetReached != null) TargetReached();
             }
             return record;
+        }
+
+        /// <summary>The runner calls this as each delivery is released.</summary>
+        public void NotifyDeliveryStarted()
+        {
+            if (DeliveryStarted != null) DeliveryStarted(match.CurrentInningsIndex);
+        }
+
+        /// <summary>Debug (spec section 25): force the current innings to its
+        /// end so the break / chase / result flow can be jumped to.</summary>
+        public void DebugForceInningsEnd()
+        {
+            Innings innings = match.CurrentInnings;
+            if (innings == null || match.IsComplete) return;
+            innings.DebugOverride(innings.Runs, innings.Wickets,
+                                  match.Config.BallsPerInnings);
+            match.DebugReevaluateAfterOverride();
+            RefreshHud();
         }
 
         /// <summary>Scoreboard + chase line for the HUD.</summary>
@@ -151,11 +192,13 @@ namespace CricketGame.BattingPrototype.Match
             if (match.Phase == MatchPhase.SecondInnings || match.Phase == MatchPhase.Completed)
             {
                 hud.SetChaseInfo(match.Target ?? 0, match.RunsRequired ?? 0,
-                                 current.BallsRemaining, current.WicketsRemaining);
+                                 current.BallsRemaining, current.WicketsRemaining,
+                                 current.CurrentRunRate);
             }
             else
             {
-                hud.SetChaseInfo(0, 0, current.BallsRemaining, current.WicketsRemaining);
+                hud.SetChaseInfo(0, 0, current.BallsRemaining, current.WicketsRemaining,
+                                 current.CurrentRunRate);
             }
         }
 
@@ -230,6 +273,10 @@ namespace CricketGame.BattingPrototype.Match
 
         private void OnInningsStarted(InningsStartedArgs args)
         {
+            // Bowler tracking (spec section 1): the AI bowls while the player
+            // bats; the player bowls the chase.
+            Innings innings = args.InningsIndex == 0 ? match.FirstInnings : match.SecondInnings;
+            innings.BowlerLabel = args.InningsIndex == 0 ? "AI" : "YOU";
             RefreshHud();
         }
 

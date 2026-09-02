@@ -105,6 +105,7 @@ namespace CricketGame.BattingPrototype.Hud
             BuildButton(rect, "WKTS +1", () => NudgeInnings(0, 1, 0), -218, 312, 96, 26);
             BuildButton(rect, "BALLS +1", () => NudgeInnings(0, 0, 1), -114, 312, 96, 26);
             BuildButton(rect, "RESET MATCH", ResetMatch, -322, 346, 150, 26);
+            BuildButton(rect, "END INNINGS", EndInnings, -164, 346, 130, 26);
 
             SetVisible(StartVisible);
         }
@@ -141,12 +142,20 @@ namespace CricketGame.BattingPrototype.Hud
             matchCtl.RefreshHud();
         }
 
+        /// <summary>Debug: jump to the break / chase / result flow.</summary>
+        private void EndInnings()
+        {
+            matchCtl.DebugForceInningsEnd();
+        }
+
         private void NudgeInnings(int runs, int wickets, int balls)
         {
-            var innings = matchCtl.Match.CurrentInnings;
-            if (innings == null) return;
+            // During the break there is no "current" innings - nudging the
+            // first innings is how the TARGET gets set (target = score + 1).
+            var innings = matchCtl.Match.CurrentInnings ?? matchCtl.Match.FirstInnings;
             innings.DebugOverride(innings.Runs + runs, innings.Wickets + wickets,
                                   innings.LegalBalls + balls);
+            matchCtl.Match.DebugReevaluateAfterOverride();
             matchCtl.RefreshHud();
         }
 

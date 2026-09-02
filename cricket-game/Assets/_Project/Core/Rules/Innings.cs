@@ -66,6 +66,16 @@ namespace CricketGame.Core.Rules
             get { return Runs + "/" + Wickets; }
         }
 
+        /// <summary>Runs per over so far (0 before a legal ball).</summary>
+        public float CurrentRunRate
+        {
+            get { return LegalBalls <= 0 ? 0f : Runs / (LegalBalls / 6f); }
+        }
+
+        /// <summary>Who is bowling this innings ("AI" when the player bats,
+        /// "YOU" during the chase). Set by the match controller.</summary>
+        public string BowlerLabel { get; set; }
+
         /// <summary>
         /// Applies one delivery to this innings and returns the resulting record.
         /// Wickets are clamped at the configured maximum; the match controller is

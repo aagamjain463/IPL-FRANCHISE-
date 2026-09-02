@@ -50,9 +50,13 @@ The runner's delivery loop yields on `MatchController.BetweenDeliveries()`
 between balls; everything rule-related happens inside the controller or in
 `Core.Rules`. PLAY AGAIN rebuilds a fresh `SuperOverMatch` — no reload.
 
-Events surfaced: `FlowChanged`, `TargetReached`, `MatchFinished`, plus the
-rules engine's `InningsStarted / BallCompleted / InningsCompleted /
-MatchCompleted`.
+Events surfaced (spec section 1): `DeliveryStarted`, `LegalBall`,
+`RunsScored`, `WicketBall`, `OverCompleted`, `TargetReached`,
+`FlowChanged`, `MatchFinished`, plus the rules engine's
+`InningsStarted / BallCompleted / InningsCompleted / MatchCompleted`.
+Each innings also tracks striker / non-striker and `BowlerLabel`
+("AI" bowls while you bat; "YOU" bowls the chase), and `CurrentRunRate`
+feeds the HUD chase line.
 
 ## Fielding (Core/Fielding — deterministic, no ML)
 
@@ -142,9 +146,13 @@ whatever is actually bowled.
 ## Debug panel additions
 
 Difficulty cycle, force-fielding cycle (CATCH / MISS / STOP / BOUNDARY),
-RUNS+2 / WKTS+1 / BALLS+1 (`Innings.DebugOverride` — debug only),
-RESET MATCH, SIM BALL. Force-outcome from Phase 2 still works and now
-flows through the match (`ForcedOutcome.Six` innings = 36, verified).
+RUNS+2 / WKTS+1 / BALLS+1 (`Innings.DebugOverride` — debug only; during the
+break these set the TARGET, since target = first-innings score + 1),
+**END INNINGS** (jump to the break / chase / result flow via
+`DebugReevaluateAfterOverride`), RESET MATCH (fresh match = "start innings 1";
+END INNINGS from innings 1 = "start innings 2"), SIM BALL. Force-outcome
+from Phase 2 still works and now flows through the match
+(`ForcedOutcome.Six` innings = 36, verified).
 
 ## Verification
 

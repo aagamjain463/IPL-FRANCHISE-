@@ -813,12 +813,13 @@ function updateScoreboard() {
   const inn = match.currentInnings() || match.innings[1];
   const side = playerIsBatting() ? "YOU" : "AI";
   scoreEl.textContent = `${side}  ${inn.runs}/${inn.wickets}   (${inn.legal_balls} of 6 balls)`;
+  const rr = inn.legal_balls > 0 ? (inn.runs / (inn.legal_balls / 6)).toFixed(1) : "0.0";
   const t = match.target();
   if (t != null) {
     chaseEl.textContent = `TARGET ${t}   ·   NEED ${match.runsRequired()}`
-      + `   ·   ${match.ballsRemaining()} BALLS   ·   ${match.wicketsRemaining()} WKTS LEFT`;
+      + `   ·   ${match.ballsRemaining()} BALLS   ·   ${match.wicketsRemaining()} WKTS LEFT   ·   RR ${rr}`;
   } else {
-    chaseEl.textContent = `SET A TARGET   ·   ${match.ballsRemaining()} BALLS LEFT`;
+    chaseEl.textContent = `SET A TARGET   ·   ${match.ballsRemaining()} BALLS LEFT   ·   RR ${rr}`;
   }
 }
 function showPopup(text, color, secs) {
@@ -970,6 +971,49 @@ document.getElementById("bResetMatch").addEventListener("pointerdown", (e) => {
   hideOverlay();
   if (playAgainResolver) { playAgainResolver(); playAgainResolver = null; }
   resetMatchAll();
+  resolvedThisBall = true;
+  fieldingLive = false;
+  flight.mode = "hidden";
+  phase = "between"; phaseT = 0.8;
+  updateScoreboard();
+});
+
+/* Debug score nudges: during the break they set the TARGET (target = 1st
+ * innings score + 1); END INNINGS jumps to the break/chase/result flow. */
+function debugNudge(runs, wickets, balls) {
+  const inn = match.currentInnings() || match.innings[0];
+  if (!inn) return;
+  inn.runs = Math.max(0, inn.runs + runs);
+  inn.wickets = clamp(inn.wickets + wickets, 0, match.maxWickets);
+  inn.legal_balls = clamp(inn.legal_balls + balls, 0, match.ballsPerInnings);
+  debugReevaluate();
+  updateScoreboard();
+}
+function debugReevaluate() {
+  if (match.phase === "first") {
+    const inn = match.innings[0];
+    if (inn.legal_balls >= match.ballsPerInnings || inn.wickets >= match.maxWickets)
+      match.phase = "break";
+  } else if (match.phase === "second") {
+    const inn = match.innings[1];
+    const complete = inn.legal_balls >= match.ballsPerInnings || inn.wickets >= match.maxWickets;
+    if (inn.runs >= match.innings[0].runs + 1) match._complete("second_win");
+    else if (complete && inn.runs === match.innings[0].runs) match._complete("tie");
+    else if (complete) match._complete("first_win");
+  }
+}
+document.getElementById("bRuns2").addEventListener("pointerdown", (e) => {
+  e.stopPropagation(); debugNudge(2, 0, 0);
+});
+document.getElementById("bWkts1").addEventListener("pointerdown", (e) => {
+  e.stopPropagation(); debugNudge(0, 1, 0);
+});
+document.getElementById("bEndInn").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  const inn = match.currentInnings();
+  if (!inn) return;
+  inn.legal_balls = match.ballsPerInnings;
+  debugReevaluate();
   resolvedThisBall = true;
   fieldingLive = false;
   flight.mode = "hidden";

@@ -266,6 +266,17 @@ class MatchScriptTests(unittest.TestCase):
         self.assertEqual(m.first.legal_balls, 1)
         self.assertEqual(m.first.runs, 1)
 
+    def test_run_rate_and_bowler_tracking(self):
+        m = SuperOverMatch()
+        m.start()
+        m.first.bowler = "AI"
+        self.assertEqual(m.first.current_run_rate, 0.0)
+        m.record_delivery(DeliveryOutcome.legal(4))
+        m.record_delivery(DeliveryOutcome.legal(2))
+        # 6 runs off 2 balls = 18 runs per over
+        self.assertAlmostEqual(m.first.current_run_rate, 18.0)
+        self.assertEqual(m.first.bowler, "AI")
+
 
 # ---------------------------------------------------------------------------
 # Full headless matches: AI vs AI through the whole pipeline

@@ -226,6 +226,28 @@ namespace CricketGame.Core.Rules
             }
         }
 
+        /// <summary>
+        /// DEBUG ONLY (spec section 25): re-runs the completion checks after an
+        /// <see cref="Innings.DebugOverride"/>. Real match flow never calls this;
+        /// it exists so the debug panel can jump straight to the innings break,
+        /// the chase or the result screen.
+        /// </summary>
+        public void DebugReevaluateAfterOverride()
+        {
+            if (phase == MatchPhase.FirstInnings && firstInnings.IsComplete)
+            {
+                phase = MatchPhase.InningsBreak;
+                RaiseInningsCompleted(0, firstInnings, firstInnings.Runs + 1);
+            }
+            else if (phase == MatchPhase.SecondInnings && secondInnings.IsComplete)
+            {
+                int target = firstInnings.Runs + 1;
+                if (secondInnings.Runs >= target) CompleteMatch(MatchOutcome.SecondInningsWin);
+                else if (secondInnings.Runs == firstInnings.Runs) CompleteMatch(MatchOutcome.Tie);
+                else CompleteMatch(MatchOutcome.FirstInningsWin);
+            }
+        }
+
         // ------------------------------------------------------------------ internals
 
         private void CompleteMatch(MatchOutcome outcome)

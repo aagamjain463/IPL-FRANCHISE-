@@ -410,19 +410,22 @@ namespace CricketGame.BattingPrototype.Hud
         }
 
         /// <summary>Chase line under the score (spec section 2):
-        /// target, runs still required, balls and wickets in hand.</summary>
-        public void SetChaseInfo(int target, int required, int ballsRemaining, int wicketsRemaining)
+        /// target, runs still required, balls and wickets in hand, run rate.</summary>
+        public void SetChaseInfo(int target, int required, int ballsRemaining,
+                                 int wicketsRemaining, float runRate)
         {
             if (chaseText == null) return;
+            string rr = "   ·   RR " + runRate.ToString("0.0");
             if (target <= 0)
             {
-                chaseText.text = "SET A TARGET   ·   " + ballsRemaining + " BALLS LEFT";
+                chaseText.text = "SET A TARGET   ·   " + ballsRemaining + " BALLS LEFT" + rr;
             }
             else
             {
                 chaseText.text = "TARGET " + target + "   ·   NEED " + required +
                                  "   ·   " + ballsRemaining + " BALLS   ·   " +
-                                 wicketsRemaining + (wicketsRemaining == 1 ? " WICKET" : " WICKETS") + " LEFT";
+                                 wicketsRemaining + (wicketsRemaining == 1 ? " WICKET" : " WICKETS")
+                                 + " LEFT" + rr;
             }
         }
 
