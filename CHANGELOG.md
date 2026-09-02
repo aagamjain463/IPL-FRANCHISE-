@@ -1,5 +1,31 @@
 # Changelog
 
+## v2.1 — Matchday & Auction Control Overhaul
+
+### 🎮 Walkout Reveal (Home → Full Screen)
+- Home "Franchise Star" Walkout button now launches the real walkout reveal on its own dedicated full-viewport screen (`fixed inset-0`, `h-dvh`), fitting the device width with zero page scrolling.
+- Walkout card is auto-scaled inside a viewport-fit frame (`fc-walkout-card-frame`) so the teaser stages, card and confirm actions always fit.
+
+### 🏟️ Squad Formation Pitch
+- Matchday formation pitch moved to the top of the Playing XI screen, sitting left of the squad bench, with the team OVR header beneath.
+- Pitch canvas enlarged (640–780px tall, stadium-lit turf, centre circle, painted pitch strip) and player tokens upgraded to a new bigger `pitch` card size.
+
+### 🔨 Auction Completion Options
+- After the final lot, the user stays in the Auction Room and sees three large options: **restart auction with the same team**, **restart auction with a different team** (team picker), and **play live multiplayer** — plus a "keep this squad & enter season" link.
+- Sim-auction flows no longer auto-jump to the dashboard, so these options are always visible when the auction ends.
+
+### ⚠️ Franchise Switch = Fresh Start
+- Switching team from the top-left franchise switcher now shows a destructive confirmation popup: current progress is deleted and the new franchise starts from 0 at the first auction lot (₹120 Cr purse). Confirming runs a full fresh-campaign restart.
+- Auction-restart confirmations include the same warning before wiping progress.
+
+### 📺 Matchday Cleanup & Control Rules
+- Removed the duplicate score tile (`premium-scorebug`) that appeared above the live match scoreboard for normal, rivalry and challenge matches.
+- Managers can now only ever control **their own franchise**: opposition tactics cannot be changed (engine guard), and substitutions are limited to the user's team.
+- Neutral matches where the user's team isn't playing run in **Spectator Mode** — no Bowl Ball, no substitutes, no tactics; only watch/sim controls (Sim Over / Sim Innings / Sim Match / Auto Watch) are available.
+
+### 🛠️ Verified
+- `tsc --noEmit` clean, production build succeeds.
+
 ## v2.0 — "FC 26 of Cricket" Overhaul
 
 ### 🎨 Design — FC 26 Ultra

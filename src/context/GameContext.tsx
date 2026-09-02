@@ -611,7 +611,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!nextPlayer) {
       auc.isCompleted = true;
       gameState.seasonStage = 'LeagueStage';
-      setCurrentScreen('Dashboard');
+      // Stay on the Auction Room so the completion panel with restart /
+      // team-switch / live-multiplayer options stays visible.
     }
 
     setGameState({ ...gameState, auctionState: auc });
@@ -668,7 +669,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!nextPlayer) {
       auc.isCompleted = true;
       gameState.seasonStage = 'LeagueStage';
-      setCurrentScreen('Dashboard');
+      // Stay on the Auction Room so the completion panel stays visible.
     }
 
     setGameState({ ...gameState, auctionState: auc });
@@ -710,12 +711,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       allPlayers: updatedPlayers,
       seasonStage: 'LeagueStage',
       newsFeed: updatedNews,
-      currentScreen: 'Dashboard'
+      currentScreen: 'Auction'
     };
 
     setGameState(newState);
-    setCurrentScreen('Dashboard');
-    setActiveTab('Dashboard');
+    setCurrentScreen('Auction');
+    setActiveTab('AuctionLive');
     soundFx.playCheer();
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
@@ -742,9 +743,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     if (updatedAuction.isCompleted) {
       newState.seasonStage = 'LeagueStage';
-      newState.currentScreen = 'Dashboard';
-      setCurrentScreen('Dashboard');
-      setActiveTab('Dashboard');
+      newState.currentScreen = 'Auction';
+      setCurrentScreen('Auction');
+      setActiveTab('AuctionLive');
     }
 
     setGameState(newState);
@@ -1069,6 +1070,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const executeImpactSub = (teamId: string, playerOutId: string, playerInId: string) => {
     if (!gameState || !gameState.currentMatchState) return;
+    // Managers can only substitute players from their own franchise.
+    if (teamId !== gameState.userTeamId) {
+      showToast('You can only manage substitutions for your own franchise.', 'warn');
+      return;
+    }
     const match: MatchState = JSON.parse(JSON.stringify(gameState.currentMatchState));
     const result = applyImpactSubstitution(match, teamId, playerOutId, playerInId, gameState.allPlayers);
     if (!result.ok) {
@@ -1383,6 +1389,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const updateMatchTactics = (teamId: string, tactics: any) => {
     if (!gameState || !gameState.currentMatchState) return;
+    // HARD RULE: the manager can only ever control their own franchise.
+    // Opposition tactics are managed entirely by the AI engine.
+    if (teamId !== gameState.userTeamId) return;
     const match = { ...gameState.currentMatchState };
     if (teamId === match.teamAId) {
       match.tactics.teamATactics = { ...match.tactics.teamATactics, ...tactics };

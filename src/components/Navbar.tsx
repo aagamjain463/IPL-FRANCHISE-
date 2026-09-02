@@ -7,7 +7,7 @@ import {
   Users, BarChart3, ShoppingBag, Zap, 
   Sparkles, Gift, Volume2, VolumeX, Shuffle, RotateCcw, X, 
   Crown, Layers, Palette, Cloud, CloudCheck, LogIn, Check, Globe,
-  Copy, ExternalLink, AlertCircle, Download, Upload, RefreshCw, Key, ShieldCheck
+  Copy, ExternalLink, AlertCircle, AlertTriangle, Download, Upload, RefreshCw, Key, ShieldCheck
 } from 'lucide-react';
 import { getFranchiseLevelInfo } from '../engine/progressionEngine';
 import { getRouteForTab } from '../navigation/screenRoutes';
@@ -31,7 +31,6 @@ export const Navbar: React.FC = () => {
     isMuted, 
     toggleMute, 
     setCurrentScreen,
-    switchUserFranchise,
     restartGame,
     setThemeMode,
     signInWithGoogle,
@@ -43,6 +42,8 @@ export const Navbar: React.FC = () => {
   const shouldReduceMotion = useReducedMotion();
   const [showFranchiseModal, setShowFranchiseModal] = useState<boolean>(false);
   const [showRestartModal, setShowRestartModal] = useState<boolean>(false);
+  const [showSwitchConfirmModal, setShowSwitchConfirmModal] = useState<boolean>(false);
+  const [pendingSwitchTeamId, setPendingSwitchTeamId] = useState<string | null>(null);
   const [showThemeModal, setShowThemeModal] = useState<boolean>(false);
   const [showGoogleModal, setShowGoogleModal] = useState<boolean>(false);
   const [syncSuccessToast, setSyncSuccessToast] = useState<boolean>(false);
@@ -117,6 +118,7 @@ export const Navbar: React.FC = () => {
   const levelInfo = getFranchiseLevelInfo(progression?.xp || 450);
   const unclaimedRewards = progression?.unclaimedRewardsCount || 0;
   const isGoogleLoggedIn = !!gameState.googleProfile?.isLoggedIn;
+  const pendingSwitchTeam = pendingSwitchTeamId ? gameState.teams[pendingSwitchTeamId] : null;
 
   const handleSyncCloud = async () => {
     const ok = await saveToCloudSync();
@@ -447,8 +449,15 @@ export const Navbar: React.FC = () => {
                     key={t.id}
                     id={`switch-team-${t.id}`}
                     onClick={() => {
-                      switchUserFranchise(t.id);
+                      // Switching franchise = beginning a brand-new campaign:
+                      // current progress is deleted, the new team starts from the auction at 0.
+                      if (isSelected) {
+                        setShowFranchiseModal(false);
+                        return;
+                      }
                       setShowFranchiseModal(false);
+                      setPendingSwitchTeamId(t.id);
+                      setShowSwitchConfirmModal(true);
                     }}
                     className={`p-2.5 rounded-xl cursor-pointer border transition text-center flex flex-col items-center justify-between ${
                       isSelected
@@ -467,6 +476,60 @@ export const Navbar: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SWITCH FRANCHISE DESTRUCTIVE CONFIRMATION */}
+      {showSwitchConfirmModal && pendingSwitchTeam && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0a0f1d] border border-red-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-[#182238] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-red-500/15 border border-red-500/40 flex items-center justify-center text-red-400">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-tight">Switch Franchise?</h3>
+                  <p className="text-[11px] text-red-300/70">This cannot be undone.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowSwitchConfirmModal(false); setPendingSwitchTeamId(null); }}
+                className="p-1 rounded-lg bg-[#04060c] hover:bg-[#182238] text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/20 text-xs text-slate-300 leading-relaxed">
+              Your current progress with <strong className="text-white">{userTeam?.name}</strong> would be
+              <strong className="text-red-400"> deleted</strong>, and you will start from
+              <strong className="text-[#D4AF37]"> 0</strong> with
+              <strong className="text-white"> {pendingSwitchTeam.name}</strong> — the auction has not taken
+              place yet, so you begin at the very first lot with a full ₹120 Cr purse.
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <button
+                onClick={() => { setShowSwitchConfirmModal(false); setPendingSwitchTeamId(null); }}
+                className="py-3 rounded-xl bg-[#1e293b] hover:bg-[#334155] text-white font-bold text-xs uppercase tracking-wider transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                id="btn-confirm-switch-franchise"
+                onClick={() => {
+                  const teamId = pendingSwitchTeam.id;
+                  setShowSwitchConfirmModal(false);
+                  setPendingSwitchTeamId(null);
+                  restartGame({ newTeamId: teamId });
+                }}
+                className="py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-red-600/20 transition cursor-pointer"
+              >
+                Yes, Start Fresh
+              </button>
             </div>
           </div>
         </div>

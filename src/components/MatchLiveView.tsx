@@ -113,6 +113,9 @@ export const MatchLiveView: React.FC = () => {
   const oppTactics = isUserTeamA ? match.tactics.teamBTactics : match.tactics.teamATactics;
   const isUserBatting = isUserMatch && currentInnings.battingTeamId === gameState.userTeamId;
   const isUserBowling = isUserMatch && currentInnings.bowlingTeamId === gameState.userTeamId;
+  // SPECTATOR MATCH: your franchise is not playing — you have zero control,
+  // you can only watch live or sim the result.
+  const isSpectatorMatch = !isUserMatch;
 
   const handleUpdateUserTactics = (patch: Partial<typeof userTactics>) => {
     if (!isUserMatch) return;
@@ -201,14 +204,16 @@ export const MatchLiveView: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={handleTriggerDRS}
-              className="px-3 py-1 rounded-full bg-[#131d35] hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-mono text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-              title="Trigger Hawk-Eye 3D Ball Tracking"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>Hawk-Eye DRS Review</span>
-            </button>
+            {isUserMatch && (
+              <button
+                onClick={handleTriggerDRS}
+                className="px-3 py-1 rounded-full bg-[#131d35] hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-mono text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                title="Trigger Hawk-Eye 3D Ball Tracking"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Hawk-Eye DRS Review</span>
+              </button>
+            )}
 
             <div className="flex items-center gap-3 font-mono">
               <span className="text-slate-400">CRR: <strong className="text-white">{currentRR}</strong></span>
@@ -412,20 +417,34 @@ export const MatchLiveView: React.FC = () => {
           </div>
 
           {/* Quick Real-Time Tactical Controller Bar */}
-          <div className="bg-[#0b1329] p-3.5 rounded-2xl border border-[#1e293b] space-y-2.5 shadow-lg">
+          <div className={`bg-[#0b1329] p-3.5 rounded-2xl border space-y-2.5 shadow-lg ${isSpectatorMatch ? 'border-slate-600/40 opacity-90' : 'border-[#1e293b]'}`}>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#D4AF37] flex items-center gap-1.5">
+              <span className={`text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${isSpectatorMatch ? 'text-slate-400' : 'text-[#D4AF37]'}`}>
                 <Sliders className="w-3.5 h-3.5" />
-                {isUserBatting ? 'Active Batting Command (User)' : isUserBowling ? 'Active Bowling Command (User)' : 'Match Tactical Console'}
+                {isSpectatorMatch
+                  ? 'Spectator Mode — No Control (Watch / Sim Only)'
+                  : isUserBatting ? 'Active Batting Command (User)' : isUserBowling ? 'Active Bowling Command (User)' : 'Match Tactical Console'}
               </span>
-              <button
-                onClick={() => setShowTacticsRadarModal(true)}
-                className="text-[10px] font-bold text-amber-300 hover:text-white uppercase flex items-center gap-1 cursor-pointer bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30"
-              >
-                <Crosshair className="w-3 h-3 text-amber-400" />
-                <span>3D Tactical Radar</span>
-              </button>
+              {!isSpectatorMatch && (
+                <button
+                  onClick={() => setShowTacticsRadarModal(true)}
+                  className="text-[10px] font-bold text-amber-300 hover:text-white uppercase flex items-center gap-1 cursor-pointer bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30"
+                >
+                  <Crosshair className="w-3 h-3 text-amber-400" />
+                  <span>3D Tactical Radar</span>
+                </button>
+              )}
             </div>
+
+            {isSpectatorMatch && (
+              <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-500/10 border border-slate-500/30 text-slate-300">
+                <Eye className="w-4 h-4 text-slate-400 shrink-0" />
+                <p className="text-[11px] leading-snug">
+                  Neutral match — your franchise is not playing tonight. Both teams are controlled by the AI.
+                  You can watch the simulation or use <strong className="text-white">Sim Over / Sim Innings / Sim Match</strong> below.
+                </p>
+              </div>
+            )}
 
             {isUserBatting && (
               <div className="flex flex-wrap items-center gap-1.5">
@@ -528,14 +547,17 @@ export const MatchLiveView: React.FC = () => {
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    id="btn-bowl-ball"
-                    onClick={bowlBall}
-                    className="px-5 py-2.5 rounded-full bg-[#D4AF37] text-black font-black text-xs uppercase tracking-widest shadow-md transition hover:scale-105 active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Zap className="w-3.5 h-3.5 fill-black" />
-                    <span>Bowl Ball</span>
-                  </button>
+                  {/* Ball-by-ball control is ONLY available when your franchise is playing */}
+                  {!isSpectatorMatch && (
+                    <button
+                      id="btn-bowl-ball"
+                      onClick={bowlBall}
+                      className="px-5 py-2.5 rounded-full bg-[#D4AF37] text-black font-black text-xs uppercase tracking-widest shadow-md transition hover:scale-105 active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-black" />
+                      <span>Bowl Ball</span>
+                    </button>
+                  )}
 
                   <button
                     id="btn-sim-over"
@@ -573,17 +595,20 @@ export const MatchLiveView: React.FC = () => {
                         : 'bg-[#05070a] text-slate-400 border-[#1e293b] hover:text-white'
                     }`}
                   >
-                    {isAutoPlaying ? 'Pause Auto' : 'Auto Play'}
+                    {isAutoPlaying ? 'Pause Auto' : isSpectatorMatch ? 'Auto Watch' : 'Auto Play'}
                   </button>
 
-                  <button
-                    id="btn-open-impact-sub"
-                    onClick={() => setShowImpactSubModal(true)}
-                    className="px-4 py-2.5 rounded-full bg-gradient-to-r from-[#00FF87] to-emerald-400 text-black font-black text-xs uppercase tracking-wider transition hover:scale-105 active:scale-95 shadow-lg shadow-[#00FF87]/20 flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 fill-black" />
-                    <span>Impact Sub</span>
-                  </button>
+                  {/* Impact sub is only for YOUR franchise, and only in your matches */}
+                  {!isSpectatorMatch && (
+                    <button
+                      id="btn-open-impact-sub"
+                      onClick={() => setShowImpactSubModal(true)}
+                      className="px-4 py-2.5 rounded-full bg-gradient-to-r from-[#00FF87] to-emerald-400 text-black font-black text-xs uppercase tracking-wider transition hover:scale-105 active:scale-95 shadow-lg shadow-[#00FF87]/20 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 fill-black" />
+                      <span>Impact Sub</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -602,14 +627,16 @@ export const MatchLiveView: React.FC = () => {
             >
               Live Feed
             </button>
-            <button
-              onClick={() => setActiveScorecardTab('Tactics')}
-              className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
-                activeScorecardTab === 'Tactics' ? 'bg-[#D4AF37] text-black font-black' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              FC IQ Tactics
-            </button>
+            {isUserMatch && (
+              <button
+                onClick={() => setActiveScorecardTab('Tactics')}
+                className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+                  activeScorecardTab === 'Tactics' ? 'bg-[#D4AF37] text-black font-black' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                FC IQ Tactics
+              </button>
+            )}
             <button
               onClick={() => setActiveScorecardTab('Scorecard1')}
               className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${

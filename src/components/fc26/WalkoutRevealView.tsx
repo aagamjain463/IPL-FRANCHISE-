@@ -3,8 +3,7 @@ import { useGame } from '../../context/GameContext';
 import { FCPlayerCard } from './FCPlayerCard';
 import { getFCCardTier, getPlayerPlayStylePlus } from '../../engine/fc26Engine';
 import confetti from 'canvas-confetti';
-import { Sparkles, Trophy, ChevronRight, X, ArrowLeft, RotateCcw, Volume2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { Sparkles, Trophy, ChevronRight, X, ArrowLeft, RotateCcw } from 'lucide-react';
 
 export const WalkoutRevealView: React.FC = () => {
   const { gameState, currentWalkoutPlayer, exitWalkout, setActiveTab } = useGame();
@@ -104,7 +103,7 @@ export const WalkoutRevealView: React.FC = () => {
   const flag = countryFlags[player.nationality] || '🏏';
 
   return (
-    <div className="w-full flex-1 flex flex-col items-center justify-between p-3 sm:p-5 select-none overflow-hidden relative max-w-5xl mx-auto h-full min-h-[calc(100vh-5rem)]">
+    <div className="absolute inset-0 w-full max-w-full flex flex-col items-center justify-between p-2 sm:p-4 select-none overflow-hidden">
       {/* Stadium Spotlight Beams Background */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-0 left-1/4 w-80 sm:w-96 h-full bg-gradient-to-b from-blue-500/15 via-indigo-500/5 to-transparent transform -rotate-12 blur-3xl" />
@@ -113,7 +112,7 @@ export const WalkoutRevealView: React.FC = () => {
       </div>
 
       {/* Top Header Controls Bar */}
-      <div className="relative z-30 w-full flex items-center justify-between shrink-0 pt-1 pb-2">
+      <div className="relative z-30 w-full max-w-5xl mx-auto flex items-center justify-between shrink-0 pt-1 pb-2">
         <button
           id="btn-return-from-walkout"
           onClick={exitWalkout}
@@ -162,7 +161,7 @@ export const WalkoutRevealView: React.FC = () => {
       </div>
 
       {/* Center Stage Container - Fully Fitted, Clean Scaling & Zero Page Overflow */}
-      <div className="relative z-20 w-full max-w-xl flex-1 flex flex-col items-center justify-center my-auto min-h-0 text-center py-2">
+      <div className="relative z-20 w-full max-w-5xl mx-auto flex-1 min-h-0 flex flex-col items-center justify-center text-center py-1">
         
         {/* STAGES 0 - 3: TEASER REVEAL TUNNEL */}
         {stage < 4 && (
@@ -219,9 +218,11 @@ export const WalkoutRevealView: React.FC = () => {
             </div>
 
             {/* 3D FC Player Card Hero - Scaled gracefully to available height */}
-            <div className="my-1 flex items-center justify-center transform transition-transform duration-300 max-h-[46vh] sm:max-h-[50vh] shrink-1">
-              <div className="transform scale-[0.80] sm:scale-[0.90] md:scale-100 origin-center">
-                <FCPlayerCard player={player} size="md" isWalkout={true} />
+            <div className="my-1 flex items-center justify-center w-full min-h-0 overflow-hidden">
+              <div className="fc-walkout-card-frame grid place-items-center max-h-[46dvh] sm:max-h-[48dvh] md:max-h-[52dvh] lg:max-h-[54dvh]">
+                <div className="transform scale-[0.72] sm:scale-[0.82] md:scale-[0.92] lg:scale-100 origin-center">
+                  <FCPlayerCard player={player} size="md" isWalkout={true} />
+                </div>
               </div>
             </div>
 
@@ -248,7 +249,7 @@ export const WalkoutRevealView: React.FC = () => {
       </div>
 
       {/* Bottom Footer Actions Bar */}
-      <div className="relative z-30 w-full max-w-md flex items-center justify-center shrink-0 pb-1 pt-2">
+      <div className="relative z-30 w-full max-w-5xl mx-auto flex items-center justify-center shrink-0 pb-1 pt-2">
         {stage >= 4 ? (
           <button
             id="btn-confirm-walkout"

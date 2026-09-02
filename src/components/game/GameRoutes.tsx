@@ -41,12 +41,13 @@ export const GameRoutes: React.FC = () => {
   const fallback = <LoadingScreen route={route} durationMs={3600} />;
 
   if (currentScreen === 'Walkout' || activeTab === 'Walkout') {
+    // Dedicated full-viewport reveal: fits the device width exactly, no page scrolling.
     return (
-      <MainAppLayout>
+      <div className="fixed inset-0 z-[90] w-full h-dvh overflow-hidden bg-[#030712]">
         <WorldScreen route={route} compact>
           <Suspense fallback={fallback}><WalkoutRevealView /></Suspense>
         </WorldScreen>
-      </MainAppLayout>
+      </div>
     );
   }
 

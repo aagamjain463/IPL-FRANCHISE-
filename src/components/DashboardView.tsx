@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react';
 import { useGame } from '../context/GameContext';
 import { FCPlayerCard } from './fc26/FCPlayerCard';
@@ -60,7 +60,8 @@ export const DashboardView: React.FC = () => {
     setActiveTab,
     setCurrentScreen,
     prepareMatch,
-    setSelectedPlayerForModal
+    setSelectedPlayerForModal,
+    triggerWalkout
   } = useGame();
   const shouldReduceMotion = useReducedMotion();
   const pointerX = useMotionValue(0);
@@ -71,7 +72,6 @@ export const DashboardView: React.FC = () => {
   const heroLightY = useTransform(smoothY, [-0.5, 0.5], [-10, 10]);
   const posterX = useTransform(smoothX, [-0.5, 0.5], [10, -10]);
   const posterY = useTransform(smoothY, [-0.5, 0.5], [5, -5]);
-  const [walkoutPlayer, setWalkoutPlayer] = useState<any | null>(null);
 
   if (!gameState) return null;
 
@@ -329,7 +329,8 @@ export const DashboardView: React.FC = () => {
               </span>
               {captainPlayer && (
                 <button 
-                  onClick={() => setWalkoutPlayer(captainPlayer)}
+                  id="btn-trigger-walkout-home"
+                  onClick={() => triggerWalkout(captainPlayer)}
                   className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-black text-[10px] uppercase tracking-wider transition cursor-pointer"
                 >
                   Walkout
@@ -564,8 +565,6 @@ export const DashboardView: React.FC = () => {
         <button onClick={() => enterWorld('Challenges')}><Medal className="w-4 h-4" /> Challenges</button>
         <button onClick={() => enterWorld('Profile')}><Crown className="w-4 h-4" /> Settings</button>
       </section>
-
-      {walkoutPlayer && <FCPackOpeningModal player={walkoutPlayer} onClose={() => setWalkoutPlayer(null)} />}
     </motion.div>
   );
 };

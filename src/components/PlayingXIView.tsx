@@ -148,61 +148,6 @@ export const PlayingXIView: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fadeIn pb-16 font-sans">
-      
-      {/* 1. FC MOBILE MY TEAM HUD & TEAM OVR HEADER */}
-      <div className="bg-gradient-to-r from-[#070a14] via-[#0a0f1d] to-[#070a14] p-5 sm:p-6 rounded-3xl border border-[#182238] shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        
-        <div className="flex items-center gap-4">
-          <div 
-            className="w-16 h-16 rounded-2xl flex items-center justify-center font-black text-2xl shadow-xl border-2 border-[#00FF87]"
-            style={{ backgroundColor: userTeam.primaryColor, color: userTeam.secondaryColor }}
-          >
-            {userTeam.shortName}
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-xl sm:text-2xl font-black text-white uppercase italic tracking-tight font-heading">
-                {userTeam.name} Lineup
-              </h2>
-              <span className="text-[10px] font-mono font-black uppercase px-2.5 py-0.5 rounded-full bg-[#00FF87]/20 text-[#00FF87] border border-[#00FF87]/40">
-                ACTIVE SQUAD
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3 text-xs text-slate-400 mt-1 font-mono">
-              <span>Overseas: <strong className={overseasCountInXI > 4 ? 'text-red-400 font-bold' : 'text-blue-400 font-bold'}>{overseasCountInXI}/4 Max</strong></span>
-              <span>•</span>
-              <span>Keeper: <strong className={hasWK ? 'text-[#00FF87]' : 'text-red-400'}>{hasWK ? 'Ready' : 'Missing WK!'}</strong></span>
-            </div>
-          </div>
-        </div>
-
-        {/* Big FC Mobile Team OVR & Chemistry Pills */}
-        <div className="flex items-center gap-3">
-          <div className="bg-[#04060c] px-4 py-2.5 rounded-2xl border border-[#182238] text-center shadow-lg">
-            <span className="text-[9px] uppercase font-black text-slate-400 block tracking-widest font-mono">TEAM OVR</span>
-            <span className="text-2xl font-mono-sport font-black text-[#00FF87] leading-tight">{teamOvr}</span>
-          </div>
-
-          <div className="bg-[#04060c] px-4 py-2.5 rounded-2xl border border-[#182238] text-center shadow-lg">
-            <span className="text-[9px] uppercase font-black text-slate-400 block tracking-widest font-mono">CHEMISTRY</span>
-            <span className="text-2xl font-mono-sport font-black text-[#00E5FF] leading-tight">{teamChemistry}<span className="text-xs text-slate-500">/100</span></span>
-            <span className="text-[9px] font-mono text-[#00FF87] block">x{chemMultiplier.toFixed(3)} match bonus</span>
-          </div>
-
-          <button
-            id="btn-auto-best-xi"
-            onClick={autoSelectBestXI}
-            className="px-4 py-3 rounded-2xl bg-gradient-to-r from-[#00FF87] to-emerald-400 text-black font-black text-xs uppercase tracking-wider shadow-lg flex items-center gap-1.5 transition hover:scale-105 active:scale-95 cursor-pointer font-mono"
-            title="Auto-select highest OVR lineup within overseas rules"
-          >
-            <Wand2 className="w-4 h-4" />
-            <span>AUTO-BUILD</span>
-          </button>
-        </div>
-
-      </div>
 
       {selectedForSwap && (
         <div className="p-3 rounded-2xl bg-[#00FF87]/20 border border-[#00FF87] text-[#00FF87] flex items-center justify-between text-xs font-bold animate-pulse">
@@ -219,8 +164,8 @@ export const PlayingXIView: React.FC = () => {
         </div>
       )}
 
-      {/* 2. MAIN FC MOBILE STADIUM PITCH FORMATION */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* 2. MAIN FC MOBILE STADIUM PITCH FORMATION — raised to the top-left, next to the bench */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* PITCH 8 COLS: 11 CARDS STANDING ON TURF */}
         <div className="lg:col-span-8 bg-[#0a0f1d] p-4 sm:p-6 rounded-3xl border border-[#182238] shadow-2xl relative overflow-hidden flex flex-col justify-between">
@@ -229,27 +174,26 @@ export const PlayingXIView: React.FC = () => {
               <span className="text-xs font-black uppercase tracking-widest text-[#00FF87] flex items-center gap-1.5">
                 <Users className="w-4 h-4" /> MATCHDAY FORMATION PITCH
               </span>
+              <span className="hidden sm:inline text-[9px] font-mono uppercase tracking-widest text-slate-500 bg-black/40 px-2 py-0.5 rounded-full">
+                BIG FIELD VIEW
+              </span>
             </div>
             <span className="text-[10px] font-mono text-slate-400">
               Click card to swap • Double-click for bio
             </span>
           </div>
 
-          {/* Authentic FC Turf Grass Canvas */}
-          <div className="fc-pitch-turf rounded-2xl p-4 sm:p-6 border-2 border-emerald-900/60 shadow-inner relative flex flex-col justify-around min-h-[520px] gap-6">
-            
-            {/* Pitch Center Ring Overlay */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-25">
-              <div className="w-36 h-36 rounded-full border-2 border-white" />
-              <div className="absolute w-full h-[2px] bg-white" />
-            </div>
+          {/* Authentic FC Turf Grass Canvas — taller, longer, stadium-lit */}
+          <div className="fc-pitch-turf rounded-2xl p-5 sm:p-7 relative flex flex-col justify-around min-h-[640px] sm:min-h-[720px] xl:min-h-[780px] gap-8">
+            {/* Center circle + pitch strip (drawn by fc-pitch-turf CSS) */}
+            <div className="fc-pitch-circle" />
 
             {/* TOP ROW: Top-Order Batters (Slots 1, 2, 3) */}
-            <div>
-              <span className="text-[9px] font-mono font-black uppercase tracking-widest text-emerald-300 bg-black/60 px-2 py-0.5 rounded-full mb-2 inline-block">
+            <div className="relative z-10">
+              <span className="text-[9px] font-mono font-black uppercase tracking-widest text-emerald-300 bg-black/70 px-2.5 py-0.5 rounded-full mb-3 inline-block shadow">
                 TOP-ORDER BATTERS
               </span>
-              <div className="flex items-center justify-around gap-2">
+              <div className="grid grid-cols-3 place-items-center gap-3 sm:gap-4">
                 {topOrder.map((player, idx) => {
                   const isSelected = selectedForSwap === player.id;
                   const isCaptain = playingXI.captainPlayerId === player.id;
@@ -263,7 +207,7 @@ export const PlayingXIView: React.FC = () => {
                     >
                       <FCPlayerCard
                         player={player}
-                        size="mini"
+                        size="pitch"
                         isSelected={isSelected}
                       />
                       <div className="flex items-center justify-center gap-1 mt-1">
@@ -293,11 +237,11 @@ export const PlayingXIView: React.FC = () => {
             </div>
 
             {/* MIDDLE ROW: Middle Order & Finishers (Slots 4, 5, 6, 7) */}
-            <div>
-              <span className="text-[9px] font-mono font-black uppercase tracking-widest text-amber-300 bg-black/60 px-2 py-0.5 rounded-full mb-2 inline-block">
+            <div className="relative z-10">
+              <span className="text-[9px] font-mono font-black uppercase tracking-widest text-amber-300 bg-black/70 px-2.5 py-0.5 rounded-full mb-3 inline-block shadow">
                 MIDDLE ORDER & ALL-ROUNDERS
               </span>
-              <div className="flex items-center justify-around gap-2">
+              <div className="grid grid-cols-4 place-items-center gap-3 sm:gap-4">
                 {middleOrder.map((player, idx) => {
                   const isSelected = selectedForSwap === player.id;
                   const isCaptain = playingXI.captainPlayerId === player.id;
@@ -311,7 +255,7 @@ export const PlayingXIView: React.FC = () => {
                     >
                       <FCPlayerCard
                         player={player}
-                        size="mini"
+                        size="pitch"
                         isSelected={isSelected}
                       />
                       <div className="flex items-center justify-center gap-1 mt-1">
@@ -341,11 +285,11 @@ export const PlayingXIView: React.FC = () => {
             </div>
 
             {/* BOTTOM ROW: Bowling Core Attack (Slots 8, 9, 10, 11) */}
-            <div>
-              <span className="text-[9px] font-mono font-black uppercase tracking-widest text-cyan-300 bg-black/60 px-2 py-0.5 rounded-full mb-2 inline-block">
+            <div className="relative z-10">
+              <span className="text-[9px] font-mono font-black uppercase tracking-widest text-cyan-300 bg-black/70 px-2.5 py-0.5 rounded-full mb-3 inline-block shadow">
                 PACE & SPIN ATTACK
               </span>
-              <div className="flex items-center justify-around gap-2">
+              <div className="grid grid-cols-4 place-items-center gap-3 sm:gap-4">
                 {bowlingAttack.map((player, idx) => {
                   const isSelected = selectedForSwap === player.id;
                   const isCaptain = playingXI.captainPlayerId === player.id;
@@ -359,7 +303,7 @@ export const PlayingXIView: React.FC = () => {
                     >
                       <FCPlayerCard
                         player={player}
-                        size="mini"
+                        size="pitch"
                         isSelected={isSelected}
                       />
                       <div className="flex items-center justify-center gap-1 mt-1">
@@ -482,6 +426,61 @@ export const PlayingXIView: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+
+      </div>
+
+      {/* 3. FC MOBILE MY TEAM HUD & TEAM OVR HEADER (kept under the formation) */}
+      <div className="bg-gradient-to-r from-[#070a14] via-[#0a0f1d] to-[#070a14] p-5 sm:p-6 rounded-3xl border border-[#182238] shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        
+        <div className="flex items-center gap-4">
+          <div 
+            className="w-16 h-16 rounded-2xl flex items-center justify-center font-black text-2xl shadow-xl border-2 border-[#00FF87]"
+            style={{ backgroundColor: userTeam.primaryColor, color: userTeam.secondaryColor }}
+          >
+            {userTeam.shortName}
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-xl sm:text-2xl font-black text-white uppercase italic tracking-tight font-heading">
+                {userTeam.name} Lineup
+              </h2>
+              <span className="text-[10px] font-mono font-black uppercase px-2.5 py-0.5 rounded-full bg-[#00FF87]/20 text-[#00FF87] border border-[#00FF87]/40">
+                ACTIVE SQUAD
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 text-xs text-slate-400 mt-1 font-mono">
+              <span>Overseas: <strong className={overseasCountInXI > 4 ? 'text-red-400 font-bold' : 'text-blue-400 font-bold'}>{overseasCountInXI}/4 Max</strong></span>
+              <span>•</span>
+              <span>Keeper: <strong className={hasWK ? 'text-[#00FF87]' : 'text-red-400'}>{hasWK ? 'Ready' : 'Missing WK!'}</strong></span>
+            </div>
+          </div>
+        </div>
+
+        {/* Big FC Mobile Team OVR & Chemistry Pills */}
+        <div className="flex items-center gap-3">
+          <div className="bg-[#04060c] px-4 py-2.5 rounded-2xl border border-[#182238] text-center shadow-lg">
+            <span className="text-[9px] uppercase font-black text-slate-400 block tracking-widest font-mono">TEAM OVR</span>
+            <span className="text-2xl font-mono-sport font-black text-[#00FF87] leading-tight">{teamOvr}</span>
+          </div>
+
+          <div className="bg-[#04060c] px-4 py-2.5 rounded-2xl border border-[#182238] text-center shadow-lg">
+            <span className="text-[9px] uppercase font-black text-slate-400 block tracking-widest font-mono">CHEMISTRY</span>
+            <span className="text-2xl font-mono-sport font-black text-[#00E5FF] leading-tight">{teamChemistry}<span className="text-xs text-slate-500">/100</span></span>
+            <span className="text-[9px] font-mono text-[#00FF87] block">x{chemMultiplier.toFixed(3)} match bonus</span>
+          </div>
+
+          <button
+            id="btn-auto-best-xi"
+            onClick={autoSelectBestXI}
+            className="px-4 py-3 rounded-2xl bg-gradient-to-r from-[#00FF87] to-emerald-400 text-black font-black text-xs uppercase tracking-wider shadow-lg flex items-center gap-1.5 transition hover:scale-105 active:scale-95 cursor-pointer font-mono"
+            title="Auto-select highest OVR lineup within overseas rules"
+          >
+            <Wand2 className="w-4 h-4" />
+            <span>AUTO-BUILD</span>
+          </button>
         </div>
 
       </div>
