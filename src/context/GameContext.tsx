@@ -63,6 +63,9 @@ interface GameContextType {
   // tab-demotion logic, so standalone flows (post-match, match, auction) are
   // never downgraded to Dashboard by a stale state read during navigation.
   syncRouteFromPath: (screen: GameScreen, tab: AppTab) => void;
+  currentWalkoutPlayer: Player | string | null;
+  triggerWalkout: (player: Player | string) => void;
+  exitWalkout: () => void;
   toggleMute: () => void;
   setSelectedPlayerForModal: (p: Player | null) => void;
   startNewFranchise: (teamId: string, managerName: string, autoSimulateAuction?: boolean, startMultiplayerAuction?: boolean) => void;
@@ -129,6 +132,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [currentScreen, setCurrentScreenState] = useState<GameScreen>('MainMenu');
   const [activeTab, setActiveTabState] = useState<AppTab>('Dashboard');
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [currentWalkoutPlayer, setCurrentWalkoutPlayer] = useState<Player | string | null>(null);
   const [selectedPlayerForModal, setSelectedPlayerForModal] = useState<Player | null>(null);
   const [activeChallenge, setActiveChallenge] = useState<ChallengeScenario | null>(null);
   const [toast, setToast] = useState<{ id: number; message: string; tone?: 'info' | 'success' | 'warn' | 'danger' } | null>(null);
@@ -167,6 +171,21 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const syncRouteFromPath = (screen: GameScreen, tab: AppTab) => {
     setCurrentScreenState(screen);
     setActiveTabState(tab);
+  };
+
+  const triggerWalkout = (player: Player | string) => {
+    setCurrentWalkoutPlayer(player);
+    setCurrentScreenState('Walkout');
+    setActiveTabState('Walkout');
+    pushGameRoute('Walkout', 'Walkout');
+    soundFx.playBigReveal();
+  };
+
+  const exitWalkout = () => {
+    setCurrentWalkoutPlayer(null);
+    setCurrentScreenState('Dashboard');
+    setActiveTabState('Dashboard');
+    pushGameRoute('Dashboard', 'Dashboard');
   };
 
   const showToast = (message: string, tone: 'info' | 'success' | 'warn' | 'danger' = 'info') => {
@@ -2116,6 +2135,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCurrentScreen,
         setActiveTab,
         syncRouteFromPath,
+        currentWalkoutPlayer,
+        triggerWalkout,
+        exitWalkout,
         toggleMute,
         setSelectedPlayerForModal,
         startNewFranchise,

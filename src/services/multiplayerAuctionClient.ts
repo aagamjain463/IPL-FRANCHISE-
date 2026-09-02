@@ -456,6 +456,29 @@ export const MultiplayerAuctionClient = {
     return localRes;
   },
 
+  // Finish / Conclude Auction Early (Host only)
+  async finishAuction(roomCode: string): Promise<{ success: boolean; state?: MultiplayerRoomState; error?: string }> {
+    const code = roomCode.trim().toUpperCase();
+    const { playerId } = getOrCreatePlayerIdentity();
+
+    const localRes = localMultiplayerEngine.finishAuction(code, playerId);
+    if (localRes.success && localRes.state) {
+      syncRoomStateAcrossTransports(localRes.state);
+    }
+
+    try {
+      safeFetchJson('/api/multiplayer/finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomCode: code, hostPlayerId: playerId })
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
+
+    return localRes;
+  },
+
   // Leave Room
   async leaveRoom(roomCode: string): Promise<void> {
     try {

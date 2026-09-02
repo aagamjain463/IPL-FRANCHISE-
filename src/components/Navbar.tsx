@@ -7,7 +7,8 @@ import {
   Users, BarChart3, ShoppingBag, Zap, 
   Sparkles, Gift, Volume2, VolumeX, Shuffle, RotateCcw, X, 
   Crown, Layers, Palette, Cloud, CloudCheck, LogIn, Check, Globe,
-  Copy, ExternalLink, AlertCircle, AlertTriangle, Download, Upload, RefreshCw, Key, ShieldCheck
+  Copy, ExternalLink, AlertCircle, AlertTriangle, Download, Upload, RefreshCw, Key, ShieldCheck,
+  Radio
 } from 'lucide-react';
 import { getFranchiseLevelInfo } from '../engine/progressionEngine';
 import { getRouteForTab } from '../navigation/screenRoutes';
@@ -193,17 +194,19 @@ export const Navbar: React.FC = () => {
     reader.readAsText(file);
   };
 
-  // Streamlined Minimalist Nav Tabs including Cards and Auction
+  // Streamlined Minimalist Nav Tabs including Cards, Auction, and Live Multiplayer
   const primaryNavTabs: { 
     id: AppTab; 
     label: string; 
     icon: React.ReactNode; 
     badge?: number;
+    isLivePulse?: boolean;
   }[] = [
     { id: 'Dashboard', label: 'HUB', icon: <BarChart3 className="w-4 h-4" /> },
     { id: 'PlayingXI', label: 'SQUAD', icon: <Users className="w-4 h-4" /> },
     { id: 'Squad', label: 'CARDS', icon: <Layers className="w-4 h-4" /> },
     { id: 'AuctionLive', label: 'AUCTION', icon: <ShoppingBag className="w-4 h-4" /> },
+    { id: 'MultiplayerAuction', label: 'MULTIPLAYER', icon: <Radio className="w-4 h-4 text-[#00FF87]" />, isLivePulse: true },
     { id: 'Play', label: 'MATCHDAY', icon: <Zap className="w-4 h-4 fill-current" /> },
     { id: 'YouthAcademy', label: 'EVO LAB', icon: <Sparkles className="w-4 h-4" /> },
     { id: 'Leaderboard', label: 'RANKS', icon: <Globe className="w-4 h-4" /> },
@@ -211,7 +214,7 @@ export const Navbar: React.FC = () => {
   ];
 
   const handleTabClick = (tabId: AppTab) => {
-    const nextScreen = tabId === 'AuctionLive' ? 'Auction' : tabId === 'MatchLive' ? 'MatchLive' : 'Dashboard';
+    const nextScreen = tabId === 'AuctionLive' ? 'Auction' : tabId === 'MultiplayerAuction' ? 'MultiplayerAuction' : tabId === 'MatchLive' ? 'MatchLive' : 'Dashboard';
     setCurrentScreen(nextScreen);
     setActiveTab(tabId);
     window.history.pushState({}, '', getRouteForTab(tabId));
@@ -219,7 +222,8 @@ export const Navbar: React.FC = () => {
 
   const isHomeActive = activeTab === 'Dashboard';
   const isPlayActive = activeTab === 'Play' || activeTab === 'Schedule' || activeTab === 'Challenges' || activeTab === 'WhatIfSimulator' || activeTab === 'MatchLive';
-  const isAuctionActive = activeTab === 'AuctionLive' || activeTab === 'MultiplayerAuction';
+  const isMultiplayerActive = activeTab === 'MultiplayerAuction';
+  const isAuctionActive = activeTab === 'AuctionLive';
   const isSquadActive = activeTab === 'PlayingXI';
   const isCardsActive = activeTab === 'Squad';
   const isEvoActive = activeTab === 'YouthAcademy' || activeTab === 'FCEvolutions';
@@ -284,8 +288,10 @@ export const Navbar: React.FC = () => {
               else if (tab.id === 'PlayingXI') isTabSelected = isSquadActive;
               else if (tab.id === 'Squad') isTabSelected = isCardsActive;
               else if (tab.id === 'AuctionLive') isTabSelected = isAuctionActive;
+              else if (tab.id === 'MultiplayerAuction') isTabSelected = isMultiplayerActive;
               else if (tab.id === 'Play') isTabSelected = isPlayActive;
               else if (tab.id === 'YouthAcademy') isTabSelected = isEvoActive;
+              else if (tab.id === 'Leaderboard') isTabSelected = activeTab === 'Leaderboard';
               else if (tab.id === 'Rewards') isTabSelected = isVaultActive;
 
               return (
@@ -299,13 +305,20 @@ export const Navbar: React.FC = () => {
                     isTabSelected
                       ? 'fc-dock-active'
                       : 'text-slate-400 hover:text-white hover:bg-white/5'
-                  }`}
+                  } ${tab.id === 'MultiplayerAuction' && !isTabSelected ? 'border border-[#00FF87]/20 bg-[#00FF87]/5 text-emerald-300' : ''}`}
                 >
                   {isTabSelected && !shouldReduceMotion && (
                     <motion.span layoutId="primary-nav-active" className="fc-dock-item__motion-bg" transition={motionSprings.nav} />
                   )}
-                  <span className="relative z-10 flex items-center gap-1.5">{tab.icon}</span>
-                  <span className="relative z-10">{tab.label}</span>
+                  <span className="relative z-10 flex items-center gap-1.5">
+                    {tab.icon}
+                  </span>
+                  <span className="relative z-10 flex items-center gap-1">
+                    {tab.label}
+                    {tab.isLivePulse && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#00FF87] animate-pulse" />
+                    )}
+                  </span>
                   {tab.badge && tab.badge > 0 ? (
                     <span className="relative z-10 w-3.5 h-3.5 rounded-full bg-red-500 text-white font-mono text-[8px] font-bold flex items-center justify-center">
                       {tab.badge}
@@ -392,8 +405,10 @@ export const Navbar: React.FC = () => {
           else if (tab.id === 'PlayingXI') isTabSelected = isSquadActive;
           else if (tab.id === 'Squad') isTabSelected = isCardsActive;
           else if (tab.id === 'AuctionLive') isTabSelected = isAuctionActive;
+          else if (tab.id === 'MultiplayerAuction') isTabSelected = isMultiplayerActive;
           else if (tab.id === 'Play') isTabSelected = isPlayActive;
           else if (tab.id === 'YouthAcademy') isTabSelected = isEvoActive;
+          else if (tab.id === 'Leaderboard') isTabSelected = activeTab === 'Leaderboard';
           else if (tab.id === 'Rewards') isTabSelected = isVaultActive;
 
           return (

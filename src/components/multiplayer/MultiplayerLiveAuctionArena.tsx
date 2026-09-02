@@ -22,6 +22,7 @@ interface MultiplayerLiveAuctionArenaProps {
   onPlaceBid: (bidAmountCr: number) => Promise<boolean>;
   onPauseAuction: () => Promise<boolean>;
   onResumeAuction: () => Promise<boolean>;
+  onFinishAuction?: () => Promise<boolean>;
   onLeaveRoom: () => void;
   errorMessage: string | null;
 }
@@ -35,12 +36,14 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
   onPlaceBid,
   onPauseAuction,
   onResumeAuction,
+  onFinishAuction,
   onLeaveRoom,
   errorMessage
 }) => {
   const [showSquadModal, setShowSquadModal] = useState<boolean>(false);
   const [selectedInspectSquadParticipantId, setSelectedInspectSquadParticipantId] = useState<string>(currentUserId);
   const [customBidInput, setCustomBidInput] = useState<string>('');
+  const [showFinishConfirm, setShowFinishConfirm] = useState<boolean>(false);
 
   const currentParticipant = roomState.participants.find(p => p.id === currentUserId);
   const myFranchise = currentParticipant?.franchiseId ? INITIAL_TEAMS[currentParticipant.franchiseId] : null;
@@ -102,24 +105,38 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
         <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
           {/* Host Pause/Resume Button (Host only retains this control!) */}
           {isHost && (
-            <button
-              id="btn-multiplayer-host-pause-resume"
-              onClick={() => {
-                if (roomState.isPaused) {
-                  onResumeAuction();
-                } else {
-                  onPauseAuction();
-                }
-              }}
-              className={`px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition border flex items-center gap-1.5 cursor-pointer ${
-                roomState.isPaused
-                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 animate-pulse'
-                  : 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
-              }`}
-            >
-              {roomState.isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-              <span>{roomState.isPaused ? 'Resume Auction' : 'Pause Auction'}</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                id="btn-multiplayer-host-pause-resume"
+                onClick={() => {
+                  if (roomState.isPaused) {
+                    onResumeAuction();
+                  } else {
+                    onPauseAuction();
+                  }
+                }}
+                className={`px-3 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition border flex items-center gap-1.5 cursor-pointer ${
+                  roomState.isPaused
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 animate-pulse'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                }`}
+              >
+                {roomState.isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+                <span>{roomState.isPaused ? 'Resume' : 'Pause'}</span>
+              </button>
+
+              {onFinishAuction && (
+                <button
+                  id="btn-multiplayer-host-finish-early"
+                  onClick={() => setShowFinishConfirm(true)}
+                  className="px-3 py-2 rounded-xl bg-red-500/15 hover:bg-red-500/30 text-red-300 border border-red-500/40 font-bold text-xs uppercase tracking-wider transition flex items-center gap-1 cursor-pointer"
+                  title="Conclude auction and generate final leaderboard"
+                >
+                  <Gavel className="w-3.5 h-3.5" />
+                  <span>Conclude</span>
+                </button>
+              )}
+            </div>
           )}
 
           <button
@@ -550,6 +567,54 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HOST FINISH AUCTION CONFIRMATION MODAL */}
+      {showFinishConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0f172a] border border-red-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scaleUp">
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center border border-red-500/40 shrink-0">
+                <Gavel className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white uppercase tracking-tight">
+                  Conclude Auction?
+                </h3>
+                <p className="text-xs text-slate-400">
+                  This will end active bidding and immediately rank all participants on the Final Leaderboard.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-[#05070a] rounded-xl border border-[#1e293b] text-xs text-slate-300 space-y-1">
+              <p>• Final scores will be calculated for all {roomState.participants.length} franchises.</p>
+              <p>• Winner podium, best playing XIs, and rewards will be awarded.</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                id="btn-cancel-conclude"
+                onClick={() => setShowFinishConfirm(false)}
+                className="px-4 py-2 rounded-xl bg-[#1e293b] hover:bg-[#334155] text-slate-300 font-bold text-xs uppercase tracking-wider transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                id="btn-confirm-conclude"
+                onClick={async () => {
+                  setShowFinishConfirm(false);
+                  if (onFinishAuction) {
+                    await onFinishAuction();
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs uppercase tracking-wider transition shadow-lg cursor-pointer"
+              >
+                Yes, Conclude & Rank
+              </button>
             </div>
           </div>
         </div>

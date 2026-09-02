@@ -33,6 +33,7 @@ const PressConferenceView = React.lazy(() => import('../PressConferenceView').th
 const SeasonRecapView = React.lazy(() => import('../SeasonRecapView').then(m => ({ default: m.SeasonRecapView })));
 const OffSeasonView = React.lazy(() => import('../OffSeasonView').then(m => ({ default: m.OffSeasonView })));
 const NewsRoomView = React.lazy(() => import('./PremiumWorldViews').then(m => ({ default: m.PremiumNewsView })));
+const WalkoutRevealView = React.lazy(() => import('../fc26/WalkoutRevealView').then(m => ({ default: m.WalkoutRevealView })));
 
 export const GameRoutes: React.FC = () => {
   const { currentScreen, activeTab } = useGame();

@@ -12,7 +12,14 @@ import {
 import { INITIAL_PLAYERS } from '../data/players';
 import { INITIAL_TEAMS } from '../data/teams';
 import { Player } from '../types/cricket';
-import { calculateAuctionPerformanceScore, getMultiplayerBidIncrement, normalizeCr } from '../multiplayer/auctionRules';
+import { 
+  calculateAuctionScore, 
+  calculateAuctionPerformanceScore,
+  assignRankRewards, 
+  generateBestPlayingXI,
+  getMultiplayerBidIncrement, 
+  normalizeCr 
+} from '../multiplayer/auctionRules';
 
 const DEFAULT_CONFIG: MultiplayerAuctionConfig = {
   format: 'Mega Auction',
@@ -105,46 +112,65 @@ function computeAwards(room: MultiplayerRoomState): MultiplayerAward[] {
 }
 
 function computeRankings(room: MultiplayerRoomState): MultiplayerRanking[] {
-  return room.participants.map(p => {
+  const totalCount = room.participants.length;
+
+  const evaluated = room.participants.map(p => {
     const team = p.franchiseId ? INITIAL_TEAMS[p.franchiseId] : null;
-    const squadCount = p.squadPlayers.length;
-    const squadOvr = squadCount > 0 
-      ? Math.round(p.squadPlayers.reduce((sum, pl) => sum + pl.overall, 0) / squadCount) 
-      : 0;
-    const overseasCount = p.squadPlayers.filter(pl => pl.isOverseas).length;
-    const spentPurseCr = Number((room.config.startingPurseCr - p.purseCr).toFixed(2));
-    const remainingPurseCr = Number(p.purseCr.toFixed(2));
-    const auctionScore = calculateAuctionPerformanceScore(p, room.config.startingPurseCr);
+    const targetSquad = room.config.poolType === 'Top 15 Accelerated' ? 9 : 15;
+    const evaluation = calculateAuctionScore(p, room.config.startingPurseCr, targetSquad);
+
     const purchases = room.soldRecords.filter(r => r.winningParticipantId === p.id);
     const bestPurchase = purchases.slice().sort((a, b) => (b.player.overall / Math.max(0.25, b.sellingPriceCr)) - (a.player.overall / Math.max(0.25, a.sellingPriceCr)))[0];
     const biggestOverpay = purchases.slice().sort((a, b) => b.sellingPriceCr - a.sellingPriceCr)[0];
 
     return {
-      rank: 1,
       participantId: p.id,
+      playerId: p.id,
       participantName: p.name,
+      playerName: p.name,
       franchiseId: p.franchiseId || 'csk',
       franchiseName: team?.name || 'Franchise',
       franchiseShort: team?.shortName || 'IPL',
       primaryColor: team?.primaryColor || '#D4AF37',
       secondaryColor: team?.secondaryColor || '#000',
-      squadOvr,
-      squadCount,
-      overseasCount,
-      spentPurseCr,
-      remainingPurseCr,
-      auctionScore,
+      finalScore: evaluation.finalScore,
+      auctionScore: evaluation.finalScore,
+      breakdown: evaluation.breakdown,
+      squadOvr: evaluation.squadOvr,
+      squadCount: evaluation.playersBought,
+      playersBought: evaluation.playersBought,
+      overseasCount: evaluation.overseasCount,
+      spentPurseCr: evaluation.spentPurseCr,
+      remainingPurseCr: evaluation.remainingPurseCr,
+      squadValueCr: evaluation.squadValueCr,
+      playingXIOverall: evaluation.playingXIOverall,
+      playingXIPlayers: evaluation.playingXIPlayers,
+      marqueeCount: evaluation.marqueeCount,
       bestPurchaseName: bestPurchase?.player.name,
+      bestPurchasePriceCr: bestPurchase?.sellingPriceCr,
       biggestOverpayName: biggestOverpay?.player.name
     };
-  }).sort((a, b) => {
-    if (b.auctionScore !== a.auctionScore) return b.auctionScore - a.auctionScore;
+  });
+
+  evaluated.sort((a, b) => {
+    if (Math.abs(b.finalScore - a.finalScore) > 0.001) return b.finalScore - a.finalScore;
+    if (b.playingXIOverall !== a.playingXIOverall) return b.playingXIOverall - a.playingXIOverall;
     if (b.squadOvr !== a.squadOvr) return b.squadOvr - a.squadOvr;
-    return b.squadCount - a.squadCount;
-  }).map((r, index) => ({
-    ...r,
-    rank: index + 1
-  }));
+    if (Math.abs(b.remainingPurseCr - a.remainingPurseCr) > 0.001) return b.remainingPurseCr - a.remainingPurseCr;
+    return a.participantId.localeCompare(b.participantId);
+  });
+
+  return evaluated.map((r, index) => {
+    const rank = index + 1;
+    const rewards = assignRankRewards(rank, totalCount);
+    return {
+      ...r,
+      rank,
+      rewardTitle: rewards.rewardTitle,
+      rewardBadge: rewards.rewardBadge,
+      xpReward: rewards.xpReward
+    };
+  });
 }
 
 const LOCAL_STORAGE_ROOMS_KEY = 'ipl_active_local_rooms_v2';
@@ -709,6 +735,26 @@ class LocalMultiplayerEngine {
     room.isPaused = false;
     room.pausedByHostId = null;
     this.broadcast(roomCode, { type: 'AUCTION_RESUMED' });
+    this.broadcastState(room);
+    return { success: true, state: room };
+  }
+
+  finishAuction(roomCode: string, hostPlayerId?: string): { success: boolean; state?: MultiplayerRoomState; error?: string } {
+    const room = this.getRoom(roomCode);
+    if (!room) return { success: false, error: 'Room not found' };
+    if (hostPlayerId && room.hostId !== hostPlayerId) return { success: false, error: 'Only host can finish auction' };
+
+    this.clearTimers(roomCode);
+    room.status = 'completed';
+    room.currentLotPlayer = null;
+    room.rankings = computeRankings(room);
+    room.awards = computeAwards(room);
+
+    this.broadcast(roomCode, {
+      type: 'AUCTION_COMPLETED',
+      rankings: room.rankings,
+      awards: room.awards
+    });
     this.broadcastState(room);
     return { success: true, state: room };
   }

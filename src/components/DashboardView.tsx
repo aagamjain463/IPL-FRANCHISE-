@@ -11,6 +11,7 @@ import {
   ArrowRight,
   Bell,
   CalendarDays,
+  Check,
   ChevronRight,
   Crown,
   Dumbbell,
@@ -118,85 +119,77 @@ export const DashboardView: React.FC = () => {
 
   const worlds = [
     {
-      title: 'Ultimate Auction',
-      label: 'Solo + Live Multiplayer',
-      desc: 'Host real-time rooms, battle friends, or run solo purse-pressure auction nights.',
-      stat: `${auctionProgress}% auction`,
-      tab: 'AuctionLive' as AppTab,
-      screen: 'Auction' as GameScreen,
-      icon: <Gavel className="w-6 h-6" />,
-      tone: '#D4AF37',
-      className: 'hub-world--auction'
-    },
-    {
-      title: 'Franchise HQ',
-      label: 'Boardroom',
-      desc: 'Facilities, finances, identity, fan pulse and dynasty growth.',
-      stat: `LV ${levelInfo.level}`,
-      tab: 'Club' as AppTab,
-      icon: <Shield className="w-6 h-6" />,
-      tone: '#FFE27D',
-      className: 'hub-world--club'
-    },
-    {
-      title: 'Squad Galaxy',
-      label: 'Player Cards',
-      desc: 'Inspect stars, form, fitness, contracts and future upgrades.',
-      stat: `${userPlayers.length}/25 players`,
+      title: 'Squad Gallery',
+      label: 'Player Cards & Form',
+      stat: `${userPlayers.length} Players`,
       tab: 'Squad' as AppTab,
-      icon: <Users className="w-6 h-6" />,
+      icon: <Users className="w-5 h-5" />,
       tone: '#00E5FF',
       className: 'hub-world--squad'
     },
     {
-      title: 'XI Tactics Lab',
-      label: 'Match Selection',
-      desc: 'Captain, vice captain, impact player, roles and balance.',
-      stat: `${xiPlayers.length}/11 XI`,
+      title: 'Playing XI Lab',
+      label: 'Matchday Lineup & Tactics',
+      stat: `${xiPlayers.length}/11 Selected`,
       tab: 'PlayingXI' as AppTab,
-      icon: <Gauge className="w-6 h-6" />,
+      icon: <Gauge className="w-5 h-5" />,
       tone: '#00FF87',
       className: 'hub-world--xi'
     },
     {
-      title: 'Tournament',
-      label: 'Competition Map',
-      desc: 'Fixtures, standings, records, playoff ladder and qualification.',
-      stat: userStanding ? `${userStanding.points} pts` : '0 pts',
-      tab: 'League' as AppTab,
-      icon: <Trophy className="w-6 h-6" />,
-      tone: '#8B5CF6',
-      className: 'hub-world--league'
+      title: 'Mega Auction',
+      label: 'Solo Bidding War Room',
+      stat: `${auctionProgress}% Pool`,
+      tab: 'AuctionLive' as AppTab,
+      screen: 'Auction' as GameScreen,
+      icon: <Gavel className="w-5 h-5" />,
+      tone: '#D4AF37',
+      className: 'hub-world--auction'
     },
     {
-      title: 'Matchday',
-      label: 'Stadium Tunnel',
-      desc: 'Broadcast simulation cockpit, ball-by-ball tactics and momentum.',
+      title: 'Match Center',
+      label: 'Live Matchday Cockpit',
       stat: nextUserFixture ? `M${nextUserFixture.matchNumber}` : 'Ready',
       tab: 'Play' as AppTab,
-      icon: <Zap className="w-6 h-6 fill-current" />,
+      icon: <Zap className="w-5 h-5 fill-current" />,
       tone: '#FF1E56',
       className: 'hub-world--match'
     },
     {
+      title: 'Tournament',
+      label: 'Standings & Fixtures',
+      stat: userStanding ? `${userStanding.points} pts` : 'Table',
+      tab: 'League' as AppTab,
+      icon: <Trophy className="w-5 h-5" />,
+      tone: '#8B5CF6',
+      className: 'hub-world--league'
+    },
+    {
       title: 'Scouting Net',
-      label: 'Data Room',
-      desc: 'Watchlists, reports, AI recommendations and hidden-value searches.',
-      stat: `${gameState.scoutingDepartment?.watchlist?.length || 0} targets`,
+      label: 'Talent Intelligence',
+      stat: `${gameState.scoutingDepartment?.watchlist?.length || 0} Targets`,
       tab: 'Scout' as AppTab,
-      icon: <Target className="w-6 h-6" />,
+      icon: <Target className="w-5 h-5" />,
       tone: '#38BDF8',
       className: 'hub-world--scout'
     },
     {
       title: 'Youth Academy',
-      label: 'Evolution Lab',
-      desc: 'Create the next icon through prospects, development and pathways.',
-      stat: `${gameState.youthAcademyPool?.length || 0} prospects`,
+      label: 'Wonderkid Evolutions',
+      stat: `${gameState.youthAcademyPool?.length || 0} Prospects`,
       tab: 'YouthAcademy' as AppTab,
-      icon: <Sparkles className="w-6 h-6" />,
+      icon: <Sparkles className="w-5 h-5" />,
       tone: '#10B981',
       className: 'hub-world--academy'
+    },
+    {
+      title: 'Franchise HQ',
+      label: 'Club Boardroom & Staff',
+      stat: `LV ${levelInfo.level}`,
+      tab: 'Club' as AppTab,
+      icon: <Shield className="w-5 h-5" />,
+      tone: '#FFE27D',
+      className: 'hub-world--club'
     }
   ];
 
@@ -281,12 +274,71 @@ export const DashboardView: React.FC = () => {
         ))}
       </motion.section>
 
+      {/* HIGHLIGHT OF THE GAME: PROMINENT LIVE MULTIPLAYER ARENA (TOP PLACEMENT) */}
+      <motion.section 
+        className="home-multiplayer-hero-banner" 
+        variants={shouldReduceMotion ? undefined : cardMotion}
+      >
+        <div className="home-multiplayer-hero-banner__glow" />
+        <div className="home-multiplayer-hero-banner__inner">
+          <div className="home-multiplayer-hero-banner__content">
+            <div className="home-multiplayer-hero-banner__badge">
+              <span className="w-2 h-2 rounded-full bg-[#00FF87] animate-ping" />
+              <span className="text-[#00FF87] font-black tracking-widest text-[11px] uppercase flex items-center gap-1.5">
+                <Radio className="w-3.5 h-3.5" /> LIVE MULTIPLAYER ARENA
+              </span>
+              <span className="home-multiplayer-hero-banner__badge-pill">REAL-TIME PVP</span>
+            </div>
+
+            <h2 className="home-multiplayer-hero-banner__title">
+              LIVE MULTIPLAYER AUCTION
+            </h2>
+
+            <p className="home-multiplayer-hero-banner__desc">
+              Synchronized real-time IPL bidding war with live human managers. Host a private room with a share code or battle in public multiplayer lobbies.
+            </p>
+
+            <div className="home-multiplayer-hero-banner__features">
+              <div className="home-multiplayer-hero-banner__pill">
+                <Check className="w-3.5 h-3.5 text-[#00FF87]" /> Real Managers Only
+              </div>
+              <div className="home-multiplayer-hero-banner__pill">
+                <Check className="w-3.5 h-3.5 text-[#00FF87]" /> Live SSE Low Latency
+              </div>
+              <div className="home-multiplayer-hero-banner__pill">
+                <Check className="w-3.5 h-3.5 text-[#00FF87]" /> 10 Franchise War Rooms
+              </div>
+            </div>
+          </div>
+
+          <div className="home-multiplayer-hero-banner__actions">
+            <button 
+              id="btn-home-enter-multiplayer-top"
+              onClick={() => enterWorld('MultiplayerAuction', 'MultiplayerAuction')}
+              className="btn-volt px-6 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#00FF87]/25 hover:scale-[1.02] active:scale-[0.98] transition font-mono"
+            >
+              <Radio className="w-4 h-4 text-black" />
+              <span>ENTER LIVE WAR ROOMS</span>
+              <ChevronRight className="w-4 h-4 text-black" />
+            </button>
+          </div>
+        </div>
+      </motion.section>
+
       <section className="ultimate-hub__grid">
         <aside className="ultimate-hub__side">
           <div className="ultimate-panel ultimate-panel--star">
             <div className="ultimate-panel__head">
-              <span><Flame className="w-4 h-4" /> Franchise Icon</span>
-              {captainPlayer && <button id="btn-trigger-walkout-home" onClick={() => triggerWalkout(captainPlayer)}>Walkout</button>}
+              <span><Flame className="w-4 h-4 text-amber-400" /> Franchise Icon</span>
+              {captainPlayer && (
+                <button 
+                  id="btn-trigger-walkout-home" 
+                  onClick={() => triggerWalkout(captainPlayer)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold uppercase tracking-wider transition cursor-pointer"
+                >
+                  Walkout
+                </button>
+              )}
             </div>
             {captainPlayer ? (
               <div className="ultimate-star" onClick={() => setSelectedPlayerForModal(captainPlayer)}>
@@ -299,35 +351,85 @@ export const DashboardView: React.FC = () => {
 
           <div className="ultimate-panel">
             <div className="ultimate-panel__head">
-              <span><Target className="w-4 h-4" /> Objectives</span>
-              <button onClick={() => enterWorld('Rewards')}>Vault</button>
+              <span className="flex items-center gap-2 text-slate-100 font-bold">
+                <Target className="w-4 h-4 text-[#00FF87]" /> Objectives
+              </span>
+              <button 
+                onClick={() => enterWorld('Rewards')}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[10px] font-bold uppercase tracking-wider transition cursor-pointer"
+              >
+                Vault
+              </button>
             </div>
             <div className="ultimate-objective-meter">
-              <b>{completedObjectives}/{objectives.length || 1}</b>
-              <div><span style={{ width: `${(completedObjectives / Math.max(1, objectives.length)) * 100}%` }} /></div>
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="text-slate-300 font-medium">Completed</span>
+                <b className="text-[#00FF87] font-mono font-bold">{completedObjectives} / {objectives.length || 1}</b>
+              </div>
+              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <span 
+                  className="h-full bg-gradient-to-r from-emerald-400 to-[#00FF87] block rounded-full transition-all duration-500" 
+                  style={{ width: `${(completedObjectives / Math.max(1, objectives.length)) * 100}%` }} 
+                />
+              </div>
             </div>
-            <div className="ultimate-list">
-              {activeObjectives.map(obj => (
-                <button key={obj.id} onClick={() => enterWorld('Rewards')}>
-                  <span>{obj.title}</span>
-                  <em>{Math.round((obj.progress / Math.max(1, obj.target)) * 100)}%</em>
-                </button>
-              ))}
+            <div className="ultimate-list space-y-2 mt-3">
+              {activeObjectives.slice(0, 4).map(obj => {
+                const percent = Math.min(100, Math.round((obj.progress / Math.max(1, obj.target)) * 100));
+                const isComplete = obj.progress >= obj.target;
+                return (
+                  <button 
+                    key={obj.id} 
+                    onClick={() => enterWorld('Rewards')}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/70 hover:border-[#00FF87]/40 text-left transition group cursor-pointer"
+                  >
+                    <span className="text-slate-100 font-semibold text-xs leading-snug group-hover:text-white line-clamp-1 pr-2">
+                      {obj.title}
+                    </span>
+                    <em className={`font-mono text-[11px] font-bold px-2 py-0.5 rounded-md shrink-0 ${
+                      isComplete 
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                        : 'bg-slate-800 text-slate-300 border border-slate-700'
+                    }`}>
+                      {percent}%
+                    </em>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           <div className="ultimate-panel">
             <div className="ultimate-panel__head">
-              <span><Bell className="w-4 h-4" /> Broadcast Wire</span>
-              <button onClick={() => enterWorld('News')}>News</button>
+              <span className="flex items-center gap-2 text-slate-100 font-bold">
+                <Bell className="w-4 h-4 text-cyan-400" /> Broadcast Feed
+              </span>
+              <button 
+                onClick={() => enterWorld('News')}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[10px] font-bold uppercase tracking-wider transition cursor-pointer"
+              >
+                Wire
+              </button>
             </div>
-            <div className="ultimate-news">
-              {latestNews.length ? latestNews.map(item => (
-                <button key={item.id} onClick={() => enterWorld('News')}>
-                  <b>{item.category}</b>
-                  <span>{item.title}</span>
+            <div className="ultimate-news space-y-2 mt-2">
+              {latestNews.length ? latestNews.slice(0, 4).map(item => (
+                <button 
+                  key={item.id} 
+                  onClick={() => enterWorld('News')}
+                  className="w-full flex flex-col gap-1 p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/70 hover:border-cyan-400/40 text-left transition group cursor-pointer"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <b className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/25">
+                      {item.category}
+                    </b>
+                  </div>
+                  <span className="text-slate-100 font-medium text-xs leading-snug group-hover:text-white line-clamp-2">
+                    {item.title}
+                  </span>
                 </button>
-              )) : <p className="ultimate-empty">No headlines yet.</p>}
+              )) : (
+                <p className="ultimate-empty text-slate-400 text-xs py-4 text-center">No broadcast alerts yet.</p>
+              )}
             </div>
           </div>
         </aside>
@@ -335,11 +437,12 @@ export const DashboardView: React.FC = () => {
         <div className="ultimate-hub__worlds">
           <div className="ultimate-hub__section-title">
             <div>
-              <p>Game Modes</p>
-              <h2>Enter the Cricket Universe</h2>
+              <p className="text-xs uppercase tracking-widest text-[#00FF87] font-bold">GAME MODES</p>
+              <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">Enter the Cricket Universe</h2>
             </div>
-            <span>Every tile opens a routed world with cinematic loading</span>
+            <span className="text-xs text-slate-400 font-medium hidden sm:inline">Direct access to all franchise operations</span>
           </div>
+          
           <motion.div className="ultimate-hub__world-grid" variants={shouldReduceMotion ? undefined : listContainerMotion}>
             {worlds.map(world => (
               <motion.button
@@ -353,16 +456,16 @@ export const DashboardView: React.FC = () => {
               >
                 <div className="ultimate-world-card__orb" />
                 <div className="ultimate-world-card__top">
-                  <span>{world.icon}</span>
-                  <em>{world.stat}</em>
+                  <span className="ultimate-world-card__icon">{world.icon}</span>
+                  <em className="ultimate-world-card__stat font-mono">{world.stat}</em>
                 </div>
-                <div>
-                  <p>{world.label}</p>
-                  <h3>{world.title}</h3>
-                  <small>{world.desc}</small>
+                <div className="ultimate-world-card__body">
+                  <p className="ultimate-world-card__label">{world.label}</p>
+                  <h3 className="ultimate-world-card__title">{world.title}</h3>
                 </div>
                 <div className="ultimate-world-card__enter">
-                  ENTER WORLD <ArrowRight className="w-4 h-4" />
+                  <span>OPEN</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </div>
               </motion.button>
             ))}
@@ -381,22 +484,6 @@ export const DashboardView: React.FC = () => {
           <button onClick={() => enterWorld('Rewards')}>VIEW REWARDS <ChevronRight className="w-4 h-4" /></button>
         </motion.section>
       )}
-
-      <motion.section className="home-multiplayer-highlight" variants={shouldReduceMotion ? undefined : cardMotion}>
-        <div>
-          <small><Radio className="w-4 h-4" /> FEATURED LIVE MODE</small>
-          <h2>Live Multiplayer Auction</h2>
-          <p>Host an auction room, share the code, and battle real managers in a synchronized IPL bidding war. No fake rooms. No AI lobbies. Real players only.</p>
-        </div>
-        <div className="home-multiplayer-highlight__stats">
-          <span><b>REAL</b> ROOMS</span>
-          <span><b>SSE</b> LIVE</span>
-          <span><b>10</b> TEAMS</span>
-        </div>
-        <button onClick={() => enterWorld('MultiplayerAuction' as AppTab, 'MultiplayerAuction' as GameScreen)}>
-          ENTER LIVE AUCTION <ChevronRight className="w-4 h-4" />
-        </button>
-      </motion.section>
 
       <section className="ultimate-hub__squad-strip">
         <div className="ultimate-hub__section-title">

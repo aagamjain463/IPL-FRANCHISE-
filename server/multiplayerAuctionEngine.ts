@@ -13,7 +13,15 @@ import {
 import { INITIAL_PLAYERS } from '../src/data/players.js';
 import { INITIAL_TEAMS } from '../src/data/teams.js';
 import { Player } from '../src/types/cricket.js';
-import { calculateAuctionPerformanceScore, getMultiplayerBidIncrement, isValidBidIncrement, MULTIPLAYER_AUCTION_RULES, normalizeCr } from '../src/multiplayer/auctionRules.js';
+import { 
+  calculateAuctionScore, 
+  assignRankRewards, 
+  generateBestPlayingXI,
+  getMultiplayerBidIncrement, 
+  isValidBidIncrement, 
+  MULTIPLAYER_AUCTION_RULES, 
+  normalizeCr 
+} from '../src/multiplayer/auctionRules.js';
 import { LeaderboardStore } from './leaderboardStore.js';
 
 // Default config
@@ -172,48 +180,113 @@ function computeAwards(room: MultiplayerRoomState): MultiplayerAward[] {
   return awards;
 }
 
-// Compute final rankings table
+// Compute final rankings table using the deterministic 100-point rubric
 function computeRankings(room: MultiplayerRoomState): MultiplayerRanking[] {
-  return room.participants.map(p => {
+  const totalCount = room.participants.length;
+
+  const evaluated = room.participants.map(p => {
     const team = p.franchiseId ? INITIAL_TEAMS[p.franchiseId] : null;
-    const squadCount = p.squadPlayers.length;
-    const squadOvr = squadCount > 0 
-      ? Math.round(p.squadPlayers.reduce((sum, pl) => sum + pl.overall, 0) / squadCount) 
-      : 0;
-    const overseasCount = p.squadPlayers.filter(pl => pl.isOverseas).length;
-    const spentPurseCr = Number((room.config.startingPurseCr - p.purseCr).toFixed(2));
-    const remainingPurseCr = Number(p.purseCr.toFixed(2));
-    const auctionScore = calculateAuctionPerformanceScore(p, room.config.startingPurseCr);
+    const targetSquad = room.config.poolType === 'Top 15 Accelerated' ? 9 : 15;
+    const evaluation = calculateAuctionScore(p, room.config.startingPurseCr, targetSquad);
+    
     const purchases = room.soldRecords.filter(r => r.winningParticipantId === p.id);
     const bestPurchase = purchases.slice().sort((a, b) => (b.player.overall / Math.max(0.25, b.sellingPriceCr)) - (a.player.overall / Math.max(0.25, a.sellingPriceCr)))[0];
     const biggestOverpay = purchases.slice().sort((a, b) => b.sellingPriceCr - a.sellingPriceCr)[0];
 
     return {
-      rank: 1,
       participantId: p.id,
+      playerId: p.id,
       participantName: p.name,
+      playerName: p.name,
       franchiseId: p.franchiseId || 'csk',
       franchiseName: team?.name || 'Franchise',
       franchiseShort: team?.shortName || 'IPL',
       primaryColor: team?.primaryColor || '#D4AF37',
       secondaryColor: team?.secondaryColor || '#000',
-      squadOvr,
-      squadCount,
-      overseasCount,
-      spentPurseCr,
-      remainingPurseCr,
-      auctionScore,
+      finalScore: evaluation.finalScore,
+      auctionScore: evaluation.finalScore,
+      breakdown: evaluation.breakdown,
+      squadOvr: evaluation.squadOvr,
+      squadCount: evaluation.playersBought,
+      playersBought: evaluation.playersBought,
+      overseasCount: evaluation.overseasCount,
+      spentPurseCr: evaluation.spentPurseCr,
+      remainingPurseCr: evaluation.remainingPurseCr,
+      squadValueCr: evaluation.squadValueCr,
+      playingXIOverall: evaluation.playingXIOverall,
+      playingXIPlayers: evaluation.playingXIPlayers,
+      marqueeCount: evaluation.marqueeCount,
       bestPurchaseName: bestPurchase?.player.name,
+      bestPurchasePriceCr: bestPurchase?.sellingPriceCr,
       biggestOverpayName: biggestOverpay?.player.name
     };
-  }).sort((a, b) => {
-    if (b.auctionScore !== a.auctionScore) return b.auctionScore - a.auctionScore;
+  });
+
+  // Sort participants by:
+  // 1. Final score descending
+  // 2. Playing XI strength descending
+  // 3. Squad strength (squadOvr) descending
+  // 4. Remaining purse descending
+  // 5. Participant ID deterministic tie-breaker
+  evaluated.sort((a, b) => {
+    if (Math.abs(b.finalScore - a.finalScore) > 0.001) return b.finalScore - a.finalScore;
+    if (b.playingXIOverall !== a.playingXIOverall) return b.playingXIOverall - a.playingXIOverall;
     if (b.squadOvr !== a.squadOvr) return b.squadOvr - a.squadOvr;
-    return b.squadCount - a.squadCount;
-  }).map((r, index) => ({
-    ...r,
-    rank: index + 1
-  }));
+    if (Math.abs(b.remainingPurseCr - a.remainingPurseCr) > 0.001) return b.remainingPurseCr - a.remainingPurseCr;
+    return a.participantId.localeCompare(b.participantId);
+  });
+
+  return evaluated.map((r, index) => {
+    const rank = index + 1;
+    const rewards = assignRankRewards(rank, totalCount);
+    return {
+      ...r,
+      rank,
+      rewardTitle: rewards.rewardTitle,
+      rewardBadge: rewards.rewardBadge,
+      xpReward: rewards.xpReward
+    };
+  });
+}
+
+export function completeAuctionRoom(room: MultiplayerRoomState) {
+  room.status = 'completed';
+  room.currentLotPlayer = null;
+  room.rankings = computeRankings(room);
+  room.awards = computeAwards(room);
+
+  // Clear lot timers
+  const timer = roomTimers.get(room.roomCode);
+  if (timer) {
+    clearInterval(timer);
+    roomTimers.delete(room.roomCode);
+  }
+  const breakTimer = roomBreakTimers.get(room.roomCode);
+  if (breakTimer) {
+    clearTimeout(breakTimer);
+    roomBreakTimers.delete(room.roomCode);
+  }
+
+  if (!room.leaderboardApplied) {
+    LeaderboardStore.recordAuctionResults(room.rankings.map(ranking => ({
+      playerId: ranking.participantId,
+      displayName: ranking.participantName,
+      rank: ranking.rank,
+      totalParticipants: room.rankings.length,
+      spentPurseCr: ranking.spentPurseCr,
+      squadOvr: ranking.squadOvr,
+      auctionScore: ranking.finalScore,
+      trophies: ranking.rank === 1 ? 1 : 0
+    })));
+    room.leaderboardApplied = true;
+  }
+
+  broadcastToRoom(room.roomCode, {
+    type: 'AUCTION_COMPLETED',
+    rankings: room.rankings,
+    awards: room.awards
+  });
+  broadcastState(room);
 }
 
 // Resolution for active lot
@@ -317,37 +390,7 @@ function advanceToNextLot(roomCode: string) {
     broadcastState(room);
   } else {
     // Auction Finished!
-    room.status = 'completed';
-    room.currentLotPlayer = null;
-    room.rankings = computeRankings(room);
-    room.awards = computeAwards(room);
-    if (!room.leaderboardApplied) {
-      LeaderboardStore.recordAuctionResults(room.rankings.map(ranking => ({
-        playerId: ranking.participantId,
-        displayName: ranking.participantName,
-        rank: ranking.rank,
-        totalParticipants: room.rankings.length,
-        spentPurseCr: ranking.spentPurseCr,
-        squadOvr: ranking.squadOvr,
-        auctionScore: ranking.auctionScore,
-        trophies: ranking.rank === 1 ? 1 : 0
-      })));
-      room.leaderboardApplied = true;
-    }
-
-    // Stop timer
-    const timer = roomTimers.get(roomCode);
-    if (timer) {
-      clearInterval(timer);
-      roomTimers.delete(roomCode);
-    }
-
-    broadcastToRoom(room.roomCode, {
-      type: 'AUCTION_COMPLETED',
-      rankings: room.rankings,
-      awards: room.awards
-    });
-    broadcastState(room);
+    completeAuctionRoom(room);
   }
 }
 
@@ -821,6 +864,24 @@ export const MultiplayerAuctionEngine = {
     });
     broadcastState(room);
 
+    return { success: true, state: room };
+  },
+
+  // Finish / Conclude Auction Early (Host only or automated completion)
+  finishAuction(roomCode: string, hostPlayerId?: string): { success: boolean; state?: MultiplayerRoomState; error?: string } {
+    if (!roomCode) return { success: false, error: 'Room code is required.' };
+    const room = rooms.get(roomCode.trim().toUpperCase());
+    if (!room) return { success: false, error: 'Room not found.' };
+
+    if (hostPlayerId && room.hostId !== hostPlayerId) {
+      return { success: false, error: 'Only the host can conclude the auction.' };
+    }
+
+    if (room.status === 'completed') {
+      return { success: true, state: room };
+    }
+
+    completeAuctionRoom(room);
     return { success: true, state: room };
   },
 

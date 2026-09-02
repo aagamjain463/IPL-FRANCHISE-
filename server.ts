@@ -337,6 +337,27 @@ async function startServer() {
     }
   });
 
+  // 9b. Finish / Conclude Auction (Host only or automated completion)
+  app.post('/api/multiplayer/finish', async (req: Request, res: Response) => {
+    try {
+      const { roomCode, hostPlayerId } = req.body || {};
+      if (!roomCode) {
+        return res.status(400).json({ success: false, error: 'roomCode is required' });
+      }
+      const code = normalizeRoomCode(roomCode);
+      await hydrateRoomFromSupabase(code);
+      const result = MultiplayerAuctionEngine.finishAuction(code, hostPlayerId ? String(hostPlayerId) : undefined);
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
+      const cloudSync = await persistRoomState(result.state);
+      res.json({ ...result, cloudSync });
+    } catch (err) {
+      console.error('Error in /api/multiplayer/finish:', err);
+      res.status(500).json({ success: false, error: err instanceof Error ? err.message : 'Server error finishing auction' });
+    }
+  });
+
   // 10. Leave Room
   app.post('/api/multiplayer/leave', async (req: Request, res: Response) => {
     try {

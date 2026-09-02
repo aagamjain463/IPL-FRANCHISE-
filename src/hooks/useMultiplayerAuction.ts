@@ -279,6 +279,18 @@ export function useMultiplayerAuction() {
     return true;
   };
 
+  const finishAuction = async () => {
+    if (!roomState) return false;
+    setErrorMessage(null);
+    const result = await MultiplayerAuctionClient.finishAuction(roomState.roomCode);
+    if (!result.success || !result.state) {
+      setErrorMessage(result.error || 'Failed to conclude auction');
+      return false;
+    }
+    setRoomState(result.state);
+    return true;
+  };
+
   const leaveRoom = async () => {
     if (roomState) {
       await MultiplayerAuctionClient.leaveRoom(roomState.roomCode);
@@ -309,6 +321,7 @@ export function useMultiplayerAuction() {
     placeBid,
     pauseAuction,
     resumeAuction,
+    finishAuction,
     leaveRoom
   };
 }

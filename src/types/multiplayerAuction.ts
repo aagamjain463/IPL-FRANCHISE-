@@ -61,23 +61,44 @@ export interface MultiplayerAward {
   badge: string;
 }
 
+export interface AuctionScoreBreakdown {
+  squadStrength: number;
+  squadBalance: number;
+  playingXIQuality: number;
+  budgetEfficiency: number;
+  squadCompletion: number;
+}
+
 export interface MultiplayerRanking {
   rank: number;
   participantId: string;
+  playerId?: string;
   participantName: string;
+  playerName?: string;
   franchiseId: string;
   franchiseName: string;
   franchiseShort: string;
   primaryColor: string;
   secondaryColor: string;
+  finalScore: number;
+  auctionScore: number; // alias for finalScore
+  breakdown: AuctionScoreBreakdown;
   squadOvr: number;
   squadCount: number;
+  playersBought: number;
   overseasCount: number;
   spentPurseCr: number;
   remainingPurseCr: number;
-  auctionScore: number;
+  squadValueCr: number;
+  playingXIOverall: number;
+  playingXIPlayers?: Player[];
+  marqueeCount: number;
   bestPurchaseName?: string;
+  bestPurchasePriceCr?: number;
   biggestOverpayName?: string;
+  rewardTitle: string;
+  rewardBadge: string;
+  xpReward: number;
 }
 
 export type HammerCallState = 'Opening Bid' | 'Active Bidding' | 'Going Once' | 'Going Twice' | 'Sold!' | 'Unsold';

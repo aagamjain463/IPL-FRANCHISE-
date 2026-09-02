@@ -51,6 +51,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
     placeBid,
     pauseAuction,
     resumeAuction,
+    finishAuction,
     leaveRoom
   } = useMultiplayerAuction();
 
@@ -185,6 +186,7 @@ export const MultiplayerAuctionHome: React.FC = () => {
           onPlaceBid={placeBid}
           onPauseAuction={pauseAuction}
           onResumeAuction={resumeAuction}
+          onFinishAuction={finishAuction}
           onLeaveRoom={leaveRoom}
           errorMessage={errorMessage}
         />
