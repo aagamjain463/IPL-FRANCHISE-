@@ -71,6 +71,44 @@ export default async function handler(req: any, res: any) {
       const rooms = await SupabaseAuctionStore.listOpenRooms();
       return res.status(200).json({ success: true, rooms });
     }
+    if (method === 'GET' && action === 'events' && parts[1]) {
+  const roomCode = normalizeRoomCode(parts[1]);
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  res.write(`data: ${JSON.stringify({
+    type: 'CONNECTED',
+    roomCode,
+  })}\n\n`);
+
+  const interval = setInterval(async () => {
+    try {
+      const state = await SupabaseAuctionStore.getRoom(roomCode);
+
+      if (state) {
+        res.write(`data: ${JSON.stringify({
+          type: 'STATE_UPDATE',
+          state,
+        })}\n\n`);
+      }
+    } catch (error) {
+      console.error('[SSE] Poll error:', error);
+    }
+  }, 2000);
+
+  const cleanup = () => {
+    clearInterval(interval);
+  };
+
+  req.on('close', cleanup);
+
+  return;
+}
 
     if (method === 'GET' && action === 'room' && parts[1]) {
       const state = await SupabaseAuctionStore.getRoom(parts[1]);
