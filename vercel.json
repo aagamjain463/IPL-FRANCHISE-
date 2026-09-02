@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/multiplayer/:path*",
-      "destination": "/api/multiplayer"
+      "destination": "/api/multiplayer?path=:path*"
     },
     {
       "source": "/(.*)",
