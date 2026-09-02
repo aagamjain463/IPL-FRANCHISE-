@@ -671,11 +671,17 @@ export const MatchLiveView: React.FC = () => {
             </div>
           )}
 
-          {/* Tactics Settings Tab */}
+          {/* Tactics Settings Tab — phase-gated: you can only see/set controls for YOUR team's current phase */}
           {activeScorecardTab === 'Tactics' && (
             <div className="bg-[#090d16] p-4 rounded-2xl border border-[#1e293b] space-y-4 text-xs shadow-2xl">
               <div className="flex items-center justify-between">
-                <h4 className="font-black uppercase tracking-widest text-white">In-Match Tactics & FC IQ</h4>
+                <h4 className="font-black uppercase tracking-widest text-white">
+                  {isUserBatting
+                    ? `Batting Command — ${gameState.teams[gameState.userTeamId]?.shortName || 'Your Team'}`
+                    : isUserBowling
+                      ? `Bowling Command — ${gameState.teams[gameState.userTeamId]?.shortName || 'Your Team'}`
+                      : 'In-Match Tactics & FC IQ'}
+                </h4>
                 <button
                   onClick={() => setShowTacticsRadarModal(true)}
                   className="text-[10px] font-bold text-cyan-300 hover:underline cursor-pointer"
@@ -684,49 +690,57 @@ export const MatchLiveView: React.FC = () => {
                 </button>
               </div>
 
-              {/* Batting Approaches */}
-              <div className="space-y-1.5">
-                <label className="text-slate-400 block font-semibold text-[11px]">Batting Approach:</label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {battingApproaches.map(mode => (
-                    <button
-                      key={mode.id}
-                      onClick={() => handleUpdateUserTactics({ batterApproach: mode.id })}
-                      className={`p-2 rounded-lg border text-[11px] font-bold text-left transition flex flex-col justify-between cursor-pointer ${
-                        userTactics.batterApproach === mode.id
-                          ? 'bg-[#D4AF37] text-black border-[#D4AF37] font-black'
-                          : 'bg-[#0f172a] text-slate-400 border-[#1e293b] hover:bg-[#1e293b] hover:text-white'
-                      }`}
-                    >
-                      <span className="font-bold">{mode.label}</span>
-                      <span className={`text-[9px] ${userTactics.batterApproach === mode.id ? 'text-black/80' : 'text-slate-500'}`}>{mode.desc}</span>
-                    </button>
-                  ))}
+              {/* Batting Approaches — ONLY while YOUR team is batting */}
+              {isUserBatting && (
+                <div className="space-y-1.5">
+                  <label className="text-slate-400 block font-semibold text-[11px]">Batting Approach (Your Team):</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {battingApproaches.map(mode => (
+                      <button
+                        key={mode.id}
+                        onClick={() => handleUpdateUserTactics({ batterApproach: mode.id })}
+                        className={`p-2 rounded-lg border text-[11px] font-bold text-left transition flex flex-col justify-between cursor-pointer ${
+                          userTactics.batterApproach === mode.id
+                            ? 'bg-[#D4AF37] text-black border-[#D4AF37] font-black'
+                            : 'bg-[#0f172a] text-slate-400 border-[#1e293b] hover:bg-[#1e293b] hover:text-white'
+                        }`}
+                      >
+                        <span className="font-bold">{mode.label}</span>
+                        <span className={`text-[9px] ${userTactics.batterApproach === mode.id ? 'text-black/80' : 'text-slate-500'}`}>{mode.desc}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Bowling Plans */}
-              <div className="space-y-1.5">
-                <label className="text-slate-400 block font-semibold text-[11px]">Delivery & Length Target:</label>
-                <div className="grid grid-cols-1 gap-1">
-                  {bowlingPlans.slice(0, 4).map(plan => (
-                    <button
-                      key={plan.id}
-                      onClick={() => handleUpdateUserTactics({ bowlingPlan: plan.id })}
-                      className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold text-left transition flex items-center justify-between cursor-pointer ${
-                        (userTactics.bowlingPlan || 'Attack Stumps') === plan.id
-                          ? 'bg-blue-500 text-white border-blue-400 font-bold'
-                          : 'bg-[#0f172a] text-slate-400 border-[#1e293b] hover:bg-[#1e293b] hover:text-white'
-                      }`}
-                    >
-                      <span>{plan.label}</span>
-                      {(userTactics.bowlingPlan || 'Attack Stumps') === plan.id && (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                      )}
-                    </button>
-                  ))}
+              {/* Bowling Plans — ONLY while YOUR team is bowling */}
+              {isUserBowling && (
+                <div className="space-y-1.5">
+                  <label className="text-slate-400 block font-semibold text-[11px]">Delivery & Length Target (Your Team):</label>
+                  <div className="grid grid-cols-1 gap-1">
+                    {bowlingPlans.slice(0, 4).map(plan => (
+                      <button
+                        key={plan.id}
+                        onClick={() => handleUpdateUserTactics({ bowlingPlan: plan.id })}
+                        className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold text-left transition flex items-center justify-between cursor-pointer ${
+                          (userTactics.bowlingPlan || 'Attack Stumps') === plan.id
+                            ? 'bg-blue-500 text-white border-blue-400 font-bold'
+                            : 'bg-[#0f172a] text-slate-400 border-[#1e293b] hover:bg-[#1e293b] hover:text-white'
+                        }`}
+                      >
+                        <span>{plan.label}</span>
+                        {(userTactics.bowlingPlan || 'Attack Stumps') === plan.id && (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {!isUserBatting && !isUserBowling && (
+                <p className="text-[11px] text-slate-500 italic">Tactical controls unlock when your franchise takes the field.</p>
+              )}
             </div>
           )}
 

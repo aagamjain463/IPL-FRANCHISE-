@@ -21,13 +21,15 @@ export const PlayingXIView: React.FC = () => {
 
   const rosterIds = userTeam.rosterPlayerIds || [];
   const allSquadPlayers = rosterIds.map(id => gameState.allPlayers[id]).filter(Boolean);
+  const injuredSquad = allSquadPlayers.filter(p => p.injuryStatus && p.injuryStatus !== 'Fit');
+  const fitSquad = allSquadPlayers.filter(p => !p.injuryStatus || p.injuryStatus === 'Fit');
 
   const playingXI = userTeam.playingXI || {
     teamId: userTeam.id,
-    playingXIIds: allSquadPlayers.slice(0, 11).map(p => p.id),
-    battingOrder: allSquadPlayers.slice(0, 11).map(p => p.id),
-    captainPlayerId: allSquadPlayers[0]?.id || '',
-    wicketkeeperPlayerId: allSquadPlayers.find(p => p.role.includes('Wicketkeeper'))?.id || allSquadPlayers[0]?.id || '',
+    playingXIIds: fitSquad.slice(0, 11).map(p => p.id),
+    battingOrder: fitSquad.slice(0, 11).map(p => p.id),
+    captainPlayerId: fitSquad[0]?.id || '',
+    wicketkeeperPlayerId: fitSquad.find(p => p.role.includes('Wicketkeeper'))?.id || fitSquad[0]?.id || '',
     powerplayBowlerIds: [],
     deathBowlerIds: []
   };
@@ -44,6 +46,22 @@ export const PlayingXIView: React.FC = () => {
   const chemMultiplier = chemistryResult.multiplier;
   const injCount = starters.filter(p => (p.injuryStatus || 'Fit') !== 'Fit').length;
   const playersNeeded = Math.max(0, 11 - starters.length);
+
+  const isPlayerInjured = (p?: Player | null) => Boolean(p && p.injuryStatus && p.injuryStatus !== 'Fit');
+
+  const InjuryBadge = ({ player, compact = false }: { player: Player; compact?: boolean }) => {
+    if (!isPlayerInjured(player)) return null;
+    return (
+      <div
+        title={`${player.name} — ${player.injuryStatus}`}
+        className={`absolute -top-2.5 left-1/2 -translate-x-1/2 z-40 px-2 py-0.5 rounded-full bg-red-600 text-white border border-red-300 shadow-lg font-black uppercase whitespace-nowrap pointer-events-none ${
+          compact ? 'text-[7px]' : 'text-[8px]'
+        }`}
+      >
+        🚑 {player.injuryStatus}
+      </div>
+    );
+  };
 
   // Swap starter with bench or change batting order
   const handlePlayerClick = (playerId: string) => {
@@ -99,12 +117,14 @@ export const PlayingXIView: React.FC = () => {
       updateUserPlayingXI(best);
       return;
     }
-    const sorted = [...allSquadPlayers].sort((a, b) => b.overall - a.overall);
+    // Injured players are NEVER auto-selected — only fit squad members are eligible.
+    const sorted = [...fitSquad].sort((a, b) => b.overall - a.overall);
     const selected: Player[] = [];
     let osCount = 0;
 
     for (const p of sorted) {
       if (selected.length >= 11) break;
+      if (isPlayerInjured(p)) continue;
       if (p.isOverseas) {
         if (osCount < 4) {
           selected.push(p);
@@ -164,6 +184,29 @@ export const PlayingXIView: React.FC = () => {
         </div>
       )}
 
+      {injuredSquad.length > 0 && (
+        <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/40 flex items-start gap-3 shadow-lg">
+          <div className="w-9 h-9 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0 mt-0.5">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-black uppercase tracking-wider text-red-400">
+              {injuredSquad.length} Injured Player{injuredSquad.length > 1 ? 's' : ''} — Cannot Play
+            </p>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              Auto-build excludes them. Swap them out of the XI or let them recover before matchday.
+            </p>
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {injuredSquad.map(p => (
+                <span key={p.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-950/60 border border-red-500/40 text-[9px] font-bold text-red-200">
+                  🚑 {p.name} · {p.injuryStatus}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 2. MAIN FC MOBILE STADIUM PITCH FORMATION — raised to the top-left, next to the bench */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
@@ -187,6 +230,8 @@ export const PlayingXIView: React.FC = () => {
           <div className="fc-pitch-turf rounded-2xl p-5 sm:p-7 relative flex flex-col justify-around min-h-[640px] sm:min-h-[720px] xl:min-h-[780px] gap-8">
             {/* Center circle + pitch strip (drawn by fc-pitch-turf CSS) */}
             <div className="fc-pitch-circle" />
+            <div className="fc-pitch-crease fc-pitch-crease--top" />
+            <div className="fc-pitch-crease fc-pitch-crease--bottom" />
 
             {/* TOP ROW: Top-Order Batters (Slots 1, 2, 3) */}
             <div className="relative z-10">
@@ -205,6 +250,7 @@ export const PlayingXIView: React.FC = () => {
                       onClick={() => handlePlayerClick(player.id)}
                       onDoubleClick={() => setSelectedPlayerForModal(player)}
                     >
+                      <InjuryBadge player={player} />
                       <FCPlayerCard
                         player={player}
                         size="pitch"
@@ -253,6 +299,7 @@ export const PlayingXIView: React.FC = () => {
                       onClick={() => handlePlayerClick(player.id)}
                       onDoubleClick={() => setSelectedPlayerForModal(player)}
                     >
+                      <InjuryBadge player={player} />
                       <FCPlayerCard
                         player={player}
                         size="pitch"
@@ -301,6 +348,7 @@ export const PlayingXIView: React.FC = () => {
                       onClick={() => handlePlayerClick(player.id)}
                       onDoubleClick={() => setSelectedPlayerForModal(player)}
                     >
+                      <InjuryBadge player={player} />
                       <FCPlayerCard
                         player={player}
                         size="pitch"
@@ -357,6 +405,7 @@ export const PlayingXIView: React.FC = () => {
                     onClick={() => handlePlayerClick(player.id)}
                     className="relative"
                   >
+                    <InjuryBadge player={player} compact />
                     <FCPlayerCard
                       player={player}
                       size="compact"

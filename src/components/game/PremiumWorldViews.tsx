@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useGame } from '../../context/GameContext';
 import { SquadManagementView } from '../SquadManagementView';
@@ -197,10 +198,12 @@ export const PremiumAuctionView: React.FC = () => {
     if (auc.isPaused) togglePauseAuction();
   };
 
-  if (!player) {
+  if (!player || auc.isCompleted) {
     const pendingTeam = pendingTeamId ? gameState.teams[pendingTeamId] : null;
-    return (
-      <motion.div className="clean-auction" initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }}>
+    // Portal to <body> so no parent transform/overflow/stacking context can ever
+    // clip or hide the completion options — always full-viewport and visible.
+    return createPortal(
+      <motion.div className="auction-complete-overlay" initial={shouldReduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }}>
         <motion.section className="auction-complete-panel" variants={shouldReduceMotion ? undefined : cinematicHeroMotion} initial={shouldReduceMotion ? false : "initial"} animate="enter">
           <div className="auction-complete-panel__head">
             <span className="auction-complete-panel__badge"><CheckCircle2 className="w-6 h-6" /> AUCTION FINISHED</span>
@@ -329,7 +332,8 @@ export const PremiumAuctionView: React.FC = () => {
             </div>
           </div>
         )}
-      </motion.div>
+      </motion.div>,
+      document.body
     );
   }
 

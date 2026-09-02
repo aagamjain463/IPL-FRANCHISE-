@@ -196,14 +196,15 @@
   pointer-events: none;
 }
 
+/* Real-length cricket pitch strip (22 yards) painted on the turf */
 .fc-pitch-turf::after {
   content: '';
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 68px;
-  height: 74%;
-  border-radius: 10px;
+  width: 46px;
+  height: 44%;
+  border-radius: 8px;
   transform: translate(-50%, -50%);
   background: linear-gradient(180deg, #dcb877, #b08443 55%, #8a5f2e);
   box-shadow:
@@ -213,6 +214,21 @@
     inset 0 0 20px rgba(0, 0, 0, .35);
   pointer-events: none;
 }
+
+/* Crease / popping-crease markings at both ends of the pitch */
+.fc-pitch-turf .fc-pitch-crease {
+  position: absolute;
+  left: 50%;
+  width: 62px;
+  height: 17px;
+  transform: translateX(-50%);
+  border: 2px solid rgba(255, 255, 255, .78);
+  border-top: 0;
+  border-bottom: 0;
+  pointer-events: none;
+}
+.fc-pitch-turf .fc-pitch-crease--top { top: calc(50% - 22% - 4px); }
+.fc-pitch-turf .fc-pitch-crease--bottom { bottom: calc(50% - 22% - 4px); }
 
 .fc-pitch-turf .fc-pitch-circle {
   content: '';
@@ -2760,7 +2776,28 @@ body {
 .clean-auction__complete p { color: #94a3b8; }
 .clean-auction__complete button { padding: 0 1.4rem; }
 
-/* Auction-complete next-move panel: restart same team / different team / live multiplayer */
+/* Auction-complete next-move panel: restart same team / different team / live multiplayer
+   Rendered as a FIXED full-viewport overlay so no ancestor overflow/layout can ever hide
+   the "Continue With A Different Team" option, on any screen size. */
+.auction-complete-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: clamp(0.75rem, 3vw, 2.5rem);
+  background:
+    radial-gradient(120% 90% at 50% -10%, rgba(212, 175, 55, .16), transparent 48%),
+    linear-gradient(160deg, rgba(2, 6, 23, .94), rgba(3, 7, 18, .97));
+  backdrop-filter: blur(14px);
+}
+.auction-complete-overlay .auction-complete-panel {
+  margin: auto 0;
+  flex-shrink: 0;
+}
 .auction-complete-panel {
   max-width: 1080px;
   width: 100%;

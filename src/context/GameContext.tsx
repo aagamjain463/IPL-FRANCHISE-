@@ -1097,7 +1097,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const buildValidXI = (team: Team, playersMap: Record<string, Player>): MatchPlayingXI => {
     const squad = (team.rosterPlayerIds || []).map(id => playersMap[id]).filter(Boolean);
     const current = team.playingXI;
-    const candidateIds = (current?.playingXIIds || []).filter(id => squad.some(p => p.id === id));
+    // Injured players are excluded from valid XIs — they cannot take the field.
+    const fitSquad = squad.filter(p => !p.injuryStatus || p.injuryStatus === 'Fit');
+    const candidateIds = (current?.playingXIIds || [])
+      .filter(id => squad.some(p => p.id === id))
+      .filter(id => !playersMap[id]?.injuryStatus || playersMap[id]?.injuryStatus === 'Fit');
     const wkInCandidate = candidateIds.some(id => playersMap[id]?.role.includes('Wicketkeeper'));
     const osInCandidate = candidateIds.filter(id => playersMap[id]?.isOverseas).length;
     const bowlersCandidate = candidateIds.filter(id => (playersMap[id]?.bowlingRating || 0) > 55).length;
@@ -1112,12 +1116,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     // Build: keeper first, then best remaining, honor 4-overseas cap, keep 4 bowlers
-    const sorted = [...squad].sort((a, b) => b.overall - a.overall);
+    const sorted = [...fitSquad].sort((a, b) => b.overall - a.overall);
     const picked: Player[] = [];
     let osCount = 0;
     const wk = sorted.find(p => p.role.includes('Wicketkeeper') && p.injuryStatus === 'Fit');
     if (wk) { picked.push(wk); if (wk.isOverseas) osCount++; }
-    const orderFallback = [...sorted.filter(p => p !== wk && p.injuryStatus === 'Fit'), ...sorted.filter(p => p !== wk && p.injuryStatus !== 'Fit')];
+    const orderFallback = sorted.filter(p => p !== wk && (!p.injuryStatus || p.injuryStatus === 'Fit'));
     orderFallback.forEach(p => {
       if (picked.length >= 11) return;
       if (p.isOverseas) {

@@ -26,6 +26,26 @@
 ### 🛠️ Verified
 - `tsc --noEmit` clean, production build succeeds.
 
+## v2.2 — Control & Visibility Fixes
+
+### 🏟️ Squad Pitch (Playing XI)
+- The actual playing pitch strip is now a **normal-length pitch** (46px × 44% of the turf, with painted creases) — only the pitch is shortened; the ground canvas and layout stay the same.
+
+### 🔨 Auction Completion — All Options Always Visible
+- The "AUCTION FINISHED" panel now also renders whenever the auction `isCompleted` (previously it depended on the active lot being `null`, so completed/stale states could miss it).
+- The panel is **portaled to `<body>`** as a fixed full-viewport overlay (`auction-complete-overlay`) with its own scroll — no parent transform, overflow or stacking context can clip it, so **"Continue With A Different Team" is visible immediately after completion AND when re-entering the auction**.
+
+### 🎮 Matchday — Own Team Only, Per Phase
+- The FC IQ Tactics tab is now **phase-gated**: while your team bats you see only "Batting Command — [Your Team]"; while it bowls you see only "Bowling Command — [Your Team]". Opponent-phase controls never render (previously both batting and bowling controls were shown for the whole match).
+- Quick controller bar, DRS, Bowl Ball, Impact Sub remain user-match / own-phase only; neutral matches stay spectator (watch/sim only).
+
+### 🏥 Injuries in Playing XI
+- Injured players are now flagged on the pitch and bench cards with a red **🚑 injury badge**, plus a top alert banner listing every injured player and their status.
+- **Auto-Build excludes injured players** — both the in-screen auto-build and the matchday `buildValidXI` auto-fill skip any non-fit player, so injured players never get picked into an XI.
+
+### 🛠️ Verified
+- `tsc --noEmit` clean, production build succeeds; all flows verified in headless Chromium (completion panel both paths, per-phase tactics, injury badges + auto-build exclusion).
+
 ## v2.0 — "FC 26 of Cricket" Overhaul
 
 ### 🎨 Design — FC 26 Ultra
