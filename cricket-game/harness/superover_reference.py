@@ -158,6 +158,7 @@ class MatchResult:
     target: int
     margin_runs: int
     margin_wickets: int
+    margin_balls: int
     first: dict
     second: dict
 
@@ -245,6 +246,7 @@ class SuperOverMatch:
             target=target,
             margin_runs=(self.first.runs - self.second.runs) if outcome == OUTCOME_FIRST_WIN else 0,
             margin_wickets=(self.max_wickets - self.second.wickets) if outcome == OUTCOME_SECOND_WIN else 0,
+            margin_balls=(self.balls_per_innings - self.second.legal_balls) if outcome == OUTCOME_SECOND_WIN else 0,
             first={"runs": self.first.runs, "wickets": self.first.wickets,
                    "legal_balls": self.first.legal_balls},
             second={"runs": self.second.runs, "wickets": self.second.wickets,

@@ -73,6 +73,10 @@ namespace CricketGame.Core.Batting
         public bool ContactWillHappen { get { return contactWillHappen; } }
         public bool HasBounced { get { return bounceReported; } }
 
+        /// <summary>True once the ball has passed the bat without contact being
+        /// scheduled (used by headless resolution and the AI driver).</summary>
+        public bool PassedBatter { get { return passedReported; } }
+
         public void SetFootworkPosition(float x, float z)
         {
             foot.X = x;

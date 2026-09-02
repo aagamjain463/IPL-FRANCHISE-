@@ -84,6 +84,9 @@ namespace CricketGame.Core.Rules
 
         public SuperOverConfig Config { get { return config; } }
         public MatchPhase Phase { get { return phase; } }
+
+        /// <summary>True once the match has reached a final result.</summary>
+        public bool IsComplete { get { return phase == MatchPhase.Completed; } }
         public Innings FirstInnings { get { return firstInnings; } }
         public Innings SecondInnings { get { return secondInnings; } }
 
@@ -242,6 +245,8 @@ namespace CricketGame.Core.Rules
                     ? firstInnings.Runs - secondInnings.Runs : 0,
                 MarginWickets = outcome == MatchOutcome.SecondInningsWin
                     ? config.MaxWicketsPerInnings - secondInnings.Wickets : 0,
+                MarginBalls = outcome == MatchOutcome.SecondInningsWin
+                    ? config.BallsPerInnings - secondInnings.LegalBalls : 0,
                 FirstInnings = InningsSummary.From(firstInnings),
                 SecondInnings = InningsSummary.From(secondInnings)
             };

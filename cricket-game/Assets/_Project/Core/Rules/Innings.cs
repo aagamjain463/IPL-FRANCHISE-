@@ -15,6 +15,12 @@ namespace CricketGame.Core.Rules
         public int Runs { get; private set; }
         public int Wickets { get; private set; }
 
+        /// <summary>Batter slots (0 and 1). The striker faces the next ball.
+        /// Swap rules: odd runs swap the strike, 2 returns to the original
+        /// end, boundaries are not run so 4/6 never swap.</summary>
+        public int Striker { get; private set; }
+        public int NonStriker { get; private set; }
+
         /// <summary>Number of legal balls bowled (extras do not count).</summary>
         public int LegalBalls { get; private set; }
 
@@ -24,6 +30,8 @@ namespace CricketGame.Core.Rules
         public Innings(SuperOverConfig config)
         {
             this.config = config;
+            Striker = 0;
+            NonStriker = 1;
         }
 
         public SuperOverConfig Config
@@ -71,7 +79,19 @@ namespace CricketGame.Core.Rules
                 LegalBalls++;
 
             if (outcome.IsWicket)
+            {
                 Wickets = System.Math.Min(config.MaxWicketsPerInnings, Wickets + 1);
+                // Bowled/LBW/caught: no runs are taken, so the replacement
+                // batter simply takes guard at the striker's end (no swap).
+                // A run-out style dismissal with completed runs would swap
+                // first - future extension point.
+            }
+            else if (outcome.BatRuns % 2 == 1)
+            {
+                int tmp = Striker;
+                Striker = NonStriker;
+                NonStriker = tmp;
+            }
 
             TotalDeliveries++;
 
@@ -88,6 +108,18 @@ namespace CricketGame.Core.Rules
             };
             deliveries.Add(record);
             return record;
+        }
+
+        /// <summary>
+        /// DEBUG ONLY: forces the innings counters (spec section 25 debug panel).
+        /// Never called by the real match flow; values are clamped to the rules.
+        /// </summary>
+        public void DebugOverride(int runs, int wickets, int legalBalls)
+        {
+            Runs = System.Math.Max(0, runs);
+            Wickets = System.Math.Clamp(System.Math.Max(0, wickets), 0, config.MaxWicketsPerInnings);
+            LegalBalls = System.Math.Clamp(System.Math.Max(0, legalBalls), 0, config.BallsPerInnings);
+            TotalDeliveries = System.Math.Max(TotalDeliveries, LegalBalls);
         }
 
         public override string ToString()

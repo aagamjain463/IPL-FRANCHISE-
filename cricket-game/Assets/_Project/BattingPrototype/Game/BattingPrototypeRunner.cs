@@ -1,7 +1,11 @@
 using System.Collections;
+using CricketGame.Core.AI;
 using CricketGame.Core.Batting;
 using CricketGame.Core.Bowling;
+using CricketGame.Core.Fielding;
+using CricketGame.Core.Rules;
 using CricketGame.Core.Simulation;
+using CricketGame.BattingPrototype.Audio;
 using CricketGame.BattingPrototype.Ball;
 using CricketGame.BattingPrototype.Batsman;
 using CricketGame.BattingPrototype.Bowler;
@@ -9,16 +13,26 @@ using CricketGame.BattingPrototype.Bowling;
 using CricketGame.BattingPrototype.Camera;
 using CricketGame.BattingPrototype.Hud;
 using CricketGame.BattingPrototype.Input;
+using CricketGame.BattingPrototype.Match;
 using CricketGame.BattingPrototype.World;
 using UnityEngine;
 
 namespace CricketGame.BattingPrototype.Game
 {
+    /// <summary>Debug-only fielding override (spec section 25).</summary>
+    public enum ForcedFielding { None, Catch, Miss, StopOne, Boundary }
+
     /// <summary>
-    /// The gameplay loop (spec section 12 + 15): waiting -> run-up -> release ->
-    /// flight -> contact/miss -> outcome -> ball travels -> result -> reset ->
-    /// next delivery. The core engine decides everything deterministic; this
-    /// class sequences presentation, resolves cricket outcomes and fires events.
+    /// The delivery loop (Phase 1/2 behaviour, now match-aware). All match
+    /// rules live in <see cref="MatchController"/>; this class sequences
+    /// presentation around whatever the match says happens next:
+    ///
+    ///   Innings 1 - PLAYER bats (touch input), AI bowls from its plan.
+    ///   Innings 2 - AI bats (drives the same engine), PLAYER bowls via the
+    ///               bowling panel.
+    ///
+    /// Struck balls are resolved by the deterministic FieldingSimulator; the
+    /// rigidbody ball and fielders present that result.
     /// </summary>
     public class BattingPrototypeRunner : MonoBehaviour
     {
@@ -31,19 +45,27 @@ namespace CricketGame.BattingPrototype.Game
         private BatSwingController swingCtrl;
         private BattingAnimationController animCtrl;
 
-        private BattingEngine engine;
+        private MatchController matchCtl;
+        private FielderManager fielders;
+        private BowlingUiPanel bowlingPanel;
+        private readonly AiBatterDriver aiDriver = new AiBatterDriver();
 
-        private int runs;
-        private int wickets;
-        private int balls;
+        private BattingEngine engine;
 
         private bool struckApplied;
         private bool ballResolved;
         private bool keeperCollected;
+        private bool deliveryRecorded;
         private bool redeliverNext;
         private DeliveryData? lastDelivery;
         private ShotOutcomeResult pendingOutcome;
         private bool hasPendingOutcome;
+
+        // Phase 3 fielding resolution state.
+        private FieldingResult pendingFielding;
+        private bool fieldingActive;
+        private float struckClock;
+        private DeliveryData? currentDelivery;
 
         // ---------------------------------------------------------------- debug API
 
@@ -52,6 +74,9 @@ namespace CricketGame.BattingPrototype.Game
 
         /// <summary>Debug: force a specific cricket outcome (None = physics).</summary>
         public ForcedOutcome ForcedOutcome = ForcedOutcome.None;
+
+        /// <summary>Debug: force the FIELDING result (None = simulation).</summary>
+        public ForcedFielding ForcedField = ForcedFielding.None;
 
         /// <summary>Debug: slow-motion for tuning.</summary>
         public bool SlowMotion
@@ -67,6 +92,9 @@ namespace CricketGame.BattingPrototype.Game
         private bool slowMotion;
 
         public GameplayEvents Events { get; private set; }
+        public MatchController MatchCtl { get { return matchCtl; } }
+        public FielderManager Fielders { get { return fielders; } }
+        public BowlingUiPanel BowlingPanel { get { return bowlingPanel; } }
 
         public BattingEngine Engine { get { return engine; } }
         public DeliveryData? LastDelivery { get { return lastDelivery; } }
@@ -79,20 +107,29 @@ namespace CricketGame.BattingPrototype.Game
             engine.SetFootworkPosition(0f, 0f);
         }
 
-        /// <summary>Debug: replay the current delivery immediately, same ball.</summary>
+        /// <summary>Debug: replay the current delivery immediately, same ball.
+        /// Only allowed before the delivery has been recorded into the match.</summary>
         public void RedeliverSameBall()
         {
-            if (lastDelivery == null) return;
+            if (lastDelivery == null || deliveryRecorded) return;
             redeliverNext = true;
             ballResolved = true;   // release the loop's wait
             keeperCollected = true;
         }
 
+        /// <summary>Debug: skip the pre-delivery ceremony for the next ball.</summary>
+        public void SimulateNextDelivery()
+        {
+            skipCeremony = true;
+        }
+        private bool skipCeremony;
+
         // ------------------------------------------------------------------ wiring
 
         public void Init(BattingWorld w, BattingHud hudRef, MobileBattingInput inputRef,
                          BowlingController bowlingRef, BowlerController bowlerRef,
-                         CameraController camRef)
+                         CameraController camRef, MatchController matchRef,
+                         FielderManager fieldersRef, BowlingUiPanel panelRef)
         {
             world = w;
             hud = hudRef;
@@ -100,6 +137,9 @@ namespace CricketGame.BattingPrototype.Game
             bowling = bowlingRef;
             bowler = bowlerRef;
             cam = camRef;
+            matchCtl = matchRef;
+            fielders = fieldersRef;
+            bowlingPanel = panelRef;
             Events = new GameplayEvents();
 
             swingCtrl = world.BatsmanRoot.GetComponentInChildren<BatSwingController>();
@@ -115,7 +155,8 @@ namespace CricketGame.BattingPrototype.Game
             world.Ball.BallSettled += OnBallSettled;
 
             bowler.AttachRig(world.BowlerRoot, world.BowlerArm);
-            hud.SetScoreboard(runs, wickets, balls);
+            hud.PlayAgainPressed += () => matchCtl.PlayAgain();
+            matchCtl.RefreshHud();
 
             StartCoroutine(DeliveryLoop());
         }
@@ -146,7 +187,8 @@ namespace CricketGame.BattingPrototype.Game
             Events.FireShotPlayed(report);
 
             if (!report.WillContact && report.Window == TimingWindow.Missed)
-                hud.ShowPopup("TOO LATE!", new Color(1f, 0.4f, 0.3f), 0.7f);
+                hud.ShowPopup(matchCtl.PlayerIsBatting ? "TOO LATE!" : "SWING AND A MISS!",
+                              new Color(1f, 0.4f, 0.3f), 0.7f);
         }
 
         private void OnBallPassed(BallPassedReport report)
@@ -159,52 +201,75 @@ namespace CricketGame.BattingPrototype.Game
             pendingOutcome = outcome;
             hasPendingOutcome = true;
 
+            DeliveryOutcome rulesOutcome;
             if (outcome.IsWicket)
             {
-                wickets++;
+                rulesOutcome = DeliveryOutcome.Wicket(
+                    outcome.Kind == ShotOutcomeKind.Lbw ? DismissalKind.Lbw : DismissalKind.Bowled);
                 hud.ShowWicketBanner(outcome.Kind == ShotOutcomeKind.Lbw ? "LBW!" : "BOWLED!");
                 cam.OnWicket();
                 StartCoroutine(KnockStumps());
                 Events.FireWicket(outcome);
-            }
-            else if (report.Swung)
-            {
-                hud.ShowPopup("BEATEN!", new Color(1f, 0.75f, 0.3f), 0.9f);
+                AudioManager.Play(GameSound.Wicket);
             }
             else
             {
-                hud.ShowPopup("LEFT ALONE", new Color(0.8f, 0.9f, 1f), 0.8f);
+                rulesOutcome = DeliveryOutcome.Legal(outcome.Runs);
+                if (report.Swung)
+                    hud.ShowPopup("BEATEN!", new Color(1f, 0.75f, 0.3f), 0.9f);
+                else
+                    hud.ShowPopup("LEFT ALONE", new Color(0.8f, 0.9f, 1f), 0.8f);
             }
 
             Events.FireDeliveryComplete(outcome);
-            hud.SetScoreboard(runs, wickets, balls + 1);
+            RecordNow(rulesOutcome);
             if (!outcome.IsWicket) cam.ReturnToGameplay();
+            ballResolved = true;
         }
 
         private void OnBallSettled(BallEndResult result)
         {
-            // Runs come from the deterministic outcome resolved at contact time.
+            // The rigidbody says the ball finished. For struck balls the RUNS
+            // come from the fielding simulation; this event only tells us the
+            // presentation caught up (boundary reached).
+            if (deliveryRecorded) return;
+
+            if (fieldingActive && pendingFielding != null)
+            {
+                FinalizeStruckDelivery();
+                return;
+            }
+
+            // Legacy safety net (e.g. redeliver races): resolve as the pending
+            // Phase 2 outcome if one exists.
             ShotOutcomeResult outcome = hasPendingOutcome
                 ? pendingOutcome
                 : new ShotOutcomeResult { Kind = ShotOutcomeKind.Dot, Label = "DOT BALL", Runs = 0 };
+            AnnounceOutcome(outcome);
+            Events.FireDeliveryComplete(outcome);
+            cam.ReturnToGameplay();
+            RecordNow(DeliveryOutcome.Legal(outcome.Runs));
+            ballResolved = true;
+        }
 
-            runs += outcome.Runs;
+        private void AnnounceOutcome(ShotOutcomeResult outcome)
+        {
             switch (outcome.Kind)
             {
                 case ShotOutcomeKind.Six:
                     hud.ShowBoundaryBanner("SIX!", new Color(1f, 0.85f, 0.2f));
                     Events.FireBoundary(6, true);
+                    AudioManager.Play(GameSound.BoundarySix);
                     break;
                 case ShotOutcomeKind.Four:
                     hud.ShowBoundaryBanner("FOUR!", new Color(0.4f, 0.9f, 1f));
                     Events.FireBoundary(4, false);
+                    AudioManager.Play(GameSound.BoundaryFour);
                     break;
                 case ShotOutcomeKind.TopEdge:
                 case ShotOutcomeKind.InsideEdge:
                 case ShotOutcomeKind.OutsideEdge:
                     hud.ShowPopup(outcome.Label, new Color(1f, 0.65f, 0.4f), 1.0f);
-                    if (outcome.Runs > 0) hud.ShowPopup(outcome.Label + "  +" + outcome.Runs,
-                        new Color(1f, 0.65f, 0.4f), 1.0f);
                     break;
                 case ShotOutcomeKind.Single:
                 case ShotOutcomeKind.Two:
@@ -219,10 +284,168 @@ namespace CricketGame.BattingPrototype.Game
                     hud.ShowPopup(outcome.Label, new Color(0.75f, 0.75f, 0.75f), 0.7f);
                     break;
             }
+        }
 
-            Events.FireDeliveryComplete(outcome);
-            cam.ReturnToGameplay();
+        // ------------------------------------------------------------------ fielding
+
+        /// <summary>Resolves a struck ball against the field (spec sections
+        /// 4-12) and schedules its presentation.</summary>
+        private void ResolveStruckBall(SwingReport swing)
+        {
+            ContactResult contact = swing.Contact;
+            DeliveryTrajectory traj = engine.ActiveDelivery;
+            float startHeight = Mathf.Max(0.35f, traj.HeightAtContact);
+            var contactPos = new Vec3(traj.XAtContact, startHeight, DeliveryTrajectory.ContactZ);
+            float speed = contact.ExitSpeedKph / 3.6f;
+            var velocity = new Vec3(contact.Direction.X * speed,
+                                    contact.Direction.Y * speed,
+                                    contact.Direction.Z * speed);
+
+            FieldingResult field = FieldingSimulator.Simulate(
+                contactPos, velocity, matchCtl.CurrentField(), engineRng);
+            field = ApplyFieldingForces(field, velocity);
+
+            pendingFielding = field;
+            fieldingActive = true;
+            struckClock = 0f;
+            fielders.OnBallStruck(field);
+
+            switch (field.Kind)
+            {
+                case FieldingKind.Six:
+                    hud.ShowBoundaryBanner("SIX!", new Color(1f, 0.85f, 0.2f));
+                    Events.FireBoundary(6, true);
+                    AudioManager.Play(GameSound.BoundarySix);
+                    cam.FollowShot(world.Ball.transform.position, true);
+                    break;
+                case FieldingKind.Four:
+                    hud.ShowBoundaryBanner("FOUR!", new Color(0.4f, 0.9f, 1f));
+                    Events.FireBoundary(4, false);
+                    AudioManager.Play(GameSound.BoundaryFour);
+                    cam.FollowShot(world.Ball.transform.position, true);
+                    break;
+                case FieldingKind.Caught:
+                    // Announced when the catch actually happens (struckClock).
+                    break;
+                default:
+                    cam.OnFieldingPlay(world.Ball.transform.position);
+                    break;
+            }
+        }
+
+        /// <summary>Debug force-fielding hook (spec section 25).</summary>
+        private FieldingResult ApplyFieldingForces(FieldingResult field, Vec3 velocity)
+        {
+            switch (ForcedField)
+            {
+                case ForcedFielding.Catch:
+                    if (field.Kind != FieldingKind.Caught)
+                    {
+                        field.Kind = FieldingKind.Caught;
+                        field.Runs = 0;
+                        if (field.FielderIndex < 0) field.FielderIndex = 2; // cover
+                        if (string.IsNullOrEmpty(field.FielderName)) field.FielderName = "cover";
+                        if (field.Time < 0.5f) field.Time = 0.9f;
+                    }
+                    break;
+                case ForcedFielding.Miss:
+                    if (field.Kind == FieldingKind.Caught || field.Kind == FieldingKind.Stopped)
+                    {
+                        field.Kind = FieldingKind.Four;
+                        field.Runs = 4;
+                        field.FielderIndex = -1;
+                        field.FielderName = null;
+                    }
+                    break;
+                case ForcedFielding.StopOne:
+                    field.Kind = FieldingKind.Stopped;
+                    field.Runs = 1;
+                    if (field.Time < 0.4f) field.Time = 0.6f;
+                    break;
+                case ForcedFielding.Boundary:
+                    field.Kind = FieldingKind.Four;
+                    field.Runs = 4;
+                    field.FielderIndex = -1;
+                    field.FielderName = null;
+                    break;
+                case ForcedFielding.None:
+                    break;
+            }
+            return field;
+        }
+
+        private void UpdateStruckPresentation(float dt)
+        {
+            if (!fieldingActive || pendingFielding == null || deliveryRecorded) return;
+            struckClock += dt;
+            fielders.AdvanceStruckClock(dt);
+
+            bool boundary = pendingFielding.Kind == FieldingKind.Four
+                            || pendingFielding.Kind == FieldingKind.Six;
+
+            if (!boundary)
+            {
+                if (struckClock >= pendingFielding.Time)
+                {
+                    Vector3 spot = new Vector3(pendingFielding.Pos.X,
+                        Mathf.Max(0.12f, pendingFielding.Pos.Y), pendingFielding.Pos.Z);
+                    world.Ball.FreezeAt(spot);
+                    if (pendingFielding.Kind == FieldingKind.Caught)
+                    {
+                        hud.ShowWicketBanner("CAUGHT" +
+                            (string.IsNullOrEmpty(pendingFielding.FielderName)
+                                ? "!" : "  -  " + pendingFielding.FielderName.ToUpper() + "!"));
+                        cam.OnCatchEmphasis(spot);
+                        AudioManager.Play(GameSound.Wicket);
+                        Events.FireWicket(new ShotOutcomeResult
+                        {
+                            Kind = ShotOutcomeKind.TopEdge,
+                            Label = "CAUGHT",
+                            IsWicket = true,
+                        });
+                    }
+                    else
+                    {
+                        cam.OnFieldingPlay(spot);
+                        if (pendingFielding.Runs > 0)
+                            hud.ShowPopup("+" + pendingFielding.Runs +
+                                          (pendingFielding.Runs == 1 ? " RUN" : " RUNS"),
+                                          Color.white, 0.9f);
+                        else
+                            hud.ShowPopup("DOT BALL", new Color(0.75f, 0.75f, 0.75f), 0.7f);
+                    }
+                    FinalizeStruckDelivery();
+                }
+            }
+            else if (struckClock > pendingFielding.Time + 1.5f)
+            {
+                // Physics fell behind the sim: force the boundary home.
+                FinalizeStruckDelivery();
+            }
+        }
+
+        private void FinalizeStruckDelivery()
+        {
+            if (deliveryRecorded) return;
+            DeliveryOutcome rulesOutcome;
+            if (pendingFielding.Kind == FieldingKind.Caught)
+                rulesOutcome = DeliveryOutcome.Wicket(DismissalKind.Caught);
+            else
+                rulesOutcome = DeliveryOutcome.Legal(pendingFielding.Runs);
+            RecordNow(rulesOutcome);
+            fieldingActive = false;
             ballResolved = true;
+            if (pendingFielding.Kind != FieldingKind.Caught
+                && pendingFielding.Kind != FieldingKind.Four
+                && pendingFielding.Kind != FieldingKind.Six)
+                cam.ReturnToGameplay();
+        }
+
+        private void RecordNow(DeliveryOutcome outcome)
+        {
+            if (deliveryRecorded) return;
+            deliveryRecorded = true;
+            matchCtl.RecordDelivery(outcome);
         }
 
         // ------------------------------------------------------------------ main loop
@@ -231,6 +454,15 @@ namespace CricketGame.BattingPrototype.Game
         {
             while (true)
             {
+                // Match flow gate: innings result / break / match result screens.
+                yield return StartCoroutine(matchCtl.BetweenDeliveries());
+
+                bool playerBatting = matchCtl.PlayerIsBatting;
+                hud.SetBattingControlsVisible(playerBatting);
+                hud.SetBattingSideLabel(playerBatting ? "YOU" : "AI");
+                bowlingPanel.SetVisible(matchCtl.PlayerIsBowling);
+                bowling.AccuracyOverride = playerBatting ? matchCtl.AiBowlingAccuracy : -1f;
+
                 DeliveryData data;
 
                 if (redeliverNext)
@@ -246,26 +478,46 @@ namespace CricketGame.BattingPrototype.Game
                     // --- pre-delivery: wide broadcast view, bowler walks back
                     bowler.ResetPosition();
                     ResetStumps();
+                    ResetBatsmanPosition();
+                    fielders.BeginDelivery();
                     cam.ShowSetup();
-                    hud.SetScoreboard(runs, wickets, balls);
-                    yield return new WaitForSeconds(0.75f);
+                    matchCtl.RefreshHud();
+                    yield return new WaitForSeconds(skipCeremony ? 0.15f : 0.75f);
+                    skipCeremony = false;
 
                     // --- run-up (camera blends to gameplay meanwhile)
                     cam.BeginRunUp();
                     bowler.StartRunUp();
                     yield return new WaitForSeconds(bowler.RunUpDuration);
 
-                    data = bowling.NextDelivery();
+                    if (matchCtl.PlayerIsBowling)
+                    {
+                        data = bowling.PlayerDelivery(bowlingPanel.SelectedType,
+                                                      bowlingPanel.Line, bowlingPanel.Length,
+                                                      0.9f);
+                    }
+                    else
+                    {
+                        data = bowling.NextDelivery();
+                    }
                 }
 
                 Deliver(data);
 
+                // AI batter plans this delivery once it exists.
+                if (!matchCtl.PlayerIsBatting)
+                {
+                    var hintTraj = new DeliveryTrajectory(data);
+                    aiDriver.BeginDelivery(data, matchCtl.BuildChaseContext(),
+                                           matchCtl.Difficulty, hintTraj.HitsStumps());
+                }
+
                 // --- wait for the ball to resolve
-                while (!ballResolved && !keeperCollected)
+                while (!ballResolved)
                     yield return null;
 
-                balls++;
-                hud.SetScoreboard(runs, wickets, balls);
+                aiDriver.EndDelivery();
+                matchCtl.RefreshHud();
                 yield return new WaitForSeconds(1.05f);
             }
         }
@@ -273,6 +525,7 @@ namespace CricketGame.BattingPrototype.Game
         private void Deliver(DeliveryData data)
         {
             lastDelivery = data;
+            currentDelivery = data;
 
             engine.BeginDelivery(data);
             world.Ball.Launch(engine.ActiveDelivery);
@@ -281,10 +534,14 @@ namespace CricketGame.BattingPrototype.Game
             ballResolved = false;
             keeperCollected = false;
             hasPendingOutcome = false;
+            deliveryRecorded = false;
+            pendingFielding = null;
+            fieldingActive = false;
 
             hud.ShowDeliveryToast(DeliveryLabels.Name(data.Type) + "  -  " +
                                   Mathf.RoundToInt(data.SpeedKph) + " KPH");
             Events.FireBallReleased(data);
+            AudioManager.Play(GameSound.DeliveryRelease);
             cam.OnRelease();
         }
 
@@ -294,13 +551,22 @@ namespace CricketGame.BattingPrototype.Game
         {
             float dt = Time.deltaTime;
 
-            BattingInputFrame frame = input.Sample();
-            InjectForcedSwing(ref frame);
+            BattingInputFrame frame;
+            if (matchCtl.PlayerIsBatting)
+            {
+                frame = input.Sample();
+                InjectForcedSwing(ref frame);
+            }
+            else
+            {
+                frame = aiDriver.SampleFrame(engine, dt);
+            }
             engine.Update(dt, frame);
 
             world.Ball.AdvanceFlight(dt);
             animCtrl.ApplyEngineFootwork(engine.Foot);
             UpdateBallShadow();
+            UpdateStruckPresentation(dt);
 
             DeliveryTrajectory traj = engine.ActiveDelivery;
             if (traj == null) return;
@@ -318,18 +584,9 @@ namespace CricketGame.BattingPrototype.Game
                         ContactResult contact = swing.Value.Contact;
                         world.Ball.Strike(contact.Direction, contact.ExitSpeedKph);
                         Events.FireBallContact(contact);
-
-                        // Resolve the cricket outcome NOW (deterministic), apply on settle.
-                        pendingOutcome = ShotOutcomeResolver.Resolve(
-                            engineRng, traj, swing, engine.Foot.X, engine.Foot.Z,
-                            true, ForcedOutcome);
-                        hasPendingOutcome = true;
-
-                        bool boundaryLikely = pendingOutcome.Kind == ShotOutcomeKind.Four
-                                              || pendingOutcome.Kind == ShotOutcomeKind.Six;
-                        cam.FollowShot(world.Ball.transform.position, boundaryLikely);
-
-                        ShowContactFeedback(swing.Value, pendingOutcome);
+                        AudioManager.Play(GameSound.BatContact);
+                        ShowContactFeedback(swing.Value);
+                        ResolveStruckBall(swing.Value);
                     }
                 }
 
@@ -338,29 +595,14 @@ namespace CricketGame.BattingPrototype.Game
                     // Ball passed the batter unstruck: hand it to the keeper.
                     world.Ball.CollectAtKeeper(world.KeeperMark.position + new Vector3(0.25f, 0.35f, 0f));
                     keeperCollected = true;
-                    if (!hasPendingOutcome)
-                    {
-                        // Nothing was ever resolved (e.g. forced redeliver race): dot.
-                        ballResolved = true;
-                    }
                 }
             }
         }
 
-        private void ShowContactFeedback(SwingReport swing, ShotOutcomeResult outcome)
+        private void ShowContactFeedback(SwingReport swing)
         {
             string text = swing.Selection.Name.ToUpper() + "  -  " + swing.Window.ToString().ToUpper();
             Color color = WindowColor(swing.Window);
-
-            // Edges speak for themselves instead of the shot name.
-            if (outcome.Kind == ShotOutcomeKind.TopEdge ||
-                outcome.Kind == ShotOutcomeKind.InsideEdge ||
-                outcome.Kind == ShotOutcomeKind.OutsideEdge)
-            {
-                text = outcome.Label;
-                color = new Color(1f, 0.65f, 0.4f);
-            }
-
             hud.ShowPopup(text, color, 0.95f);
             if (swing.Window == TimingWindow.Perfect) hud.FlashTiming(color);
         }

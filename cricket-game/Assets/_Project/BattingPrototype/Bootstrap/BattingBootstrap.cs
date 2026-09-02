@@ -4,6 +4,7 @@ using CricketGame.BattingPrototype.Camera;
 using CricketGame.BattingPrototype.Game;
 using CricketGame.BattingPrototype.Hud;
 using CricketGame.BattingPrototype.Input;
+using CricketGame.BattingPrototype.Match;
 using CricketGame.BattingPrototype.World;
 using UnityEngine;
 
@@ -66,6 +67,24 @@ namespace CricketGame.BattingPrototype.Bootstrap
             hud.Build(input);
             input.IntentButtonsRectScreen = hud.IntentButtonsScreenRect();
 
+            // Fielders (9 + bowler + keeper, spec section 6).
+            var fieldersGo = new GameObject("Fielders");
+            fieldersGo.transform.SetParent(root.transform, false);
+            var fielders = fieldersGo.AddComponent<FielderManager>();
+            fielders.Build(root.transform);
+
+            // Match controller (owns all match rules and flow).
+            var matchGo = new GameObject("MatchController");
+            matchGo.transform.SetParent(root.transform, false);
+            var matchCtl = matchGo.AddComponent<MatchController>();
+            matchCtl.Init(hud);
+
+            // Bowling controls for the chase innings.
+            var panelGo = new GameObject("BowlingPanel");
+            panelGo.transform.SetParent(root.transform, false);
+            var bowlingPanel = panelGo.AddComponent<BowlingUiPanel>();
+            bowlingPanel.Build(hud.Canvas);
+
             // Debug panel.
             var debugGo = new GameObject("DebugUI");
             debugGo.transform.SetParent(root.transform, false);
@@ -77,8 +96,8 @@ namespace CricketGame.BattingPrototype.Bootstrap
             var runner = runnerGo.AddComponent<BattingPrototypeRunner>();
 
             debug.StartVisible = debugPanelVisible;
-            debug.Build(hud.Canvas, bowling, runner, input);
-            runner.Init(world, hud, input, bowling, bowler, camCtrl);
+            debug.Build(hud.Canvas, bowling, runner, input, matchCtl);
+            runner.Init(world, hud, input, bowling, bowler, camCtrl, matchCtl, fielders, bowlingPanel);
         }
     }
 }

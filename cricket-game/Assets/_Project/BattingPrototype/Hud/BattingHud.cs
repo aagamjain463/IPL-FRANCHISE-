@@ -38,6 +38,16 @@ namespace CricketGame.BattingPrototype.Hud
         private Coroutine bannerRoutine;
         private Coroutine flashRoutine;
         private ShotIntent currentIntent = ShotIntent.Normal;
+        private string battingSideLabel = "YOU";
+
+        // Phase 3: chase line + full-screen overlays.
+        private Text chaseText;
+        private RectTransform overlayPanel;
+        private Text overlayTitle;
+        private Text overlayDetail;
+        private Text overlaySub;
+        private UnityEngine.UI.Button playAgainButton;
+        private RectTransform battingControls;   // joystick + intent column root
 
         private static readonly Color Dim = new Color(1f, 1f, 1f, 0.14f);
         private static readonly Color PanelDark = new Color(0.05f, 0.07f, 0.12f, 0.62f);
@@ -69,6 +79,7 @@ namespace CricketGame.BattingPrototype.Hud
             CanvasRect = (RectTransform)canvasGo.transform;
 
             BuildScoreboard();
+            BuildChaseLine();
             BuildIntentButtons();
             BuildJoystickVisuals();
             BuildSwipeZone();
@@ -76,6 +87,7 @@ namespace CricketGame.BattingPrototype.Hud
             BuildToast();
             BuildBanner();
             BuildTimingFlash();
+            BuildOverlay();
 
             input.JoystickStarted += () => SetJoystickVisible(true);
             input.JoystickEnded += () => SetJoystickVisible(false);
@@ -103,10 +115,153 @@ namespace CricketGame.BattingPrototype.Hud
             bg.raycastTarget = false;
 
             scoreText = World.UiKit.AddText(bg.transform, "Score",
-                "SCORE 0   WKTS 0   BALLS 0      TARGET —   REQ —", 30, TextAnchor.MiddleCenter, Color.white);
+                "YOU  0/0   (0 of 6 balls)", 30, TextAnchor.MiddleCenter, Color.white);
             World.UiKit.Anchor(scoreText.rectTransform, Vector2.zero, Vector2.one,
                 new Vector2(8, 0), new Vector2(-8, 0));
         }
+
+        private void BuildChaseLine()
+        {
+            var bg = AnchoredPanel<Image>("ChaseLine", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(-420, -128), new Vector2(420, -90));
+            bg.sprite = World.UiKit.WhiteSprite;
+            bg.color = new Color(0.05f, 0.07f, 0.12f, 0.42f);
+            bg.raycastTarget = false;
+
+            chaseText = World.UiKit.AddText(bg.transform, "Chase",
+                "SET A TARGET   ·   6 BALLS LEFT", 22, TextAnchor.MiddleCenter,
+                new Color(0.9f, 0.96f, 1f));
+            World.UiKit.Anchor(chaseText.rectTransform, Vector2.zero, Vector2.one,
+                new Vector2(8, 0), new Vector2(-8, 0));
+        }
+
+        private void BuildOverlay()
+        {
+            overlayPanel = AnchoredPanel<RectTransform>("MatchOverlay",
+                Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            var dim = World.UiKit.AddImage(overlayPanel, "Dim", new Color(0.02f, 0.03f, 0.08f, 0.72f));
+            World.UiKit.Anchor(dim.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            var card = World.UiKit.AddImage(overlayPanel, "Card", PanelDark);
+            World.UiKit.Anchor(card.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(-430, -240), new Vector2(430, 240));
+
+            overlayTitle = World.UiKit.AddText(card.rectTransform, "Title", "", 64,
+                TextAnchor.MiddleCenter, Color.white);
+            World.UiKit.Anchor(overlayTitle.rectTransform, new Vector2(0, 1), new Vector2(1, 1),
+                new Vector2(20, -150), new Vector2(-20, -30));
+
+            overlayDetail = World.UiKit.AddText(card.rectTransform, "Detail", "", 30,
+                TextAnchor.MiddleCenter, new Color(0.85f, 0.9f, 1f));
+            World.UiKit.Anchor(overlayDetail.rectTransform, new Vector2(0, 0.5f), new Vector2(1, 0.5f),
+                new Vector2(24, -60), new Vector2(-24, 60));
+
+            overlaySub = World.UiKit.AddText(card.rectTransform, "Sub", "", 24,
+                TextAnchor.MiddleCenter, new Color(0.7f, 0.75f, 0.9f));
+            World.UiKit.Anchor(overlaySub.rectTransform, new Vector2(0, 0), new Vector2(1, 0),
+                new Vector2(24, 110), new Vector2(-24, 160));
+
+            var btnImg = World.UiKit.AddImage(card.rectTransform, "PlayAgainBtn",
+                new Color(0.15f, 0.65f, 0.35f, 0.95f));
+            btnImg.raycastTarget = true;
+            World.UiKit.Anchor(btnImg.rectTransform, new Vector2(0.5f, 0), new Vector2(0.5f, 0),
+                new Vector2(-190, 26), new Vector2(190, 96));
+            var btnLabel = World.UiKit.AddText(btnImg.rectTransform, "Label", "PLAY AGAIN", 32,
+                TextAnchor.MiddleCenter, Color.white);
+            World.UiKit.Anchor(btnLabel.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            playAgainButton = btnImg.gameObject.AddComponent<Button>();
+            playAgainButton.targetGraphic = btnImg;
+
+            overlayPanel.gameObject.SetActive(false);
+        }
+
+        // ------------------------------------------------------------------ phase 3 overlays
+
+        /// <summary>Raised when the player presses PLAY AGAIN on the result screen.</summary>
+        public event Action PlayAgainPressed;
+
+        /// <summary>End of innings 1: what was scored and the target to defend.</summary>
+        public void ShowInningsComplete(int runs, int wickets, int balls, int target)
+        {
+            ShowOverlayCard("INNINGS COMPLETE",
+                "YOU  " + runs + "/" + wickets + "   (" + balls + " balls)",
+                "TARGET SET:  " + target, false);
+        }
+
+        /// <summary>The break screen: the chase target (spec section 20).</summary>
+        public void ShowInningsBreak(int target)
+        {
+            ShowOverlayCard("THE CHASE BEGINS",
+                "AI NEEDS  " + target + "  RUNS FROM 6 BALLS",
+                "YOU BOWL  ·  PICK LINE, LENGTH AND TYPE", false);
+        }
+
+        /// <summary>Final result screen (spec section 22) with margins.</summary>
+        public void ShowMatchResult(CricketGame.Core.Rules.MatchResult result, bool playerWon)
+        {
+            string title;
+            string detail;
+            switch (result.Outcome)
+            {
+                case CricketGame.Core.Rules.MatchOutcome.SecondInningsWin:
+                    title = "YOU LOSE";
+                    detail = "Target chased with " + result.MarginBalls
+                             + (result.MarginBalls == 1 ? " ball" : " balls") + " remaining";
+                    break;
+                case CricketGame.Core.Rules.MatchOutcome.FirstInningsWin:
+                    title = "YOU WIN";
+                    bool allOut = result.SecondInnings.Wickets >= 2;
+                    detail = allOut
+                        ? "All out  -  fell short by " + result.MarginRuns
+                          + (result.MarginRuns == 1 ? " run" : " runs")
+                        : "Won by " + result.MarginRuns + (result.MarginRuns == 1 ? " run" : " runs");
+                    break;
+                default:
+                    title = "TIE";
+                    detail = "Scores level after the Super Over";
+                    break;
+            }
+
+            string sub = "YOU  " + result.FirstInnings.Runs + "/" + result.FirstInnings.Wickets
+                         + "  (" + result.FirstInnings.LegalBalls + " balls)     ·     AI  "
+                         + result.SecondInnings.Runs + "/" + result.SecondInnings.Wickets
+                         + "  (" + result.SecondInnings.LegalBalls + " balls)";
+            ShowOverlayCard(title, detail, sub, true);
+        }
+
+        public void HideOverlays()
+        {
+            if (overlayPanel != null) overlayPanel.gameObject.SetActive(false);
+        }
+
+        private void ShowOverlayCard(string title, string detail, string sub, bool showPlayAgain)
+        {
+            if (overlayPanel == null) return;
+            overlayPanel.gameObject.SetActive(true);
+            overlayTitle.text = title;
+            overlayDetail.text = detail;
+            overlaySub.text = sub;
+            playAgainButton.gameObject.SetActive(showPlayAgain);
+            if (showPlayAgain)
+            {
+                playAgainButton.onClick.RemoveAllListeners();
+                playAgainButton.onClick.AddListener(() =>
+                {
+                    if (PlayAgainPressed != null) PlayAgainPressed();
+                });
+            }
+        }
+
+        /// <summary>Hides batting-only controls while the player bowls.</summary>
+        public void SetBattingControlsVisible(bool visible)
+        {
+            battingControlsVisible = visible;
+            if (intentPanelRect != null) intentPanelRect.gameObject.SetActive(visible);
+            SetJoystickVisible(joystickShown);
+        }
+        private bool battingControlsVisible = true;
+        private bool joystickShown;
 
         private void BuildIntentButtons()
         {
@@ -244,8 +399,31 @@ namespace CricketGame.BattingPrototype.Hud
 
         public void SetScoreboard(int runs, int wickets, int balls)
         {
-            scoreText.text = "SCORE " + runs + "   WKTS " + wickets + "   BALLS " + balls +
-                             "      TARGET —   REQ —";
+            string side = battingSideLabel;
+            scoreText.text = side + "  " + runs + "/" + wickets + "   (" + balls + " of 6 balls)";
+        }
+
+        /// <summary>Which side is batting, for the scoreboard ("YOU" / "AI").</summary>
+        public void SetBattingSideLabel(string label)
+        {
+            battingSideLabel = string.IsNullOrEmpty(label) ? "SCORE" : label;
+        }
+
+        /// <summary>Chase line under the score (spec section 2):
+        /// target, runs still required, balls and wickets in hand.</summary>
+        public void SetChaseInfo(int target, int required, int ballsRemaining, int wicketsRemaining)
+        {
+            if (chaseText == null) return;
+            if (target <= 0)
+            {
+                chaseText.text = "SET A TARGET   ·   " + ballsRemaining + " BALLS LEFT";
+            }
+            else
+            {
+                chaseText.text = "TARGET " + target + "   ·   NEED " + required +
+                                 "   ·   " + ballsRemaining + " BALLS   ·   " +
+                                 wicketsRemaining + (wicketsRemaining == 1 ? " WICKET" : " WICKETS") + " LEFT";
+            }
         }
 
         public void ShowPopup(string message, Color color, float duration = 1.1f)
@@ -350,8 +528,10 @@ namespace CricketGame.BattingPrototype.Hud
 
         private void SetJoystickVisible(bool visible)
         {
-            joyBase.gameObject.SetActive(visible);
-            joyKnob.gameObject.SetActive(visible);
+            joystickShown = visible;
+            bool show = visible && battingControlsVisible;
+            joyBase.gameObject.SetActive(show);
+            joyKnob.gameObject.SetActive(show);
         }
 
         /// <summary>Screen-pixel rect of the intent buttons (touch exclusion zone).</summary>

@@ -23,6 +23,7 @@ namespace CricketGame.BattingPrototype.Hud
         private BowlingController bowling;
         private BattingPrototypeRunner runner;
         private Input.MobileBattingInput input;
+        private CricketGame.BattingPrototype.Match.MatchController matchCtl;
         private float refreshTimer;
         private readonly StringBuilder sb = new StringBuilder(768);
 
@@ -41,12 +42,24 @@ namespace CricketGame.BattingPrototype.Hud
             ForcedOutcome.Bowled, ForcedOutcome.Lbw
         };
 
+        private int forcedFieldIndex = 0;
+        private Text fieldBtnLabel;
+        private Text diffBtnLabel;
+
+        private static readonly Game.ForcedFielding[] FieldCycle =
+        {
+            Game.ForcedFielding.None, Game.ForcedFielding.Catch, Game.ForcedFielding.Miss,
+            Game.ForcedFielding.StopOne, Game.ForcedFielding.Boundary
+        };
+
         public void Build(Canvas canvas, BowlingController bowlingRef, BattingPrototypeRunner runnerRef,
-                          Input.MobileBattingInput inputRef)
+                          Input.MobileBattingInput inputRef,
+                          CricketGame.BattingPrototype.Match.MatchController matchRef)
         {
             bowling = bowlingRef;
             runner = runnerRef;
             input = inputRef;
+            matchCtl = matchRef;
 
             var bgGo = World.UiKit.NewUi("DebugPanel", canvas.transform);
             var bg = bgGo.AddComponent<Image>();
@@ -64,7 +77,7 @@ namespace CricketGame.BattingPrototype.Hud
             var rt = readout.rectTransform;
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
-            rt.offsetMin = new Vector2(12, 252);
+            rt.offsetMin = new Vector2(12, 356);
             rt.offsetMax = new Vector2(-12, -12);
 
             BuildSlider(rect, "Speed", 80f, 150f, () => CurrentSpeed(), v => SetSpeed(v), 112);
@@ -83,7 +96,58 @@ namespace CricketGame.BattingPrototype.Hud
             typeBtnLabel = BuildButton(rect, "TYPE: AUTO", CycleForcedType, -322, 244, 222, 26);
             outcomeBtnLabel = BuildButton(rect, "OUTCOME: NONE", CycleForcedOutcome, -92, 244, 130, 26);
 
+            // Phase 3 match debug row (spec section 25).
+            diffBtnLabel = BuildButton(rect, "DIFF: MEDIUM", CycleDifficulty, -322, 278, 150, 26);
+            fieldBtnLabel = BuildButton(rect, "FIELD: NONE", CycleForcedField, -164, 278, 130, 26);
+            BuildButton(rect, "SIM BALL", SimulateBall, -26, 278, 96, 26);
+
+            BuildButton(rect, "RUNS +2", () => NudgeInnings(2, 0, 0), -322, 312, 96, 26);
+            BuildButton(rect, "WKTS +1", () => NudgeInnings(0, 1, 0), -218, 312, 96, 26);
+            BuildButton(rect, "BALLS +1", () => NudgeInnings(0, 0, 1), -114, 312, 96, 26);
+            BuildButton(rect, "RESET MATCH", ResetMatch, -322, 346, 150, 26);
+
             SetVisible(StartVisible);
+        }
+
+        // ------------------------------------------------------------- phase 3 debug
+
+        private void CycleDifficulty()
+        {
+            var next = matchCtl.Difficulty == CricketGame.Core.AI.AiDifficulty.Easy
+                ? CricketGame.Core.AI.AiDifficulty.Medium
+                : matchCtl.Difficulty == CricketGame.Core.AI.AiDifficulty.Medium
+                    ? CricketGame.Core.AI.AiDifficulty.Hard
+                    : CricketGame.Core.AI.AiDifficulty.Easy;
+            matchCtl.Difficulty = next;
+            diffBtnLabel.text = "DIFF: " + next.ToString().ToUpper();
+        }
+
+        private void CycleForcedField()
+        {
+            forcedFieldIndex = (forcedFieldIndex + 1) % FieldCycle.Length;
+            runner.ForcedField = FieldCycle[forcedFieldIndex];
+            fieldBtnLabel.text = "FIELD: " + FieldCycle[forcedFieldIndex].ToString().ToUpper();
+        }
+
+        private void SimulateBall()
+        {
+            runner.SimulateNextDelivery();
+        }
+
+        private void ResetMatch()
+        {
+            matchCtl.PlayAgain();      // releases any result screen
+            matchCtl.ResetMatch();
+            matchCtl.RefreshHud();
+        }
+
+        private void NudgeInnings(int runs, int wickets, int balls)
+        {
+            var innings = matchCtl.Match.CurrentInnings;
+            if (innings == null) return;
+            innings.DebugOverride(innings.Runs + runs, innings.Wickets + wickets,
+                                  innings.LegalBalls + balls);
+            matchCtl.RefreshHud();
         }
 
         // ------------------------------------------------------------- slider glue

@@ -134,6 +134,19 @@ namespace CricketGame.BattingPrototype.Ball
             transform.position = keeperPos;
         }
 
+        /// <summary>Phase 3: the fielding sim resolved the ball (catch/stop) -
+        /// freeze it at the simulated spot. No settle event; the runner owns
+        /// the outcome.</summary>
+        public void FreezeAt(Vector3 position)
+        {
+            inFlight = false;
+            struck = false;
+            rigidbody.isKinematic = true;
+            rigidbody.velocity = Vector3.zero;
+            rigidbody.angularVelocity = Vector3.zero;
+            transform.position = position;
+        }
+
         private void Update()
         {
             // --- dust puff fade (cheap, pooled)

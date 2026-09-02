@@ -13,7 +13,7 @@ namespace CricketGame.BattingPrototype.Camera
     /// </summary>
     public class CameraController : MonoBehaviour
     {
-        private enum State { Setup, BlendToGameplay, Gameplay, Follow, FollowLong, Wicket, Return }
+        private enum State { Setup, BlendToGameplay, Gameplay, Follow, FollowLong, Wicket, CatchEmphasis, FieldingFollow, Return }
 
         private static readonly Vector3 SetupPos = new Vector3(11.5f, 4.6f, 10f);
         private static readonly Vector3 SetupLook = new Vector3(0f, 1.0f, 10f);
@@ -81,6 +81,22 @@ namespace CricketGame.BattingPrototype.Camera
             stateTime = 0f;
         }
 
+        /// <summary>Catch taken: hold on the fielder for a beat (spec 18).</summary>
+        public void OnCatchEmphasis(Vector3 catchPosition)
+        {
+            state = State.CatchEmphasis;
+            stateTime = 0f;
+            followLook = catchPosition;
+        }
+
+        /// <summary>Ball fielded in the deep/ground: watch the play develop.</summary>
+        public void OnFieldingPlay(Vector3 ballPosition)
+        {
+            state = State.FieldingFollow;
+            stateTime = 0f;
+            followLook = ballPosition;
+        }
+
         /// <summary>Ball settled/passed: ease back to the gameplay view.</summary>
         public void ReturnToGameplay()
         {
@@ -91,7 +107,8 @@ namespace CricketGame.BattingPrototype.Camera
         /// <summary>While the ball is moving the camera keeps an eye on it.</summary>
         public void TrackBall(Vector3 ballPosition)
         {
-            if (state == State.Gameplay || state == State.Follow || state == State.FollowLong)
+            if (state == State.Gameplay || state == State.Follow || state == State.FollowLong
+                || state == State.FieldingFollow)
                 followLook = ballPosition;
         }
 
@@ -152,6 +169,27 @@ namespace CricketGame.BattingPrototype.Camera
                     look = WicketLook;
                     if (stateTime > 1.5f) state = State.Return;
                     break;
+
+                case State.CatchEmphasis:
+                {
+                    // Drift toward the catcher, framed low and close.
+                    Vector3 target = followLook + new Vector3(-2.6f, 1.6f, -4.2f);
+                    pos = Vector3.Lerp(GameplayPos, target, Mathf.Clamp01(stateTime / 0.5f));
+                    look = followLook + new Vector3(0f, 1.2f, 0f);
+                    if (stateTime > 1.7f) state = State.Return;
+                    break;
+                }
+
+                case State.FieldingFollow:
+                {
+                    float depth = Mathf.Clamp(followLook.z * 0.08f, 0f, 4.5f);
+                    pos = GameplayPos + new Vector3(
+                        Mathf.Clamp(followLook.x * 0.08f, -2.5f, 2.5f),
+                        0.35f + depth * 0.4f, -depth * 0.25f);
+                    look = Vector3.Lerp(lastLook, followLook, 0.3f);
+                    if (stateTime > 1.4f) state = State.Return;
+                    break;
+                }
 
                 case State.Return:
                 {

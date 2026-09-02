@@ -57,6 +57,9 @@ namespace CricketGame.Core.Rules
         /// <summary>Wickets in hand when the chasing side wins.</summary>
         public int MarginWickets;
 
+        /// <summary>Balls still available when the chasing side wins.</summary>
+        public int MarginBalls;
+
         public InningsSummary FirstInnings;
         public InningsSummary SecondInnings;
 
@@ -69,8 +72,12 @@ namespace CricketGame.Core.Rules
             switch (Outcome)
             {
                 case MatchOutcome.SecondInningsWin:
-                    return secondBattingSideName + " won by " + MarginWickets
+                    string win = secondBattingSideName + " won by " + MarginWickets
                            + (MarginWickets == 1 ? " wicket" : " wickets");
+                    if (MarginBalls > 0)
+                        win += " with " + MarginBalls
+                               + (MarginBalls == 1 ? " ball" : " balls") + " to spare";
+                    return win;
 
                 case MatchOutcome.FirstInningsWin:
                     return firstBattingSideName + " won by " + MarginRuns

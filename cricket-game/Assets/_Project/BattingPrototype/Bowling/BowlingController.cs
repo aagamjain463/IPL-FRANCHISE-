@@ -18,6 +18,9 @@ namespace CricketGame.BattingPrototype.Bowling
         /// <summary>Debug hook: force deliveries to a type (null = use the plan).</summary>
         public DeliveryType? ForcedType;
 
+        /// <summary>Phase 3: overrides the plan's accuracy while >= 0 (AI difficulty).</summary>
+        public float AccuracyOverride = -1f;
+
         /// <summary>Debug hook: fully manual delivery from the panel sliders (wins over everything).</summary>
         public DeliveryData? ManualDelivery;
 
@@ -44,7 +47,8 @@ namespace CricketGame.BattingPrototype.Bowling
                 DeliveryType type = ForcedType.HasValue
                     ? ForcedType.Value
                     : DeliveryFactory.NextType(plan, rng);
-                data = DeliveryFactory.Build(type, rng, plan.Accuracy);
+                float accuracy = AccuracyOverride >= 0f ? AccuracyOverride : plan.Accuracy;
+                data = DeliveryFactory.Build(type, rng, accuracy);
             }
 
             LastDelivery = data;
@@ -57,6 +61,23 @@ namespace CricketGame.BattingPrototype.Bowling
         {
             if (BallReleased != null) BallReleased(LastDelivery);
             return LastDelivery;
+        }
+
+        /// <summary>
+        /// Player-bowled delivery (Phase 3 chase innings). The player picks
+        /// type, line and length; the factory supplies speed/swing/seam from
+        /// the type's spec and adds accuracy-based scatter so nothing is a
+        /// robot-perfect dart.
+        /// </summary>
+        public DeliveryData PlayerDelivery(DeliveryType type, float line, float length,
+                                           float accuracy)
+        {
+            DeliveryData data = DeliveryFactory.Build(type, rng, accuracy);
+            data.Line = line + (rng.NextFloat() * 2f - 1f) * 0.06f * (1.2f - accuracy);
+            data.Length = Mathf.Clamp01(length + (rng.NextFloat() * 2f - 1f) * 0.05f * (1.2f - accuracy));
+            LastDelivery = data;
+            if (BallReleased != null) BallReleased(data);
+            return data;
         }
     }
 }
