@@ -1,15 +1,22 @@
-# Web preview — batting + bowling engine
+# Web preview — full Super Over engine
 
 A standalone, mobile-friendly browser preview of the cricket gameplay engine.
 **Not** part of the React app and **not** a Unity WebGL build — it is a 1:1
 JavaScript port of the deterministic engines (`../batting_reference.py` +
-`../bowling_reference.py`, mirrored from `Assets/_Project/Core/`).
+`../bowling_reference.py` + Phase 3's `../fielding_reference.py` /
+`../ai_reference.py` / `../matchflow_reference.py`, mirrored from
+`Assets/_Project/Core/`).
 
-Phase 2 included: eight delivery types from a weighted bowler plan, seam /
+Phase 3 included: a complete playable Super Over — you bat innings 1, then
+the AI chases while you bowl (LINE/LENGTH pad + FAST/SWING/YORKER/SHORT).
+The 11-person field chases/catches/stops from the same simulation as Unity;
+innings break + result overlays with margins and PLAY AGAIN; difficulty and
+force-fielding debug toggles.
+
+Phase 2 remains: eight delivery types from a weighted bowler plan, seam /
 bounce / swing physics, pitch dust, bowled + simplified LBW, edges
-(top/inside/outside), ballistic carry + roll for runs and boundaries,
-broadcast camera states (delivery / boundary chase / wicket reaction) and
-the full debug toggle set.
+(top/inside/outside), ballistic carry + roll, broadcast camera states
+(delivery / boundary chase / wicket reaction) and the full debug toggle set.
 
 ## Run
 
@@ -23,7 +30,7 @@ python3 -m http.server 4000 --bind 0.0.0.0
 
 ```bash
 node smoke.cjs      # trajectory/parity + factory + outcome-resolver invariants
-node dom_smoke.cjs  # headless 14 s gameplay run against a fake DOM
+node dom_smoke.cjs  # headless full-match run (fielding + chase + PLAY AGAIN) against a fake DOM
 ```
 
 ## Controls

@@ -77,6 +77,42 @@ comes from `BatBallContact`; the resolver turns the contact (or its absence)
 into cricket: runs, boundaries, wickets. Full design in
 `Docs/PHASE2_BOWLING_DESIGN.md`.
 
+## Fielding (Core/Fielding) — Phase 3
+
+`FieldingSimulator` resolves a struck ball against the field in fixed 60 Hz
+steps — no physics engine, no per-frame AI in Unity, fully deterministic
+with a seeded `IRng`:
+
+* `FieldSetup.Default`: slip, point, cover, mid-off, mid-on, mid-wicket,
+  square leg, fine leg, third man + bowler + keeper, each with speed /
+  reaction / catching / ground / throw attributes, scaled by difficulty.
+* Fielders read the flight (closed-form landing estimate), chase, take one
+  catch roll and one stop attempt per pass (cooldown), fumble fast balls,
+  and return the ball to the keeper; `RunsFromTime` derives 0–3 automatic
+  runs from how long that takes.
+* The result carries `ChaseHint`s so presentation (Unity `FielderManager`,
+  camera) replays exactly what the sim decided.
+
+## AI batting (Core/AI) — Phase 3
+
+`AiBattingPlanner` turns the chase context (target/score/balls/wickets)
+into strategic states — SAFE / BALANCED / AGGRESSIVE / DESPERATE — and from
+there into the SAME inputs a human produces (intent, direction, strength,
+timing offset, footwork). Mistakes are gaussian timing spread + outright
+hacks + leave decisions, never score manipulation. `AiBatterDriver` (Unity)
+and `Phase3MatchSimulator` (headless) feed those frames into the real
+`BattingEngine`. Difficulty (`AiDifficultyTuning`) tunes timing, mistakes,
+field quality both ways and AI bowling accuracy.
+
+## Match flow (BattingPrototype/Match) — Phase 3
+
+`MatchController` is the single owner of match rules/flow (PreMatch →
+Innings1 → Innings1Result → InningsBreak → Innings2 → MatchResult);
+innings 1 = player bats / AI bowls, innings 2 = AI chases / **player
+bowl**s via `BowlingUiPanel` (line/length + FAST/SWING/YORKER/SHORT into
+the Phase 2 `BowlingController`). No match rules exist outside the
+controller + `Core.Rules`.
+
 ## Rules engine (Core/Rules)
 
 `SuperOverMatch` is the single source of truth for SUPER OVER — HUMAN VS AI:
@@ -103,8 +139,9 @@ analytics, future web bridge) can observe without coupling.
 | Simulation | `Core.Tests/SimulationTests.cs` | deterministic seeded matches, replay-consistency, policy sanity |
 | Batting | `Core.Tests/BattingEngineTests.cs` | trajectory, footwork, timing, selection, contact, engine flow |
 | Bowling/Outcomes | `Core.Tests/BowlingSystemTests.cs` | factory, plans, seam/bounce/pitch, yorker rules, resolver, LBW |
-| All engines | `harness/test_*.py` (95 tests) | Python mirrors, incl. a 2,500-ball soak (no Unity needed) |
-| Browser preview | `harness/webpreview/smoke.cjs`, `dom_smoke.cjs` | JS-port parity + headless 14 s gameplay run |
+| Fielding/AI/Match | `Core.Tests/MatchFlowTests.cs` | fielding sim, AI states, scripted scenarios, headless AI-vs-AI soak |
+| All engines | `harness/test_*.py` (122 tests) | Python mirrors, incl. a 2,500-ball soak + full-match soak (no Unity needed) |
+| Browser preview | `harness/webpreview/smoke.cjs`, `dom_smoke.cjs` | JS-port parity + headless full-match run (chase + PLAY AGAIN) |
 
 The Python harness is a 1:1 reference port used for environments without a
 .NET toolchain. **If rules change, both implementations must change.**

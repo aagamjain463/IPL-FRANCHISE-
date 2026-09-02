@@ -535,3 +535,346 @@ class BattingEngine {
     }
   }
 }
+
+/* ================= Phase 3: fielding simulation =================
+ * Mirrors harness/fielding_reference.py constant-for-constant. */
+
+const ROPE = BOUNDARY_RADIUS - 0.4;
+const FIELD_SIM_DT = 1 / 60;
+const RUN_DELAY = 0.25;
+const TIME_PER_RUN = 2.4;
+const CATCH_RADIUS = 0.95;
+const CATCH_MAX_HEIGHT = 2.4;
+const STOP_RADIUS = 0.80;
+const KEEPER_POS_SIM = { x: 0, z: -2.6 };
+
+// name, x, z, speed, reaction, catching, ground, throw_speed, throw_acc
+const FIELD_SETUP = [
+  ["slip",        1.0,  -2.2, 5.6, 0.16, 0.80, 0.55, 20.0, 0.70],
+  ["point",      24.0,   6.0, 6.6, 0.24, 0.68, 0.80, 23.0, 0.80],
+  ["cover",      17.0,  18.0, 6.8, 0.22, 0.70, 0.85, 24.0, 0.85],
+  ["mid_off",     8.0,  26.0, 6.5, 0.24, 0.62, 0.80, 23.0, 0.80],
+  ["mid_on",     -8.0,  26.0, 6.5, 0.24, 0.62, 0.80, 23.0, 0.80],
+  ["mid_wicket",-17.0,  18.0, 6.8, 0.22, 0.66, 0.84, 23.5, 0.82],
+  ["square_leg",-24.0,   6.0, 6.6, 0.24, 0.66, 0.80, 23.0, 0.80],
+  ["fine_leg",  -20.0, -20.0, 6.9, 0.28, 0.60, 0.78, 24.0, 0.78],
+  ["third_man",  20.0, -20.0, 6.9, 0.28, 0.60, 0.78, 24.0, 0.78],
+  ["bowler",      0.6,  16.0, 6.2, 0.20, 0.55, 0.75, 22.0, 0.75],
+  ["keeper",      0.0,  -2.6, 5.4, 0.12, 0.90, 0.60, 20.0, 0.75],
+];
+
+function makeFielder(row, scale) {
+  const [name, x, z, speed, reaction, catching, ground, throwSpeed, throwAcc] = row;
+  return {
+    name, home: { x, z }, speed, reaction, catching, ground, throwSpeed, throwAcc, scale,
+    get eff_speed() { return this.speed * (0.75 + 0.25 * this.scale); },
+    get eff_reaction() { return this.reaction * (1.35 - 0.35 * this.scale); },
+    get eff_catching() { return Math.min(0.97, this.catching * (0.8 + 0.2 * this.scale)); },
+  };
+}
+
+function defaultField(scale) { return FIELD_SETUP.map((r) => makeFielder(r, scale)); }
+
+// Same integration as the presentation flight (keep them in sync).
+function stepBallStruck(pos, vel, grounded, dt) {
+  vel.y -= G * dt;
+  pos.x += vel.x * dt; pos.y += vel.y * dt; pos.z += vel.z * dt;
+  if (pos.y <= 0.055) {
+    pos.y = 0.055;
+    if (vel.y < -0.6) {           // a real bounce
+      vel.y = -vel.y * 0.48;
+      vel.x *= 0.86; vel.z *= 0.86;
+      if (vel.y < 1.1) vel.y = 0;
+    } else {
+      vel.y = 0;                  // rolling: no micro-bounce loop
+    }
+    grounded = true;
+  }
+  if (grounded) {
+    const f = Math.max(0, 1 - 0.35 * dt);
+    vel.x *= f; vel.z *= f;
+    if (Math.hypot(vel.x, vel.z) < 0.6) { vel.x = 0; vel.z = 0; }
+  }
+  return grounded;
+}
+
+function catchProbability(f, ballSpeedKph, height) {
+  let p = f.eff_catching;
+  p *= Math.max(0.25, 1.18 - ballSpeedKph / 130);
+  p *= Math.max(0.4, 1.12 - height / 9);
+  return clamp(p, 0.05, 0.97);
+}
+
+function runsFromTime(available, rand) {
+  const raw = (available - RUN_DELAY) / TIME_PER_RUN;
+  let runs = clamp(Math.floor(raw), 0, 3);
+  if (runs > 0 && rand() < 0.07 * runs) runs -= 1;
+  return runs;
+}
+
+function simulateFielding(contactPos, velocity, fielders, rand, maxSeconds = 12) {
+  const pos = { x: contactPos.x, y: Math.max(contactPos.y, 0.1), z: contactPos.z };
+  const vel = { ...velocity };
+  let grounded = false, everBounced = false;
+
+  const n = fielders.length;
+  const fx = fielders.map((f) => f.home.x);
+  const fz = fielders.map((f) => f.home.z);
+  const reactAt = fielders.map((f) => f.eff_reaction + rand() * 0.12);
+  const stopReadyAt = fielders.map(() => 0);
+  const chasing = fielders.map(() => false);
+  const toLanding = fielders.map(() => false);
+  const chased = [];
+
+  // Closed-form first-landing estimate so fielders read the flight at once.
+  const vy0 = vel.y;
+  const tLand = (vy0 + Math.sqrt(Math.max(0, vy0 * vy0 + 2 * G * pos.y))) / G;
+  const landX = pos.x + vel.x * tLand;
+  const landZ = pos.z + vel.z * tLand;
+  const landingRelevant = Math.hypot(landX, landZ) < ROPE + 4;
+
+  let t = 0;
+  while (t < maxSeconds) {
+    t += FIELD_SIM_DT;
+    grounded = stepBallStruck(pos, vel, grounded, FIELD_SIM_DT);
+    if (grounded) everBounced = true;
+
+    if (Math.hypot(pos.x, pos.z) >= ROPE) {
+      const six = !everBounced && pos.y > 0.05;
+      return { kind: six ? "six" : "four", runs: six ? 6 : 4, fielder: null,
+               name: null, pos: { ...pos }, t, collect_time: null, throw_time: null,
+               chased, catch_prob: null };
+    }
+
+    const speedH = Math.hypot(vel.x, vel.z);
+    for (let i = 0; i < n; i++) {
+      const f = fielders[i];
+      if (t < reactAt[i]) continue;
+      let d = Math.hypot(pos.x - fx[i], pos.z - fz[i]);
+
+      if (!chasing[i]) {
+        const worth = d < 34 || ((f.name === "keeper" || f.name === "slip") && pos.z < 2 && d < 12);
+        if (worth) { chasing[i] = true; chased.push([i, t, { x: pos.x, z: pos.z }]); }
+      }
+      if (!chasing[i]) continue;
+
+      if (toLanding[i] && everBounced) toLanding[i] = false;
+      if (!everBounced && landingRelevant && !toLanding[i]) {
+        const arrive = t + Math.hypot(landX - fx[i], landZ - fz[i]) / f.eff_speed;
+        if (arrive <= tLand + 0.10 && Math.hypot(landX, landZ) < 46) toLanding[i] = true;
+      }
+      const tx = toLanding[i] ? landX : (grounded ? pos.x + vel.x * 0.12 : pos.x);
+      const tz = toLanding[i] ? landZ : (grounded ? pos.z + vel.z * 0.12 : pos.z);
+      const md = Math.hypot(tx - fx[i], tz - fz[i]);
+      if (md > 1e-4) {
+        const step = Math.min(f.eff_speed * FIELD_SIM_DT, md);
+        fx[i] += (tx - fx[i]) / md * step;
+        fz[i] += (tz - fz[i]) / md * step;
+      }
+      d = Math.hypot(pos.x - fx[i], pos.z - fz[i]);
+
+      // catch attempt on a reachable high ball (hard rising drives excluded)
+      if (!grounded && pos.y >= 0.25 && pos.y <= CATCH_MAX_HEIGHT && d < CATCH_RADIUS) {
+        const ballSpeed = Math.hypot(vel.x, vel.y, vel.z) * 3.6;
+        const rising = vel.y > 0;
+        if (rising && !(pos.y <= 1.6 && ballSpeed < 90)) continue;
+        const p = catchProbability(f, ballSpeed, pos.y);
+        if (rand() < p) {
+          return { kind: "caught", runs: 0, fielder: i, name: f.name, pos: { ...pos },
+                   t, collect_time: null, throw_time: null, chased, catch_prob: p };
+        }
+        // dropped: squirts away
+        const deflect = (rand() * 2 - 1) * 0.9;
+        const sp = Math.hypot(vel.x, vel.z) * 0.35 + 1.5;
+        const ang = Math.atan2(vel.z, vel.x) + deflect;
+        vel.x = Math.cos(ang) * sp; vel.y = 0; vel.z = Math.sin(ang) * sp;
+        grounded = true;
+        reactAt[i] = t + 0.7;
+      } else if (grounded && d < STOP_RADIUS && speedH < 34 && t >= stopReadyAt[i]) {
+        stopReadyAt[i] = t + 0.5;
+        const pStop = f.ground * clamp(1.25 - speedH / 34, 0.05, 0.97);
+        if (rand() > pStop) {
+          const deflect = (rand() * 2 - 1) * 0.35;
+          const ang = Math.atan2(vel.z, vel.x) + deflect;
+          const sp = speedH * 0.55;
+          vel.x = Math.cos(ang) * sp; vel.y = 0; vel.z = Math.sin(ang) * sp;
+          reactAt[i] = t + 0.45;
+          continue;
+        }
+        const distHome = Math.hypot(pos.x - KEEPER_POS_SIM.x, pos.z - KEEPER_POS_SIM.z);
+        const throwTime = distHome / Math.max(12, f.throwSpeed)
+          * (1 + (1 - f.throwAcc) * rand() * 0.6);
+        return { kind: "stopped", runs: runsFromTime(t + throwTime, rand), fielder: i,
+                 name: f.name, pos: { ...pos }, t, collect_time: t, throw_time: throwTime,
+                 chased, catch_prob: null };
+      }
+    }
+
+    if (grounded && speedH < 0.4) {
+      const distHome = Math.hypot(pos.x - KEEPER_POS_SIM.x, pos.z - KEEPER_POS_SIM.z);
+      const retrieve = 1.4 + distHome / 6.5;
+      return { kind: "stopped", runs: runsFromTime(t + retrieve, rand), fielder: null,
+               name: null, pos: { ...pos }, t, collect_time: t, throw_time: retrieve,
+               chased, catch_prob: null };
+    }
+  }
+  return { kind: "stopped", runs: 3, fielder: null, name: null, pos: { ...pos },
+           t: maxSeconds, collect_time: maxSeconds, throw_time: 1, chased, catch_prob: null };
+}
+
+/* ================= Phase 3: AI batting =================
+ * Mirrors harness/ai_reference.py. */
+
+const AI_DIFFICULTY = {
+  easy:   { timing_sd: 1.45, mistake: 0.10, field_vs_player: 0.80, field_for_player: 1.10, ai_bowling_acc: 0.60 },
+  medium: { timing_sd: 1.00, mistake: 0.05, field_vs_player: 1.00, field_for_player: 1.00, ai_bowling_acc: 0.75 },
+  hard:   { timing_sd: 0.78, mistake: 0.02, field_vs_player: 1.15, field_for_player: 0.90, ai_bowling_acc: 0.85 },
+};
+
+function aggressionState(requiredRuns, ballsRemaining, wicketsRemaining) {
+  if (ballsRemaining <= 0) return "desperate";
+  if (requiredRuns <= 0) return "safe";
+  const rrr = requiredRuns / ballsRemaining;
+  if (requiredRuns <= ballsRemaining && wicketsRemaining >= 2) return "safe";
+  if (rrr <= 2.2) return "balanced";
+  if (rrr <= 4.2) return "aggressive";
+  return "desperate";
+}
+
+const STATE_INTENTS = {
+  safe:       { defensive: 0.35, normal: 0.65, aggressive: 0, lofted: 0 },
+  balanced:   { defensive: 0.05, normal: 0.65, aggressive: 0.25, lofted: 0.05 },
+  aggressive: { defensive: 0, normal: 0.30, aggressive: 0.45, lofted: 0.25 },
+  desperate:  { defensive: 0, normal: 0.10, aggressive: 0.35, lofted: 0.55 },
+};
+const STATE_SKILL = {
+  safe:       { swing: 0.84, sd: 0.050, leave_wide: 0.25 },
+  balanced:   { swing: 0.92, sd: 0.045, leave_wide: 0.12 },
+  aggressive: { swing: 0.97, sd: 0.055, leave_wide: 0.05 },
+  desperate:  { swing: 1.00, sd: 0.075, leave_wide: 0.00 },
+};
+
+function aiTimingOffset(rand, sd, mistake) {
+  if (rand() < mistake) {
+    const side = rand() < 0.45 ? -1 : 1;
+    return side * (0.12 + rand() * 0.20);
+  }
+  const g = (rand() + rand() + rand() - 1.5) / 1.5;
+  return g * sd * 2;
+}
+
+function aiBattingPlan(rand, delivery, ctx, difficulty, hitsStumpsHint) {
+  const tune = AI_DIFFICULTY[difficulty];
+  let state, required = null;
+  if (ctx.target == null) {
+    state = "balanced";
+  } else {
+    required = ctx.target - ctx.score;
+    state = aggressionState(required, ctx.balls_remaining, ctx.wickets_remaining);
+    if (required <= 2 && ctx.balls_remaining >= 1 && state === "safe") state = "balanced";
+  }
+  const skill = STATE_SKILL[state];
+  const sd = skill.sd * tune.timing_sd;
+  const mistake = tune.mistake + (state === "desperate" ? 0.14 : 0);
+
+  const plan = { state, swing: false, intent: "normal", angle: 0, strength: 0.8,
+                 offset: 0, foot_target: { x: 0, z: 0 }, leave_reason: null };
+
+  plan.foot_target = {
+    x: clamp(delivery.line * 0.45 - 0.10, -1.15, 1.15),
+    z: delivery.length < 0.30 ? 0.75 : delivery.length < 0.72 ? 0.10 : -0.55,
+  };
+
+  const wideBall = Math.abs(delivery.line) > 0.55;
+  const hitsStumps = hitsStumpsHint != null ? hitsStumpsHint
+    : Math.abs(delivery.line * 0.45) <= 0.18;
+  if (state === "safe" && wideBall && !hitsStumps && rand() < skill.leave_wide) {
+    plan.leave_reason = "wide_outside_off";
+    return plan;
+  }
+  if (rand() > skill.swing) { plan.leave_reason = "held_back"; return plan; }
+
+  plan.swing = true;
+  const weights = STATE_INTENTS[state];
+  let roll = rand(), acc = 0;
+  for (const k of ["defensive", "normal", "aggressive", "lofted"]) {
+    acc += weights[k];
+    if (roll < acc) { plan.intent = k; break; }
+  }
+  plan.angle = state === "desperate"
+    ? (rand() * 2 - 1) * 0.35
+    : clamp(delivery.line * 1.05 + (rand() * 2 - 1) * 0.48, -1.35, 1.35);
+  plan.strength = 0.55 + 0.45 * rand();
+  plan.offset = aiTimingOffset(rand, sd, mistake);
+  return plan;
+}
+
+function aiSwingFrameTime(trajTimeToContact, intent, offset) {
+  return trajTimeToContact + offset - windupTime(intent);
+}
+
+/* ================= Phase 3: Super Over match mirror ================= */
+
+class SuperOverMatchJS {
+  constructor(ballsPerInnings = 6, maxWickets = 2) {
+    this.ballsPerInnings = ballsPerInnings;
+    this.maxWickets = maxWickets;
+    this.innings = [
+      { runs: 0, wickets: 0, legal_balls: 0, striker: 0, non_striker: 1 },
+      { runs: 0, wickets: 0, legal_balls: 0, striker: 0, non_striker: 1 },
+    ];
+    this.phase = "not_started";   // not_started|first|break|second|completed
+    this.result = null;
+  }
+  currentInningsIndex() { return this.phase === "second" ? 1 : 0; }
+  currentInnings() {
+    return this.phase === "first" ? this.innings[0]
+         : this.phase === "second" ? this.innings[1] : null;
+  }
+  target() { return (this.phase === "break" || this.phase === "second" || this.phase === "completed")
+    ? this.innings[0].runs + 1 : null; }
+  runsRequired() { const t = this.target(); return t == null ? null : Math.max(0, t - this.innings[1].runs); }
+  ballsRemaining() { const i = this.currentInnings(); return i ? Math.max(0, this.ballsPerInnings - i.legal_balls) : 0; }
+  wicketsRemaining() { const i = this.currentInnings(); return i ? Math.max(0, this.maxWickets - i.wickets) : 0; }
+
+  start() { this.phase = "first"; }
+  startSecondInnings() { this.phase = "second"; }
+
+  recordDelivery(outcome) {
+    // outcome: { kind: "legal"|"wicket", runs, dismissal }
+    const inn = this.currentInnings();
+    inn.runs += outcome.runs || 0;
+    if (outcome.kind === "legal") inn.legal_balls += 1;
+    if (outcome.kind === "wicket") {
+      inn.wickets = Math.min(this.maxWickets, inn.wickets + 1);
+      // replacement batter guards the striker's end (no swap)
+    } else if ((outcome.runs || 0) % 2 === 1) {
+      [inn.striker, inn.non_striker] = [inn.non_striker, inn.striker];
+    }
+
+    if (this.phase === "second") {
+      const target = this.innings[0].runs + 1;
+      if (inn.runs >= target) { this._complete("second_win"); return; }
+    }
+    const complete = inn.legal_balls >= this.ballsPerInnings || inn.wickets >= this.maxWickets;
+    if (complete) {
+      if (this.phase === "first") this.phase = "break";
+      else if (inn.runs === this.innings[0].runs) this._complete("tie");
+      else this._complete("first_win");
+    }
+  }
+
+  _complete(outcome) {
+    const [a, b] = this.innings;
+    this.result = {
+      outcome,
+      target: a.runs + 1,
+      margin_runs: outcome === "first_win" ? a.runs - b.runs : 0,
+      margin_wickets: outcome === "second_win" ? this.maxWickets - b.wickets : 0,
+      margin_balls: outcome === "second_win" ? this.ballsPerInnings - b.legal_balls : 0,
+      first: { runs: a.runs, wickets: a.wickets, legal_balls: a.legal_balls },
+      second: { runs: b.runs, wickets: b.wickets, legal_balls: b.legal_balls },
+    };
+    this.phase = "completed";
+  }
+}

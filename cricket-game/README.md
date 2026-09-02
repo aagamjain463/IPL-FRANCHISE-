@@ -9,12 +9,24 @@ modern cricket games, never on proprietary assets or implementations.
 
 ---
 
-## Current focus: PHASE 2 — Bowling, Ball Physics & Shot Outcomes
+## Current focus: PHASE 3 — Full Playable Super Over
 
-Phase 1's mobile batting controls now run against a real **bowling system**:
-eight delivery types, seam/bounce/swing physics, contextual shot outcomes,
-bowled + simplified LBW detection, broadcast cameras and a complete
-delivery-after-delivery loop. See
+The prototype is now a complete, replayable **Super Over** built on top of
+Phases 1–2 (nothing rebuilt): you bat a 6-ball innings against the AI
+bowler, then the AI chases your total while **you bowl** (line/length +
+FAST/SWING/YORKER/SHORT). An 11-person field chases, catches and throws
+from a deterministic simulation; runs, boundaries, catches, bowled/LBW and
+the chase all resolve from physics + rules, with proper margins, a result
+screen and instant PLAY AGAIN. See
+[Docs/PHASE3_SUPER_OVER_DESIGN.md](Docs/PHASE3_SUPER_OVER_DESIGN.md).
+
+Rules: 6 legal balls per innings · max 2 wickets · target = 1st innings + 1 ·
+chase wins the instant the target is reached · exact level = Tie (tie-break
+is a future extension point) · odd runs swap the strike, boundaries don't.
+
+Phase 2 remains fully in place: eight delivery types, seam/bounce/swing
+physics, contextual shot outcomes, bowled + simplified LBW detection,
+broadcast cameras. See
 [Docs/PHASE2_BOWLING_DESIGN.md](Docs/PHASE2_BOWLING_DESIGN.md).
 
 ### Definition of done (all met)
@@ -69,6 +81,16 @@ delivery-after-delivery loop. See
 | OUTCOME: NONE button | Cycles forced shot outcome (debug) |
 | PERFECT / SLOW-MO / RE-BOWL | Debug toggles |
 | RESET POS | Re-centre the batsman |
+
+During the **chase innings** (innings 2) the batting controls swap for the
+bowling panel:
+
+| Input | Action |
+| --- | --- |
+| ◀ / ▶ | Line — leg stump ↔ off stump |
+| ▲ / ▼ | Length — full ↔ short |
+| FAST / SWING / YORKER / SHORT | Delivery type |
+| DIFF / FIELD / RESET MATCH | Debug: difficulty, force fielding, restart |
 
 ## Running the tests
 

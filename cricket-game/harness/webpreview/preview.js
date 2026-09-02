@@ -98,12 +98,23 @@ let lastDeliveryData = null;
 let pendingOutcome = null;
 
 let phase = "pre", phaseT = 0;
-let runs = 0, wickets = 0, balls = 0;
 let bowlerZ = 26, bowlerArmT = 0;
 let resolvedThisBall = false;
 let struckApplied = false;
 let stumpKnock = 0; // 0..1 animation
 const dusts = [];   // pitch-dust puffs {x, z, t}
+
+/* ---- Phase 3 match state ---- */
+let match = new SuperOverMatchJS(); match.start();
+let matchFlow = "innings1";        // innings1 | innings2 | result
+let difficulty = "medium";
+let forcedField = null;            // null | "catch" | "miss" | "stop" | "boundary"
+let aiPlan = null, aiSwingT = null, aiFired = false;
+let fieldingResult = null, fieldingLive = false, fieldClock = 0;
+let playAgainResolver = null;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const playerIsBatting = () => matchFlow === "innings1";
+const bowlCfg = { type: "fast_straight", line: 0, length: 0.5 };
 
 const flight = { mode: "hidden", t: 0, pos: { x: 0, y: 1, z: 20 }, vel: { x: 0, y: 0, z: 0 }, grounded: false, restTimer: 0 };
 const swingAnim = { active: false, t: 0, dur: 0.4, contactFrac: 0.4, yawDeg: 0 };
@@ -114,10 +125,21 @@ let camMode = "setup";
 const cam = { pos: { ...SETUP_POS }, look: { ...SETUP_LOOK } };
 
 const KEEPER_POS = { x: 0, y: 0, z: -2.6 };
-const FIELDERS = [
-  { x: -20, z: 14 }, { x: 20, z: 14 }, { x: -31, z: 30 }, { x: 31, z: 30 },
-  { x: -13, z: 44 }, { x: 13, z: 44 }, { x: 0, z: 52 }, { x: -40, z: 6 },
-];
+/* Fielders come from the Phase 3 field setup (the bowler is drawn separately
+ * because he runs in to bowl). Each view moves to present the fielding sim. */
+let fieldSim = defaultField(1.0);
+const fieldViews = FIELD_SETUP
+  .filter((r) => r[0] !== "bowler")
+  .map((r) => ({ name: r[0], home: { x: r[1], z: r[2] }, x: r[1], z: r[2],
+                 chaseTarget: null, resolving: false }));
+
+function rebuildFieldSim() {
+  const tune = AI_DIFFICULTY[difficulty];
+  fieldSim = defaultField(playerIsBatting() ? tune.field_vs_player : tune.field_for_player);
+}
+function resetFielders() {
+  for (const v of fieldViews) { v.x = v.home.x; v.z = v.home.z; v.chaseTarget = null; v.resolving = false; }
+}
 
 /* ================= input (touch + mouse via Pointer Events) ================= */
 const inputState = {
@@ -220,14 +242,46 @@ function nextDeliveryData() {
     return makeDelivery(bowlerCfg.speed, bowlerCfg.line, bowlerCfg.length, bowlerCfg.swing,
       { dtype: manualType, seam: 0, bounce: 1 });
   }
+  if (!playerIsBatting()) {
+    // The PLAYER bowls the chase: type/line/length come from the bowling panel.
+    const d = buildDelivery(bowlCfg.type, Math.random, 0.9);
+    d.line = bowlCfg.line + (Math.random() * 2 - 1) * 0.06;
+    d.length = clamp01(bowlCfg.length + (Math.random() * 2 - 1) * 0.05);
+    return d;
+  }
   const type = forcedType || nextDeliveryType(Math.random);
-  return buildDelivery(type, Math.random, 0.75);
+  return buildDelivery(type, Math.random, AI_DIFFICULTY[difficulty].ai_bowling_acc);
 }
 
-function startBall() {
+async function startBall() {
+  // ---- match flow gate: innings result -> break -> chase; result -> replay
+  if (match.phase === "break") {
+    const inn = match.innings[0];
+    await showOverlay("INNINGS COMPLETE",
+      `YOU  ${inn.runs}/${inn.wickets}  (${inn.legal_balls} balls)`,
+      `TARGET SET:  ${inn.runs + 1}`, false);
+    await sleep(2200);
+    await showOverlay("THE CHASE BEGINS",
+      `AI NEEDS  ${inn.runs + 1}  RUNS FROM 6 BALLS`,
+      "YOU BOWL  ·  PICK LINE, LENGTH AND TYPE", false);
+    await sleep(2000);
+    hideOverlay();
+    match.startSecondInnings();
+    matchFlow = "innings2";
+  }
+  if (match.phase === "completed") {
+    await showResultOverlay();           // resolves when PLAY AGAIN is pressed
+    resetMatchAll();
+  }
+
   stumpKnock = 0;
   resolvedThisBall = false;
+  fieldingLive = false;
+  fieldingResult = null;
   flight.mode = "hidden";
+  rebuildFieldSim();
+  resetFielders();
+  updateBowlPanelVisibility();
 
   if (redeliverNext) {
     // Debug re-bowl: same ball again, no run-up ceremony.
@@ -242,6 +296,16 @@ function startBall() {
   updateScoreboard();
 }
 
+function resetMatchAll() {
+  match = new SuperOverMatchJS();
+  match.start();
+  matchFlow = "innings1";
+  aiPlan = null;
+  fieldingLive = false;
+  fieldingResult = null;
+  pendingOutcome = null;
+}
+
 function releaseBall() {
   const d = (redeliverNext && lastDeliveryData) ? lastDeliveryData : nextDeliveryData();
   redeliverNext = false;
@@ -249,6 +313,8 @@ function releaseBall() {
   engine.beginDelivery(d);
   struckApplied = false;
   pendingOutcome = null;
+  fieldingLive = false;
+  fieldingResult = null;
   flight.mode = "traj";
   flight.t = 0;
   flight.pos = engine.traj.position(0);
@@ -257,6 +323,36 @@ function releaseBall() {
   camMode = "game";
   phase = "delivery";
   showToast(DELIVERY_LABELS[d.dtype] + "  —  " + Math.round(d.speed_kph) + " KPH");
+
+  // AI batter plans the chase delivery against the live match context.
+  if (!playerIsBatting()) {
+    const ctx = {
+      target: match.target(), score: match.innings[1].runs,
+      balls_remaining: match.ballsRemaining(), wickets_remaining: match.wicketsRemaining(),
+    };
+    aiPlan = aiBattingPlan(Math.random, d, ctx, difficulty, engine.traj.hitsStumps());
+    aiFired = false;
+    aiSwingT = aiPlan.swing
+      ? aiSwingFrameTime(engine.traj.time_to_contact, aiPlan.intent, aiPlan.offset) : null;
+  } else {
+    aiPlan = null;
+  }
+}
+
+function applyForcedField(res) {
+  if (forcedField === "catch" && res.kind !== "caught") {
+    res.kind = "caught"; res.runs = 0;
+    if (res.fielder == null) { res.fielder = 2; res.name = "cover"; }
+    if (res.t < 0.5) res.t = 0.9;
+  } else if (forcedField === "miss" && (res.kind === "caught" || res.kind === "stopped")) {
+    res.kind = "four"; res.runs = 4; res.fielder = null; res.name = null;
+  } else if (forcedField === "stop") {
+    res.kind = "stopped"; res.runs = 1;
+    if (res.t < 0.4) res.t = 0.6;
+  } else if (forcedField === "boundary") {
+    res.kind = "four"; res.runs = 4; res.fielder = null; res.name = null;
+  }
+  return res;
 }
 
 function applyContact() {
@@ -271,59 +367,123 @@ function applyContact() {
   flight.grounded = false;
   flight.restTimer = 0;
 
-  // Resolve the cricket outcome NOW (deterministic); runs apply on settle.
-  pendingOutcome = resolveOutcome(Math.random, engine.traj, swing,
-    engine.foot.x, engine.foot.z, forcedOutcome);
-  const boundary = pendingOutcome.kind === "four" || pendingOutcome.kind === "six";
+  // Phase 3: the FIELD decides runs/wickets for struck balls.
+  const contactPos = {
+    x: engine.traj.x_at_contact,
+    y: Math.max(engine.traj.height_at_contact, 0.35),
+    z: CONTACT_Z,
+  };
+  let res = simulateFielding(contactPos, { ...flight.vel }, fieldSim, Math.random);
+  res = applyForcedField(res);
+  fieldingResult = res;
+  fieldingLive = true;
+  fieldClock = 0;
+  scheduleFielderChases(res);
+
+  const boundary = res.kind === "four" || res.kind === "six";
   camMode = boundary ? "followBoundary" : "follow";
+  if (boundary) showBanner(res.kind === "six" ? "SIX!" : "FOUR!",
+    res.kind === "six" ? "#ffd23f" : "#5ecfff");
 
   const winTxt = swing.window.replace("_", " ").toUpperCase();
   const col = swing.window === "perfect" ? "#ffd23f" : swing.window === "good" ? "#5eff8a"
     : (swing.window === "early" || swing.window === "late") ? "#ffb14a" : "#ff6a5e";
-  const isEdge = pendingOutcome.kind === "top_edge" || pendingOutcome.kind === "inside_edge"
-    || pendingOutcome.kind === "outside_edge";
-  showPopup(isEdge ? pendingOutcome.label : swing.selection.name.toUpperCase() + "  -  " + winTxt,
-    isEdge ? "#ffa15e" : col, 1.0);
-  if (swing.window === "perfect" && !isEdge) showTimingFlash("#ffd23f");
+  showPopup(swing.selection.name.toUpperCase() + "  -  " + winTxt, col, 1.0);
+  if (swing.window === "perfect") showTimingFlash("#ffd23f");
 }
 
-function settleFromOutcome() {
+/* ---- fielding presentation ---- */
+function scheduleFielderChases(res) {
+  for (const v of fieldViews) { v.chaseTarget = null; v.resolving = false; }
+  for (const [idx, startT, target] of res.chased) {
+    const view = fieldViews.find((v) => v.name === FIELD_SETUP[idx][0]);
+    if (!view) continue;
+    view.chaseTarget = (res.fielder === idx)
+      ? { x: res.pos.x, z: res.pos.z } : { x: target.x, z: target.z };
+    view.resolving = res.fielder === idx;
+  }
+}
+
+function updateFieldingPresentation(dt) {
+  // fielder movement
+  for (const v of fieldViews) {
+    let target = v.chaseTarget || v.home;
+    let speed = v.chaseTarget ? 6.4 : 4.2;
+    if (v.resolving && fieldingLive && fieldingResult && fieldingResult.t > 0.05) {
+      // arrive exactly when the sim says the play happens
+      const remaining = fieldingResult.t - fieldClock;
+      if (remaining > 0) {
+        const dist = Math.hypot(target.x - v.x, target.z - v.z);
+        speed = Math.min(dist / remaining, 9.5);
+      }
+    }
+    const dx = target.x - v.x, dz = target.z - v.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 0.08) {
+      const step = Math.min(speed * dt, d);
+      v.x += dx / d * step; v.z += dz / d * step;
+    }
+  }
+
+  if (!fieldingLive || !fieldingResult || resolvedThisBall) return;
+  fieldClock += dt;
+  const res = fieldingResult;
+  const boundary = res.kind === "four" || res.kind === "six";
+
+  if (!boundary) {
+    if (fieldClock >= res.t) {
+      flight.pos = { x: res.pos.x, y: Math.max(0.12, res.pos.y), z: res.pos.z };
+      flight.vel = { x: 0, y: 0, z: 0 };
+      if (res.kind === "caught") {
+        showBanner("CAUGHT" + (res.name ? "  -  " + res.name.toUpperCase() : "") + "!", "#ff4a3c");
+        camMode = "wicket";
+        stumpKnock = 0; // stumps intact; camera does the emphasis
+      } else if (res.runs > 0) {
+        showPopup("+" + res.runs + (res.runs === 1 ? " RUN" : " RUNS"), "#ffffff", 0.9);
+      } else {
+        showPopup("DOT BALL", "#b9c2cc", 0.7);
+      }
+      finalizeStruckDelivery();
+    }
+  } else if (fieldClock > res.t + 1.5 || Math.hypot(flight.pos.x, flight.pos.z) >= 62) {
+    finalizeStruckDelivery();
+  }
+}
+
+function recordBall(outcome) {
+  match.recordDelivery(outcome);
+  updateScoreboard();
+}
+
+function finalizeStruckDelivery() {
   if (resolvedThisBall) return;
   resolvedThisBall = true;
-  const o = pendingOutcome || { kind: "dot", label: "DOT BALL", runs: 0 };
-  runs += o.runs;
-  balls++;
-  if (o.kind === "six") showBanner("SIX!", "#ffd23f");
-  else if (o.kind === "four") showBanner("FOUR!", "#5ecfff");
-  else if (o.kind === "top_edge" || o.kind === "inside_edge" || o.kind === "outside_edge")
-    showPopup(o.label + (o.runs > 0 ? "  +" + o.runs : ""), "#ffa15e", 1.0);
-  else if (o.runs > 0) showPopup("+" + o.runs, "#ffffff", 0.9);
-  else if (o.kind === "defensive") showPopup(o.runs > 0 ? "BLOCKED  +1" : "BLOCKED", "#bcd2ff", 0.7);
-  else showPopup(o.label, "#b9c2cc", 0.7);
-  camMode = "game";
-  flight.mode = "hidden";
+  const res = fieldingResult;
+  if (res.kind === "caught") recordBall({ kind: "wicket", runs: 0, dismissal: "caught" });
+  else recordBall({ kind: "legal", runs: res.runs });
+  fieldingLive = false;
+  camMode = res.kind === "caught" ? "wicket" : "game";
+  flight.mode = res.kind === "caught" || res.kind === "stopped" ? "held" : "hidden";
   phase = "between"; phaseT = 0;
-  updateScoreboard();
 }
 
 function ballPassedCollected() {
   if (resolvedThisBall) return;
   resolvedThisBall = true;
-  balls++;
 
   // Unstruck ball: bowled / LBW / beaten / left alone.
   const o = resolveOutcome(Math.random, engine.traj, engine.lastSwing,
     engine.foot.x, engine.foot.z, forcedOutcome);
   pendingOutcome = o;
   if (o.wicket) {
-    wickets++;
     stumpKnock = 0.0001;
     showBanner(o.kind === "lbw" ? "LBW!" : "BOWLED!", "#ff4a3c");
     camMode = "wicket";
-  } else if (o.kind === "beaten") {
-    showPopup("BEATEN!", "#ffbf5e", 0.9);
+    recordBall({ kind: "wicket", runs: 0, dismissal: o.kind === "lbw" ? "lbw" : "bowled" });
   } else {
-    showPopup("LEFT ALONE", "#cfe2ff", 0.8);
+    if (o.kind === "beaten") showPopup("BEATEN!", "#ffbf5e", 0.9);
+    else showPopup("LEFT ALONE", "#cfe2ff", 0.8);
+    recordBall({ kind: "legal", runs: o.runs || 0 });
   }
 
   flight.mode = "keeper";
@@ -332,32 +492,12 @@ function ballPassedCollected() {
   updateScoreboard();
 }
 
+/* Visual flight of the struck ball. The SIM owns the outcome; this only
+ * moves the ball (and must never settle the delivery on its own). */
 function stepFreeFlight(dt) {
-  const v = flight.vel, p = flight.pos;
-  v.y -= G * dt;
-  p.x += v.x * dt; p.y += v.y * dt; p.z += v.z * dt;
-  if (p.y <= 0.055 && v.y < 0) {
-    p.y = 0.055;
-    v.y = -v.y * 0.45;
-    v.x *= 0.78; v.z *= 0.78;
-    if (Math.abs(v.y) < 1.1) v.y = 0;
-    flight.grounded = true;
-  }
-  if (flight.grounded) {
-    const f = Math.max(0, 1 - 1.15 * dt);
-    v.x *= f; v.z *= f;
-  }
-  const dist = Math.hypot(p.x, p.z);
-  if (dist >= 62) {
-    settleFromOutcome();
-    return;
-  }
-  if (flight.grounded && Math.hypot(v.x, v.z) < 0.5 && p.y < 0.12) {
-    flight.restTimer += dt;
-    if (flight.restTimer > 0.25) settleFromOutcome();
-  } else {
-    flight.restTimer = 0;
-  }
+  if (flight.mode !== "free") return;
+  const grounded = stepBallStruck(flight.pos, flight.vel, flight.grounded, dt);
+  flight.grounded = grounded;
 }
 
 /* ================= camera ================= */
@@ -431,15 +571,13 @@ function drawWorld(cam) {
   // bowler-end stumps
   drawStumps(cam, 20.9, 0);
 
-  // fielders
-  for (const f of FIELDERS) {
-    line3(cam, { x: f.x, y: 0.15, z: f.z }, { x: f.x, y: 1.45, z: f.z }, "#3d5f9e", 0.42);
-    circle3(cam, { x: f.x, y: 1.62, z: f.z }, 0.16, "#d9b08c");
+  // fielders (9 + keeper from the Phase 3 field setup; positions animated)
+  for (const f of fieldViews) {
+    const body = f.name === "keeper" ? "#43435c" : "#3d5f9e";
+    const h = f.chaseTarget ? 1.35 : 1.45;   // slight crouch while chasing
+    line3(cam, { x: f.x, y: 0.15, z: f.z }, { x: f.x, y: h, z: f.z }, body, 0.42);
+    circle3(cam, { x: f.x, y: h + 0.17, z: f.z }, 0.16, "#d9b08c");
   }
-
-  // keeper
-  line3(cam, { x: KEEPER_POS.x, y: 0.1, z: KEEPER_POS.z }, { x: KEEPER_POS.x, y: 1.35, z: KEEPER_POS.z }, "#43435c", 0.5);
-  circle3(cam, { x: KEEPER_POS.x, y: 1.55, z: KEEPER_POS.z }, 0.17, "#d9b08c");
 
   // bowler
   drawBowler(cam);
@@ -574,8 +712,97 @@ function drawTouchVisuals() {
 
 /* ================= HUD (DOM) ================= */
 const scoreEl = document.getElementById("scoreboard");
+const chaseEl = document.getElementById("chase");
 const popupEl = document.getElementById("popup");
 let popupTimer = null;
+
+/* ---- Phase 3 overlays ---- */
+const overlayEl = document.getElementById("overlay");
+const overlayTitle = document.getElementById("overlayTitle");
+const overlayDetail = document.getElementById("overlayDetail");
+const overlaySub = document.getElementById("overlaySub");
+const playAgainBtn = document.getElementById("playAgain");
+
+async function showOverlay(title, detail, sub, withPlayAgain) {
+  overlayTitle.textContent = title;
+  overlayDetail.textContent = detail;
+  overlaySub.textContent = sub;
+  playAgainBtn.style.display = withPlayAgain ? "inline-block" : "none";
+  overlayEl.style.display = "flex";
+}
+function hideOverlay() { overlayEl.style.display = "none"; }
+
+function showResultOverlay() {
+  const r = match.result;
+  let title, detail;
+  if (r.outcome === "second_win") {
+    title = "YOU LOSE";
+    detail = `Target chased with ${r.margin_balls} ball${r.margin_balls === 1 ? "" : "s"} remaining`;
+  } else if (r.outcome === "first_win") {
+    title = "YOU WIN";
+    detail = r.second.wickets >= 2
+      ? `All out — fell short by ${r.margin_runs} run${r.margin_runs === 1 ? "" : "s"}`
+      : `Won by ${r.margin_runs} run${r.margin_runs === 1 ? "" : "s"}`;
+  } else {
+    title = "TIE";
+    detail = "Scores level after the Super Over";
+  }
+  const sub = `YOU  ${r.first.runs}/${r.first.wickets} (${r.first.legal_balls} balls)`
+    + `    ·    AI  ${r.second.runs}/${r.second.wickets} (${r.second.legal_balls} balls)`;
+  matchFlow = "result";
+  return showOverlay(title, detail, sub, true);
+}
+
+playAgainBtn.addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  hideOverlay();
+  if (playAgainResolver) { playAgainResolver(); playAgainResolver = null; }
+});
+// showResultOverlay resolves only after PLAY AGAIN: wrap it.
+const _showResultOverlay = showResultOverlay;
+showResultOverlay = function () {
+  return new Promise((resolve) => {
+    playAgainResolver = resolve;
+    _showResultOverlay();
+  });
+};
+
+/* ---- Phase 3 bowling panel ---- */
+const bowlPanelEl = document.getElementById("bowlPanel");
+const bowlReadout = document.getElementById("bowlReadout");
+
+function updateBowlReadout() {
+  const line = bowlCfg.line < -0.25 ? "LINE: LEG STUMP" : bowlCfg.line > 0.25 ? "LINE: OFF STUMP" : "LINE: STUMPS";
+  const len = bowlCfg.length < 0.22 ? "LENGTH: FULL" : bowlCfg.length > 0.7 ? "LENGTH: SHORT" : "LENGTH: GOOD";
+  bowlReadout.innerHTML = line + "<br>" + len;
+}
+function updateBowlPanelVisibility() {
+  bowlPanelEl.style.display = playerIsBatting() ? "none" : "flex";
+  document.getElementById("intentBar").style.display = playerIsBatting() ? "flex" : "none";
+}
+function bindBowlButton(id, fn) {
+  document.getElementById(id).addEventListener("pointerdown", (e) => { e.stopPropagation(); fn(); updateBowlReadout(); });
+}
+bindBowlButton("bpLeft", () => { bowlCfg.line = clamp(bowlCfg.line - 0.15, -0.9, 0.9); });
+bindBowlButton("bpRight", () => { bowlCfg.line = clamp(bowlCfg.line + 0.15, -0.9, 0.9); });
+bindBowlButton("bpUp", () => { bowlCfg.length = clamp(bowlCfg.length - 0.12, 0.04, 0.95); });
+bindBowlButton("bpDown", () => { bowlCfg.length = clamp(bowlCfg.length + 0.12, 0.04, 0.95); });
+document.querySelectorAll(".btype").forEach((btn) => {
+  btn.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    bowlCfg.type = btn.dataset.bt;
+    document.querySelectorAll(".btype").forEach((b) => b.classList.toggle("sel", b === btn));
+  });
+});
+updateBowlReadout();
+window.addEventListener("keydown", (e) => {
+  if (playerIsBatting()) return;
+  if (e.key === "ArrowLeft") bowlCfg.line = clamp(bowlCfg.line - 0.15, -0.9, 0.9);
+  if (e.key === "ArrowRight") bowlCfg.line = clamp(bowlCfg.line + 0.15, -0.9, 0.9);
+  if (e.key === "ArrowUp") bowlCfg.length = clamp(bowlCfg.length - 0.12, 0.04, 0.95);
+  if (e.key === "ArrowDown") bowlCfg.length = clamp(bowlCfg.length + 0.12, 0.04, 0.95);
+  updateBowlReadout();
+});
 
 const toastEl = document.getElementById("toast");
 const bannerEl = document.getElementById("banner");
@@ -583,7 +810,16 @@ const flashEl = document.getElementById("flash");
 let toastTimer = null, bannerTimer = null, flashTimer = null;
 
 function updateScoreboard() {
-  scoreEl.textContent = `SCORE ${runs}   WKTS ${wickets}   BALLS ${balls}      TARGET —   REQ —`;
+  const inn = match.currentInnings() || match.innings[1];
+  const side = playerIsBatting() ? "YOU" : "AI";
+  scoreEl.textContent = `${side}  ${inn.runs}/${inn.wickets}   (${inn.legal_balls} of 6 balls)`;
+  const t = match.target();
+  if (t != null) {
+    chaseEl.textContent = `TARGET ${t}   ·   NEED ${match.runsRequired()}`
+      + `   ·   ${match.ballsRemaining()} BALLS   ·   ${match.wicketsRemaining()} WKTS LEFT`;
+  } else {
+    chaseEl.textContent = `SET A TARGET   ·   ${match.ballsRemaining()} BALLS LEFT`;
+  }
 }
 function showPopup(text, color, secs) {
   popupEl.textContent = text;
@@ -693,14 +929,53 @@ bSlow.addEventListener("pointerdown", (e) => {
 });
 document.getElementById("bRebowl").addEventListener("pointerdown", (e) => {
   e.stopPropagation();
-  if (!lastDeliveryData) return;
+  if (!lastDeliveryData || resolvedThisBall) return;
   redeliverNext = true;
   resolvedThisBall = true;
   struckApplied = true;
+  fieldingLive = false;
   flight.mode = "hidden";
   phase = "between"; phaseT = 0.6;    // short pause, then same ball again
 });
 updateTypeBtn(); updateOutcomeBtn();
+
+/* ---- Phase 3 debug controls ---- */
+const bDiff = document.getElementById("bDiff");
+const bField = document.getElementById("bField");
+const FIELD_CYCLE = [null, "catch", "miss", "stop", "boundary"];
+let fieldIdx = 0;
+bDiff.addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  difficulty = difficulty === "easy" ? "medium" : difficulty === "medium" ? "hard" : "easy";
+  bDiff.textContent = "DIFF: " + difficulty.toUpperCase();
+});
+bField.addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  fieldIdx = (fieldIdx + 1) % FIELD_CYCLE.length;
+  forcedField = FIELD_CYCLE[fieldIdx];
+  bField.textContent = "FIELD: " + (forcedField ? forcedField.toUpperCase() : "NONE");
+});
+document.getElementById("bSimBall").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  // Fast-forward: force the current delivery to resolve as a single.
+  if (resolvedThisBall) return;
+  if (phase === "delivery" || phase === "struck") {
+    forcedOutcome = forcedOutcome || "one";
+    if (flight.mode === "traj" && !engine.contactWillHappen) ballPassedCollected();
+    forcedOutcome = null;
+  }
+});
+document.getElementById("bResetMatch").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  hideOverlay();
+  if (playAgainResolver) { playAgainResolver(); playAgainResolver = null; }
+  resetMatchAll();
+  resolvedThisBall = true;
+  fieldingLive = false;
+  flight.mode = "hidden";
+  phase = "between"; phaseT = 0.8;
+  updateScoreboard();
+});
 
 let debugTimer = 0;
 function updateDebug(dt) {
@@ -737,8 +1012,28 @@ function updateDebug(dt) {
   debugBody.textContent = txt;
 }
 
+/* ================= AI batter input (Phase 3) ================= */
+function aiInputFrame() {
+  if (!aiPlan) return { footX: 0, footY: 0, intent: "normal", swing: false, dirX: 0, dirY: 1, strength: 0 };
+  const ft = aiPlan.foot_target;
+  const frame = {
+    footX: clamp(ft.x - engine.foot.x, -1, 1) * 2,
+    footY: clamp(ft.z - engine.foot.z, -1, 1) * 2,
+    intent: aiPlan.intent,
+    swing: false,
+    dirX: Math.sin(aiPlan.angle), dirY: Math.cos(aiPlan.angle),
+    strength: aiPlan.strength,
+  };
+  if (aiPlan.swing && !aiFired && aiSwingT != null && engine.t >= aiSwingT) {
+    frame.swing = true;
+    aiFired = true;
+  }
+  return frame;
+}
+
 /* ================= main loop ================= */
 let lastT = performance.now();
+let ballStarting = false;
 
 function frame(now) {
   let dt = Math.min(0.033, (now - lastT) / 1000);
@@ -748,11 +1043,11 @@ function frame(now) {
 
   // Advance footwork + delivery clock in all live phases; block swings once
   // the ball is struck or the delivery is over.
-  const inputFrame = sampleInputFrame();
+  const inputFrame = playerIsBatting() ? sampleInputFrame() : aiInputFrame();
   if (struckApplied || resolvedThisBall) inputFrame.swing = false;
 
-  // Debug: force a PERFECT swing at the exact ideal frame.
-  if (forcePerfect && phase === "delivery" && !inputFrame.swing
+  // Debug: force a PERFECT swing at the exact ideal frame (player only).
+  if (forcePerfect && playerIsBatting() && phase === "delivery" && !inputFrame.swing
       && !engine.swingTaken && !engine.contactWillHappen && engine.traj) {
     const windup = windupTime(inputFrame.intent);
     const ideal = engine.traj.time_to_contact - windup;
@@ -788,7 +1083,10 @@ function frame(now) {
     case "struck":
       break;
     case "between":
-      if (phaseT >= 1.15) startBall();
+      if (phaseT >= 1.15 && !ballStarting) {
+        ballStarting = true;
+        startBall().then(() => { ballStarting = false; });
+      }
       break;
   }
 
@@ -796,6 +1094,7 @@ function frame(now) {
     stepFreeFlight(dt);
     if (phase === "delivery") phase = "struck";
   }
+  updateFieldingPresentation(dt);
 
   if (swingAnim.active) {
     swingAnim.t += dt;
@@ -826,3 +1125,4 @@ function frame(now) {
 updateScoreboard();
 startBall();
 requestAnimationFrame(frame);
+window.__matchDebug = () => ({ match, matchFlow, difficulty, forcedField, phase, fieldingResult });

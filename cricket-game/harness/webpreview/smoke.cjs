@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const src = fs.readFileSync(path.join(__dirname, "engine.js"), "utf8");
 const sandbox = {};
-new Function("s", src + "; Object.assign(s, { BattingEngine, makeDelivery, Trajectory, windupTime, buildDelivery, nextDeliveryType, resolveOutcome, DELIVERY_TYPES, DELIVERY_SPECS, DELIVERY_LABELS, predictCarry });")(sandbox);
+new Function("s", src + "; Object.assign(s, { BattingEngine, makeDelivery, Trajectory, windupTime, buildDelivery, nextDeliveryType, resolveOutcome, DELIVERY_TYPES, DELIVERY_SPECS, DELIVERY_LABELS, predictCarry, simulateFielding, defaultField, FIELD_SETUP, aiBattingPlan, aggressionState, aiSwingFrameTime, AI_DIFFICULTY, SuperOverMatchJS });")(sandbox);
 const S = sandbox;
 
 const ok = (cond, msg) => { if (!cond) throw new Error("FAIL: " + msg); };
@@ -115,3 +115,174 @@ close(S.predictCarry(100, 38, 0.9).carry > 60, true, 0, "100kph@38 flies past 60
 ok(S.predictCarry(40, 8, 0.9).carry < 13, "40kph dapper dies short");
 
 console.log("SMOKE OK — engine.js (Phase 2) matches the Python reference invariants.");
+
+
+// ================= Phase 3: fielding / AI / match flow =================
+function shoot(exitKph, elevDeg, angleDeg, seed, scale = 1.0) {
+  const e = elevDeg * Math.PI / 180, a = angleDeg * Math.PI / 180, v = exitKph / 3.6;
+  const vel = { x: Math.sin(a) * Math.cos(e) * v, y: Math.sin(e) * v, z: Math.cos(a) * Math.cos(e) * v };
+  // deterministic-ish rand from a seed
+  let st = seed >>> 0 || 1;
+  const rand = () => { st ^= st << 13; st ^= st >>> 17; st ^= st << 5; return ((st >>> 0) % 100000) / 100000; };
+  return S.simulateFielding({ x: 0.1, y: 0.9, z: 0.35 }, vel, S.defaultField(scale), rand);
+}
+
+// hard drive through the gap -> boundary; at a fielder -> contained
+{
+  let gap = 0, atFielder = 0;
+  for (let s = 1; s <= 60; s++) {
+    if (["four", "six"].includes(shoot(104, 7, 30, s).kind)) gap++;
+    if (shoot(104, 7, 43, s).kind === "stopped") atFielder++;
+  }
+  ok(gap > 40, `hard gap shot boundaries got=${gap}`);
+  ok(atFielder > 30, `hard shot at fielder stopped got=${atFielder}`);
+}
+// lofted chip: caught sometimes, survives sometimes
+{
+  let caught = 0, escaped = 0;
+  for (let s = 1; s <= 200; s++) {
+    const r = shoot(70, 42, -30, s * 7 + 1);
+    if (r.kind === "caught") caught++; else escaped++;
+  }
+  ok(caught > 25, `lofted catches got=${caught}`);
+  ok(escaped > 50, `lofted escapes got=${escaped}`);
+}
+// runs bounded
+for (let s = 1; s <= 100; s++) {
+  const r = shoot(95, 14, 23, s);
+  ok(r.runs >= 0 && r.runs <= 6, "runs within 0..6");
+}
+
+// AI aggression scales with required rate
+ok(S.aggressionState(2, 5, 2) === "safe", "agg safe");
+ok(S.aggressionState(8, 5, 2) === "balanced", "agg balanced");
+ok(S.aggressionState(16, 5, 2) === "aggressive", "agg aggressive");
+ok(S.aggressionState(26, 4, 2) === "desperate", "agg desperate");
+{
+  const delivery = S.buildDelivery("good_length", Math.random, 0.8);
+  const lofts = (ctx) => {
+    let c = 0;
+    for (let i = 0; i < 500; i++) {
+      const p = S.aiBattingPlan(Math.random, delivery, ctx, "medium", null);
+      if (p.swing && (p.intent === "lofted" || p.intent === "aggressive")) c++;
+    }
+    return c;
+  };
+  const calm = lofts({ target: 10, score: 4, balls_remaining: 5, wickets_remaining: 2 });
+  const panic = lofts({ target: 40, score: 5, balls_remaining: 2, wickets_remaining: 2 });
+  ok(panic > calm * 2, `aggression lifts intent mix calm=${calm} panic=${panic}`);
+}
+
+// scripted match scenarios (spec section 28)
+{
+  const L = (r) => ({ kind: "legal", runs: r });
+  const W = (d) => ({ kind: "wicket", runs: 0, dismissal: d });
+  let m = new S.SuperOverMatchJS(); m.start();
+  for (let i = 0; i < 6; i++) m.recordDelivery(L(0));
+  ok(m.phase === "break" && m.innings[0].legal_balls === 6, "six dots end innings");
+
+  m = new S.SuperOverMatchJS(); m.start();
+  [L(1), L(1), L(1), L(1), L(0), L(0)].forEach((o) => m.recordDelivery(o));
+  m.startSecondInnings();
+  m.recordDelivery(L(4)); m.recordDelivery(L(4));
+  ok(m.result.outcome === "second_win" && m.innings[1].legal_balls === 2, "early chase win");
+
+  m = new S.SuperOverMatchJS(); m.start();
+  m.recordDelivery(W("bowled")); m.recordDelivery(W("caught"));
+  ok(m.phase === "break" && m.innings[0].wickets === 2, "two wickets end innings");
+
+  m = new S.SuperOverMatchJS(); m.start();
+  [L(6), L(0), L(0), L(0), L(0), L(0)].forEach((o) => m.recordDelivery(o));
+  m.startSecondInnings();
+  m.recordDelivery(L(6)); m.recordDelivery(L(1));
+  ok(m.result.outcome === "second_win" && m.result.margin_balls === 4, "instant chase end + margin balls");
+
+  m = new S.SuperOverMatchJS(); m.start();
+  [L(4), L(0), L(0), L(0), L(0), L(0)].forEach((o) => m.recordDelivery(o));
+  m.startSecondInnings();
+  [L(4), L(0), L(0), L(0), L(0), L(0)].forEach((o) => m.recordDelivery(o));
+  ok(m.result.outcome === "tie", "tie stays tie");
+
+  // striker swaps
+  m = new S.SuperOverMatchJS(); m.start();
+  m.recordDelivery(L(1)); ok(m.innings[0].striker === 1, "odd run swaps");
+  m.recordDelivery(L(2)); ok(m.innings[0].striker === 1, "two keeps strike");
+  m.recordDelivery(L(4)); ok(m.innings[0].striker === 1, "boundary keeps strike");
+}
+
+// full AI-vs-AI soak through the real engine pipeline
+{
+  function playDeliveryAI(match) {
+    const tune = S.AI_DIFFICULTY.medium;
+    const type = S.nextDeliveryType(Math.random);
+    const d = S.buildDelivery(type, Math.random, tune.ai_bowling_acc);
+    const eng = new S.BattingEngine();
+    eng.beginDelivery(d);
+    const innIdx = match.phase === "second" ? 1 : 0;
+    const ctx = {
+      target: innIdx === 1 ? match.innings[0].runs + 1 : null,
+      score: match.innings[innIdx].runs,
+      balls_remaining: match.ballsRemaining(),
+      wickets_remaining: match.wicketsRemaining(),
+    };
+    const plan = S.aiBattingPlan(Math.random, d, ctx, "medium", eng.traj.hitsStumps());
+    const swingT = plan.swing ? S.aiSwingFrameTime(eng.traj.time_to_contact, plan.intent, plan.offset) : null;
+    let fired = false, t = 0;
+    const dt = 1 / 120;
+    while (t < 4) {
+      const frame = {
+        footX: Math.max(-1, Math.min(1, plan.foot_target.x - eng.foot.x)) * 2,
+        footY: Math.max(-1, Math.min(1, plan.foot_target.z - eng.foot.z)) * 2,
+        intent: plan.intent,
+        swing: plan.swing && !fired && swingT != null && t >= swingT,
+        dirX: Math.sin(plan.angle), dirY: Math.cos(plan.angle), strength: plan.strength,
+      };
+      if (frame.swing) fired = true;
+      eng.update(dt, frame);
+      t += dt;
+      if (eng.passedReported || eng.contactWillHappen) break;
+    }
+    if (!eng.contactWillHappen) {
+      const o = S.resolveOutcome(Math.random, eng.traj, eng.lastSwing, eng.foot.x, eng.foot.z, null);
+      match.recordDelivery(o.wicket
+        ? { kind: "wicket", runs: 0, dismissal: o.kind === "lbw" ? "lbw" : "bowled" }
+        : { kind: "legal", runs: o.runs });
+      return o.kind;
+    }
+    const c = eng.lastSwing.contact;
+    const speed = c.exit_kph / 3.6;
+    const res = S.simulateFielding(
+      { x: eng.traj.x_at_contact, y: Math.max(eng.traj.height_at_contact, 0.35), z: 0.35 },
+      { x: c.direction.x * speed, y: c.direction.y * speed, z: c.direction.z * speed },
+      S.defaultField(innIdx === 0 ? tune.field_vs_player : tune.field_for_player),
+      Math.random);
+    if (res.kind === "caught") match.recordDelivery({ kind: "wicket", runs: 0, dismissal: "caught" });
+    else match.recordDelivery({ kind: "legal", runs: res.runs });
+    return res.kind;
+  }
+
+  const kinds = new Set();
+  let firstWins = 0, secondWins = 0;
+  for (let seed = 0; seed < 40; seed++) {
+    const m = new S.SuperOverMatchJS(); m.start();
+    while (m.phase !== "completed") {
+      if (m.phase === "break") { m.startSecondInnings(); continue; }
+      kinds.add(playDeliveryAI(m));
+    }
+    ok(m.innings[0].legal_balls <= 6 && m.innings[1].legal_balls <= 6, "balls cap");
+    ok(m.innings[0].wickets <= 2 && m.innings[1].wickets <= 2, "wickets cap");
+    if (m.result.outcome === "second_win") {
+      secondWins++;
+      ok(m.innings[1].runs >= m.innings[0].runs + 1, "chase reached target");
+    } else if (m.result.outcome === "first_win") {
+      firstWins++;
+      ok(m.innings[1].runs < m.innings[0].runs + 1, "chase fell short");
+    }
+  }
+  ok(firstWins > 0, "AI chase can fail");
+  ok(secondWins > 0, "AI chase can succeed");
+  ok(kinds.has("caught") && kinds.has("four"), "catches and boundaries occur live");
+  ok(kinds.has("bowled") || kinds.has("lbw"), "stump wickets occur live");
+}
+
+console.log("SMOKE PASS (phase 1+2+3)");

@@ -75,6 +75,38 @@
   #flash {
     inset: 0; background: #ffd23f; opacity: 0; transition: opacity 0.22s; pointer-events: none;
   }
+  #chase {
+    top: max(44px, calc(env(safe-area-inset-top) + 36px)); left: 50%; transform: translateX(-50%);
+    background: rgba(8,12,22,0.45); color: #cfe2ff; font-size: clamp(10px, 1.9vmin, 16px);
+    letter-spacing: 0.05em; padding: 5px 14px; border-radius: 8px; white-space: nowrap; pointer-events: none;
+  }
+  #overlay {
+    inset: 0; background: rgba(3,6,14,0.74); display: none; align-items: center; justify-content: center;
+  }
+  #overlay .card {
+    background: rgba(10,16,30,0.92); border-radius: 16px; padding: 28px 40px; text-align: center;
+    max-width: min(560px, 86vw); box-shadow: 0 10px 44px rgba(0,0,0,0.5);
+  }
+  #overlayTitle { color: #fff; font-size: clamp(26px, 5.6vmin, 46px); font-weight: 900; letter-spacing: 0.08em; }
+  #overlayDetail { color: #d7e4ff; font-size: clamp(15px, 3vmin, 22px); margin-top: 14px; }
+  #overlaySub { color: #93a3c8; font-size: clamp(12px, 2.2vmin, 16px); margin-top: 10px; }
+  #playAgain {
+    margin-top: 22px; padding: 12px 42px; border: 0; border-radius: 10px; background: #1fa051;
+    color: #fff; font-size: clamp(15px, 2.8vmin, 20px); font-weight: 800; letter-spacing: 0.08em;
+    cursor: pointer; touch-action: none; display: none;
+  }
+  #bowlPanel {
+    bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+    display: none; align-items: center; gap: 8px; background: rgba(8,12,22,0.66);
+    padding: 8px 12px; border-radius: 12px;
+  }
+  #bowlPanel button {
+    min-width: clamp(52px, 9vmin, 78px); padding: 10px 6px; border: 0; border-radius: 9px;
+    background: rgba(255,255,255,0.14); color: #fff; font-size: clamp(12px, 2vmin, 16px);
+    font-weight: 800; letter-spacing: 0.04em; cursor: pointer; touch-action: none;
+  }
+  #bowlPanel button.sel { background: #2c74d3; }
+  #bowlReadout { color: #cfe2ff; font-size: clamp(10px, 1.8vmin, 14px); min-width: 92px; text-align: center; line-height: 1.4; }
 </style>
 </head>
 <body>
@@ -82,9 +114,31 @@
 
 <div id="flash" class="ui"></div>
 <div id="scoreboard" class="ui"></div>
+<div id="chase" class="ui"></div>
 <div id="popup" class="ui"></div>
 <div id="banner" class="ui"></div>
 <div id="toast" class="ui"></div>
+
+<div id="overlay" class="ui">
+  <div class="card">
+    <div id="overlayTitle"></div>
+    <div id="overlayDetail"></div>
+    <div id="overlaySub"></div>
+    <button id="playAgain">PLAY AGAIN</button>
+  </div>
+</div>
+
+<div id="bowlPanel" class="ui">
+  <button id="bpLeft">&#9664;</button>
+  <button id="bpUp">&#9650;</button>
+  <button id="bpDown">&#9660;</button>
+  <button id="bpRight">&#9654;</button>
+  <div id="bowlReadout">LINE: STUMPS<br>LENGTH: GOOD</div>
+  <button class="btype sel" data-bt="fast_straight">FAST</button>
+  <button class="btype" data-bt="fast_inswinger">SWING</button>
+  <button class="btype" data-bt="yorker">YORKER</button>
+  <button class="btype" data-bt="short_ball">SHORT</button>
+</div>
 
 <div id="intentBar" class="ui">
   <button class="intent" data-intent="defensive">DEF</button>
@@ -114,6 +168,12 @@
   <div class="dbtns">
     <button id="bType">TYPE: AUTO</button>
     <button id="bOutcome">OUTCOME: NONE</button>
+  </div>
+  <div class="dbtns">
+    <button id="bDiff">DIFF: MEDIUM</button>
+    <button id="bField">FIELD: NONE</button>
+    <button id="bSimBall">SIM BALL</button>
+    <button id="bResetMatch">RESET MATCH</button>
   </div>
 </div>
 
