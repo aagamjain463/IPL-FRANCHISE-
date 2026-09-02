@@ -103,6 +103,9 @@ class Innings:
         self.legal_balls = 0
         self.total_deliveries = 0
         self.deliveries: List[BallRecord] = []
+        # Batters numbered 0 and 1; the striker faces the next ball.
+        self.striker = 0
+        self.non_striker = 1
 
     @property
     def is_complete(self) -> bool:
@@ -123,6 +126,14 @@ class Innings:
             self.legal_balls += 1
         if outcome.is_wicket:
             self.wickets = min(self.max_wickets, self.wickets + 1)
+            # Bowled/LBW/caught: no runs are taken, so the replacement batter
+            # simply takes guard at the striker's end (no swap). A run-out
+            # style dismissal with completed runs would swap first - that is
+            # a future extension point.
+        elif outcome.bat_runs % 2 == 1:
+            # Odd runs swap the strike; 2 returns to the original end;
+            # boundaries (4/6) are not run, so no swap.
+            self.striker, self.non_striker = self.non_striker, self.striker
         self.total_deliveries += 1
         rec = BallRecord(
             innings_index=innings_index,
