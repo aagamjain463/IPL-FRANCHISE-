@@ -17,17 +17,37 @@
 
 ```
 Assets/_Project/
-├── Core/            CricketGame.Core        (noEngineReferences: true)
-│   ├── Rules/       Super Over state machine, innings, deliveries, results
-│   ├── Simulation/  outcome resolution, AI policies, RNG, headless simulator
-│   └── Contracts/   match result payload (future web bridge contract)
-├── Core.Tests/      CricketGame.Core.Tests  (NUnit, Edit Mode Test Runner)
-├── Presentation/    CricketGame.Presentation (MonoBehaviours, HUD, input, world)
-├── Editor/          CricketGame.Editor       (scene tooling)
-└── Scenes/          SuperOver.unity
+├── Core/               CricketGame.Core        (noEngineReferences: true)
+│   ├── Rules/          Super Over state machine (future match mode)
+│   ├── Simulation/     RNG, outcome model, AI policies, headless simulator
+│   └── Batting/        Phase 1 batting engine (input-agnostic)
+├── Core.Tests/         CricketGame.Core.Tests  (NUnit, Edit Mode Test Runner)
+├── BattingPrototype/   CricketGame.BattingPrototype (touch input, world, rigs,
+│                       ball, camera, HUD, debug UI, runner, bootstrap)
+└── Scenes/             BattingPrototype.unity
 ```
 
-Dependency rule: `Presentation -> Core`, `Editor -> *`, `Core -> nothing`.
+Dependency rule: `BattingPrototype -> Core`, `Core -> nothing`.
+
+## Batting engine (Core/Batting) — Phase 1
+
+```
+Touch (MobileBattingInput)          [later: gamepad/keyboard adapters]
+        │  produces
+        ▼
+BattingInputFrame ──▶ BattingEngine
+                        ├─ FootworkController    analog movement model
+                        ├─ DeliveryTrajectory    analytic deterministic flight
+                        ├─ TimingSystem          swing offset → windows/curves
+                        ├─ ShotDirectionResolver swipe+timing+line → direction
+                        ├─ ShotSelector          contextual shot table
+                        └─ BatBallContact        outcome + exit velocity
+```
+
+The engine never knows the input source. Swing timing is judged at the
+release of the swipe against the analytic ball-arrival time; contact produces
+a real velocity vector applied to the ball's Rigidbody. See
+`Docs/PHASE1_BATTING_DESIGN.md` for the full design.
 
 ## Rules engine (Core/Rules)
 

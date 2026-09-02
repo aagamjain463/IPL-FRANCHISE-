@@ -15,6 +15,10 @@ ASSETS = os.path.abspath(ASSETS)
 FIXED_GUIDS = {
     "Assets/_Project/Presentation/Bootstrap/SuperOverBootstrap.cs":
         "aa10c2f4e6b84d0a9f3c5b7e8d2a4c61",
+    "Assets/_Project/BattingPrototype/Bootstrap/BattingBootstrap.cs":
+        "bb20c2f4e6b84d0a9f3c5b7e8d2a4c71",
+    "Assets/_Project/Scenes/BattingPrototype.unity":
+        "62a1b9c2d7b34e6f8a1c0d9b7e5f3b33",
 }
 
 META_TEMPLATES = {
