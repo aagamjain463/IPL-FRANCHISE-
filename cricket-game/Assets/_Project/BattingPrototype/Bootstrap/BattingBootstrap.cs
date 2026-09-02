@@ -67,7 +67,7 @@ namespace CricketGame.BattingPrototype.Bootstrap
             var runner = runnerGo.AddComponent<BattingPrototypeRunner>();
 
             debug.StartVisible = debugPanelVisible;
-            debug.Build(hud.Canvas, bowler, runner);
+            debug.Build(hud.Canvas, bowler, runner, input);
             runner.Init(world, hud, input, bowler, camCtrl);
         }
     }

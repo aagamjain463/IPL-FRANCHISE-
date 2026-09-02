@@ -20,13 +20,16 @@ namespace CricketGame.BattingPrototype.Hud
         private GameObject panel;
         private TestBowler bowler;
         private BattingPrototypeRunner runner;
+        private Input.MobileBattingInput input;
         private float refreshTimer;
         private readonly StringBuilder sb = new StringBuilder(512);
 
-        public void Build(Canvas canvas, TestBowler bowlerRef, BattingPrototypeRunner runnerRef)
+        public void Build(Canvas canvas, TestBowler bowlerRef, BattingPrototypeRunner runnerRef,
+                          Input.MobileBattingInput inputRef)
         {
             bowler = bowlerRef;
             runner = runnerRef;
+            input = inputRef;
 
             var bgGo = World.UiKit.NewUi("DebugPanel", canvas.transform);
             var bg = bgGo.AddComponent<Image>();
@@ -187,6 +190,13 @@ namespace CricketGame.BattingPrototype.Hud
             sb.Append("BATTER x ").Append(f.X.ToString("+0.00;-0.00")).Append("  z ")
               .Append(f.Z.ToString("+0.00;-0.00")).Append("  (")
               .Append(FootworkController.Pose(f).ToString().ToLower()).Append(")\n");
+            if (input != null)
+            {
+                Vector2 joy = input.JoystickVector;
+                sb.Append("FOOTWORK INPUT ").Append(joy.x.ToString("+0.00;-0.00")).Append(',')
+                  .Append(joy.y.ToString("+0.00;-0.00"))
+                  .Append(input.JoystickActive ? "  (stick held)" : "").Append('\n');
+            }
             SwingReport? s = runner.LastSwing;
             if (s.HasValue)
             {

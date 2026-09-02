@@ -2,6 +2,8 @@ using System;
 using CricketGame.Core.Batting;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.EnhancedTouch;
+using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 namespace CricketGame.BattingPrototype.Input
 {
@@ -10,8 +12,9 @@ namespace CricketGame.BattingPrototype.Input
     /// joystick for footwork. Right half: swipe for shot direction, the
     /// RELEASE of the swipe plays the shot (that moment is timed).
     ///
-    /// Also supports mouse-drag in the editor so the prototype can be played
-    /// on desktop without touch simulation. Emits only the generic
+    /// Uses the Input System's EnhancedTouch API (documented, stable touch
+    /// phases + finger tracking). A mouse-drag fallback lets the prototype be
+    /// played in the editor on desktop. Emits only the generic
     /// <see cref="BattingInputFrame"/> - the engine never sees touches.
     /// </summary>
     public class MobileBattingInput : MonoBehaviour, IBattingInputSource
@@ -34,7 +37,7 @@ namespace CricketGame.BattingPrototype.Input
         public event Action JoystickEnded;
 
         private const int MaxTouches = 10;
-        private readonly bool[] touchDown = new bool[MaxTouches];
+        private readonly bool[] slotDown = new bool[MaxTouches];
         private int joySlot = -1;
         private int swipeSlot = -1;
         private Vector2 swipeAnchor;
@@ -53,43 +56,51 @@ namespace CricketGame.BattingPrototype.Input
 
         private void Awake()
         {
+            if (!EnhancedTouchSupport.enabled)
+                EnhancedTouchSupport.Enable();
             joystickRadius = Mathf.Max(60f, Screen.height * 0.11f);
         }
 
         private void Update()
         {
             joystickRadius = Mathf.Max(60f, Screen.height * 0.11f);
-            ReadTouches();
-            if (Touchscreen.current == null) ReadMouseFallback();
+
+            bool anyTouch = EnhancedTouch.Touch.activeTouches.Count > 0;
+            if (anyTouch) ReadTouches();
+            else ReadMouseFallback();
         }
 
-        // ------------------------------------------------------------- touch
+        // ------------------------------------------------------------- touch (EnhancedTouch)
 
         private void ReadTouches()
         {
-            var ts = Touchscreen.current;
-            if (ts == null) return;
-
-            int count = Mathf.Min(ts.touches.Count, MaxTouches);
-            for (int i = 0; i < count; i++)
+            foreach (var touch in EnhancedTouch.Touch.activeTouches)
             {
-                var touch = ts.touches[i];
-                bool down = touch.press.isPressed;
-                Vector2 pos = touch.position.ReadValue();
+                int slot = Mathf.Clamp(touch.finger.index, 0, MaxTouches - 1);
+                Vector2 pos = touch.screenPosition;
 
-                if (down && !touchDown[i])
+                switch (touch.phase)
                 {
-                    OnPointerDown(i, pos);
+                    case TouchPhase.Began:
+                        slotDown[slot] = true;
+                        OnPointerDown(slot, pos);
+                        break;
+
+                    case TouchPhase.Moved:
+                    case TouchPhase.Stationary:
+                        if (slotDown[slot]) OnPointerMove(slot, pos);
+                        else { slotDown[slot] = true; OnPointerDown(slot, pos); }
+                        break;
+
+                    case TouchPhase.Ended:
+                    case TouchPhase.Canceled:
+                        if (slotDown[slot])
+                        {
+                            slotDown[slot] = false;
+                            OnPointerUp(slot, pos);
+                        }
+                        break;
                 }
-                else if (down && touchDown[i])
-                {
-                    OnPointerMove(i, pos);
-                }
-                else if (!down && touchDown[i])
-                {
-                    OnPointerUp(i, pos);
-                }
-                touchDown[i] = down;
             }
         }
 
@@ -119,6 +130,8 @@ namespace CricketGame.BattingPrototype.Input
                 {
                     swipeAnchor = pos;
                     swipeCurrent = pos;
+                    SwipeAnchorScreen = pos;
+                    SwipeCurrentScreen = pos;
                     SwipeActive = true;
                 }
             }
@@ -128,7 +141,6 @@ namespace CricketGame.BattingPrototype.Input
                 else if (mouseIsSwipe)
                 {
                     swipeCurrent = pos;
-                    SwipeAnchorScreen = swipeAnchor;
                     SwipeCurrentScreen = pos;
                 }
             }
@@ -221,13 +233,18 @@ namespace CricketGame.BattingPrototype.Input
 
             Vector2 dir;
             if (mag < 18f)
+            {
                 dir = new Vector2(0f, 1f); // bare tap: straight
+                strength = Mathf.Max(strength, 0.35f);
+            }
             else
+            {
                 dir = delta.normalized;
+            }
 
             swingQueued = true;
             queuedDirection = dir;
-            queuedStrength = Mathf.Max(strength, mag < 18f ? 0.35f : strength);
+            queuedStrength = strength;
         }
 
         // ------------------------------------------------------------- generic output
