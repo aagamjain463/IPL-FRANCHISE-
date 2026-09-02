@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Batting Prototype — Engine Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1526; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; touch-action: none; overscroll-behavior: none; }
+  #view { position: fixed; inset: 0; display: block; touch-action: none; }
+  .ui { position: fixed; z-index: 10; }
+
+  #scoreboard {
+    top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    background: rgba(8,12,22,0.62); color: #fff; font-size: clamp(12px, 2.2vmin, 20px);
+    letter-spacing: 0.06em; padding: 8px 18px; border-radius: 10px; white-space: nowrap; pointer-events: none;
+  }
+  #popup {
+    top: 40%; left: 50%; transform: translate(-50%, -50%);
+    color: #fff; font-size: clamp(26px, 6vmin, 58px); font-weight: 800; letter-spacing: 0.04em;
+    text-shadow: 0 3px 14px rgba(0,0,0,0.65); opacity: 0; transition: opacity 0.28s; pointer-events: none;
+    white-space: nowrap;
+  }
+  #intentBar { top: max(52px, calc(env(safe-area-inset-top) + 44px)); right: 10px; display: flex; flex-direction: column; gap: 7px; }
+  .intent {
+    width: clamp(56px, 9vmin, 84px); padding: 9px 0; border: 0; border-radius: 9px;
+    background: rgba(16,20,36,0.78); color: #dfe7ff; font-size: clamp(12px, 2vmin, 17px); font-weight: 700;
+    letter-spacing: 0.05em; touch-action: none; cursor: pointer;
+  }
+  .intent.on[data-intent="defensive"] { background: #2c74d3; color: #fff; }
+  .intent.on[data-intent="normal"] { background: #1fa051; color: #fff; }
+  .intent.on[data-intent="aggressive"] { background: #e86a17; color: #fff; }
+  .intent.on[data-intent="lofted"] { background: #b13aa5; color: #fff; }
+
+  #debugToggle {
+    top: max(8px, env(safe-area-inset-top)); left: 10px; padding: 7px 12px; border: 0; border-radius: 8px;
+    background: rgba(16,20,36,0.78); color: #9fe8b4; font-size: 13px; font-weight: 700; cursor: pointer; touch-action: none;
+  }
+  #debugPanel {
+    top: max(46px, calc(env(safe-area-inset-top) + 38px)); left: 10px; width: min(430px, 46vw);
+    background: rgba(4,8,16,0.78); border-radius: 10px; padding: 10px 12px; color: #9fe8b4;
+  }
+  #debugBody { font: 11px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; white-space: pre-wrap; min-height: 118px; }
+  .drow { display: flex; align-items: center; gap: 8px; margin-top: 7px; color: #cfe0ff; font-size: 12px; }
+  .drow label { width: 52px; text-align: right; flex: none; }
+  .drow input[type="range"] { flex: 1; accent-color: #59b7ff; touch-action: none; }
+  .dbtns { display: flex; gap: 6px; margin-top: 9px; }
+  .dbtns button {
+    flex: 1; padding: 7px 0; border: 0; border-radius: 7px; background: #2b3554; color: #fff;
+    font-size: 12px; font-weight: 700; cursor: pointer; touch-action: none;
+  }
+  #badge {
+    bottom: max(6px, env(safe-area-inset-bottom)); right: 10px; color: rgba(255,255,255,0.4);
+    font-size: 10.5px; letter-spacing: 0.04em; pointer-events: none; text-align: right; line-height: 1.45;
+  }
+  #hint {
+    bottom: max(6px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+    color: rgba(255,255,255,0.35); font-size: clamp(10px, 1.8vmin, 14px); pointer-events: none; white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="scoreboard" class="ui"></div>
+<div id="popup" class="ui"></div>
+
+<div id="intentBar" class="ui">
+  <button class="intent" data-intent="defensive">DEF</button>
+  <button class="intent" data-intent="normal">NOR</button>
+  <button class="intent" data-intent="aggressive">POW</button>
+  <button class="intent" data-intent="lofted">LOFT</button>
+</div>
+
+<button id="debug" class="ui">DEBUG ▾</button>
+<div id="debugPanel" class="ui">
+  <div id="debugBody"></div>
+  <div class="drow"><label>Speed</label><input id="sSpeed" type="range" min="80" max="150" step="1" value="126"></div>
+  <div class="drow"><label>Line</label><input id="sLine" type="range" min="-1" max="1" step="0.05" value="0.15"></div>
+  <div class="drow"><label>Length</label><input id="sLength" type="range" min="0" max="1" step="0.01" value="0.52"></div>
+  <div class="drow"><label>Swing</label><input id="sSwing" type="range" min="-1" max="1" step="0.05" value="0"></div>
+  <div class="dbtns">
+    <button id="bFull">FULL</button>
+    <button id="bGood">GOOD</button>
+    <button id="bShort">SHORT</button>
+    <button id="bReset">RESET POS</button>
+  </div>
+</div>
+
+<div id="hint" class="ui">LEFT THUMB = FOOTWORK&nbsp;&nbsp;·&nbsp;&nbsp;RIGHT SIDE = SWIPE (release = shot)</div>
+<div id="badge" class="ui">ENGINE PREVIEW — same math as the Unity prototype<br>cricket-game/Assets/_Project/Core/Batting</div>
+
+<script src="engine.js"></script>
+<script src="preview.js"></script>
+</body>
+</html>

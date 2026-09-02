@@ -70,6 +70,22 @@ be added later without rewriting anything.
   runs a 1:1 Python reference of every deterministic engine through the same
   scenario battery (70 tests incl. 24,000-match and 4,000-delivery soaks).
 
+## Browser preview (no Unity required)
+
+`harness/webpreview/` contains a standalone, mobile-friendly browser build of
+the Phase 1 batting engine — a 1:1 JavaScript port of
+`harness/batting_reference.py` (verified against it by `node smoke.cjs`).
+It reproduces the exact same math: footwork, swipe direction, intent, timing
+windows, contextual shot selection, and bat-ball contact.
+
+- Serve it: `python3 -m http.server 4000 --bind 0.0.0.0` from
+  `harness/webpreview/`, then open the URL on a phone or desktop browser.
+- Controls mirror the Unity prototype: left thumb = joystick footwork,
+  right side = swipe (release plays the timed shot), DEF/NOR/POW/LOFT
+  buttons, sliders + presets in the DEBUG panel.
+- This is a **feel-testing preview only**. The Unity prototype remains the
+  real deliverable; the JS port is not wired into the React app.
+
 ## Project layout
 
 ```
@@ -87,6 +103,7 @@ cricket-game/
 ├── Packages/                  manifest (ugui, Input System, test framework)
 ├── ProjectSettings/           2022.3 LTS, landscape, new input handler
 └── harness/                   headless reference implementations + tests
+    └── webpreview/            browser play-preview (JS port of the engine)
 ```
 
 ## Module map (Phase 1)
