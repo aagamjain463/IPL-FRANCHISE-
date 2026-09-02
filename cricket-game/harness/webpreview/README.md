@@ -1,9 +1,15 @@
-# Web preview — Phase 1 batting engine
+# Web preview — batting + bowling engine
 
-A standalone, mobile-friendly browser preview of the Phase 1 batting control
-system. **Not** part of the React app and **not** a Unity WebGL build — it is
-a 1:1 JavaScript port of the deterministic engine
-(`../batting_reference.py`, mirrored from `Assets/_Project/Core/Batting/`).
+A standalone, mobile-friendly browser preview of the cricket gameplay engine.
+**Not** part of the React app and **not** a Unity WebGL build — it is a 1:1
+JavaScript port of the deterministic engines (`../batting_reference.py` +
+`../bowling_reference.py`, mirrored from `Assets/_Project/Core/`).
+
+Phase 2 included: eight delivery types from a weighted bowler plan, seam /
+bounce / swing physics, pitch dust, bowled + simplified LBW, edges
+(top/inside/outside), ballistic carry + roll for runs and boundaries,
+broadcast camera states (delivery / boundary chase / wicket reaction) and
+the full debug toggle set.
 
 ## Run
 
@@ -16,7 +22,8 @@ python3 -m http.server 4000 --bind 0.0.0.0
 ## Verify the port matches the reference
 
 ```bash
-node smoke.cjs     # trajectory parity + timing/contact/bowled/dot invariants
+node smoke.cjs      # trajectory/parity + factory + outcome-resolver invariants
+node dom_smoke.cjs  # headless 14 s gameplay run against a fake DOM
 ```
 
 ## Controls
@@ -26,13 +33,17 @@ node smoke.cjs     # trajectory parity + timing/contact/bowled/dot invariants
 | Left thumb (touch/drag) | Dynamic joystick → analog footwork |
 | Right thumb (swipe, release = shot) | Continuous shot direction; tap = straight |
 | DEF / NOR / POW / LOFT | Intent (modifies the resulting shot) |
-| DEBUG panel sliders | Next-ball pace / line / length / swing |
-| FULL / GOOD / SHORT / RESET POS | Delivery presets / re-centre batsman |
+| DEBUG panel sliders | Manual delivery pace / line / length / swing |
+| FULL / GOOD / SHORT | Manual delivery presets |
+| TYPE: AUTO | Cycle forced delivery type (AUTO = bowler's weighted plan) |
+| OUTCOME: NONE | Cycle forced outcome (dot/1/2/4/6/edge/bowled/lbw…) |
+| PERFECT / SLOW-MO / RE-BOWL | Debug toggles |
+| RESET POS | Re-centre the batsman |
 
 ## Files
 
-- `engine.js` — pure engine port (trajectory, footwork, timing, direction,
-  selection, contact, delivery loop). No DOM.
-- `preview.js` — canvas renderer + pointer input + HUD wiring.
+- `engine.js` — pure engine port (batting + bowling + outcomes). No DOM.
+- `preview.js` — canvas renderer + pointer input + HUD + camera states.
 - `index.html` — mobile shell (`touch-action:none`, safe-area padding).
-- `smoke.cjs` — Node parity tests vs the Python mirror.
+- `smoke.cjs` — Node parity tests vs the Python mirrors.
+- `dom_smoke.cjs` — headless runtime test of the whole game loop.

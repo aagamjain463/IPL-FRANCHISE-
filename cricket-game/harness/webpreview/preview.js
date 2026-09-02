@@ -85,7 +85,17 @@ function circle3(cam, p, radiusWorld, color) {
 
 /* ================= game state ================= */
 const engine = new BattingEngine();
+// Manual bowler sliders (debug); autoMode = plan-driven Phase 2 bowling.
 const bowlerCfg = { speed: 126, line: 0.15, length: 0.52, swing: 0 };
+let manualActive = false;
+let manualType = "good_length";
+let forcedType = null;            // null = AUTO (plan)
+let forcedOutcome = null;         // null = physics
+let forcePerfect = false;
+let slowMo = false;
+let redeliverNext = false;
+let lastDeliveryData = null;
+let pendingOutcome = null;
 
 let phase = "pre", phaseT = 0;
 let runs = 0, wickets = 0, balls = 0;
@@ -93,6 +103,7 @@ let bowlerZ = 26, bowlerArmT = 0;
 let resolvedThisBall = false;
 let struckApplied = false;
 let stumpKnock = 0; // 0..1 animation
+const dusts = [];   // pitch-dust puffs {x, z, t}
 
 const flight = { mode: "hidden", t: 0, pos: { x: 0, y: 1, z: 20 }, vel: { x: 0, y: 0, z: 0 }, grounded: false, restTimer: 0 };
 const swingAnim = { active: false, t: 0, dur: 0.4, contactFrac: 0.4, yawDeg: 0 };
@@ -196,36 +207,48 @@ engine.onSwing = (report) => {
   swingAnim.yawDeg = report.direction.angle * 57.29578;
 };
 
-engine.onPassed = (r) => {
-  if (r.hit_stumps) {
-    wickets++;
-    stumpKnock = 0.0001;
-    showPopup("BOWLED!", "#ff4a3c", 1.4);
-  } else if (r.swung) {
-    showPopup("BEATEN!", "#ffbf5e", 0.9);
-  } else {
-    showPopup("LEFT ALONE", "#cfe2ff", 0.8);
-  }
-  camMode = "game";
+// Note: wicket/beaten/leave handling happens in ballPassedCollected() where
+// the outcome resolver runs; onPassed only marks the ball as past the bat.
+
+engine.onBounce = (pos) => {
+  dusts.push({ x: pos.x, z: pos.z, t: 0 });
 };
 
 /* ================= delivery flow ================= */
 function nextDeliveryData() {
-  return makeDelivery(bowlerCfg.speed, bowlerCfg.line, bowlerCfg.length, bowlerCfg.swing);
+  if (manualActive) {
+    return makeDelivery(bowlerCfg.speed, bowlerCfg.line, bowlerCfg.length, bowlerCfg.swing,
+      { dtype: manualType, seam: 0, bounce: 1 });
+  }
+  const type = forcedType || nextDeliveryType(Math.random);
+  return buildDelivery(type, Math.random, 0.75);
 }
 
 function startBall() {
-  phase = "pre"; phaseT = 0;
-  bowlerZ = 26; bowlerArmT = 0;
   stumpKnock = 0;
   resolvedThisBall = false;
   flight.mode = "hidden";
+
+  if (redeliverNext) {
+    // Debug re-bowl: same ball again, no run-up ceremony.
+    bowlerZ = 20.2; bowlerArmT = 1;
+    releaseBall();
+    updateScoreboard();
+    return;
+  }
+
+  phase = "pre"; phaseT = 0;
+  bowlerZ = 26; bowlerArmT = 0;
   updateScoreboard();
 }
 
 function releaseBall() {
-  engine.beginDelivery(nextDeliveryData());
+  const d = (redeliverNext && lastDeliveryData) ? lastDeliveryData : nextDeliveryData();
+  redeliverNext = false;
+  lastDeliveryData = d;
+  engine.beginDelivery(d);
   struckApplied = false;
+  pendingOutcome = null;
   flight.mode = "traj";
   flight.t = 0;
   flight.pos = engine.traj.position(0);
@@ -233,6 +256,7 @@ function releaseBall() {
   flight.restTimer = 0;
   camMode = "game";
   phase = "delivery";
+  showToast(DELIVERY_LABELS[d.dtype] + "  —  " + Math.round(d.speed_kph) + " KPH");
 }
 
 function applyContact() {
@@ -246,22 +270,36 @@ function applyContact() {
   flight.vel = { x: c.direction.x * speed, y: c.direction.y * speed, z: c.direction.z * speed };
   flight.grounded = false;
   flight.restTimer = 0;
-  camMode = "follow";
+
+  // Resolve the cricket outcome NOW (deterministic); runs apply on settle.
+  pendingOutcome = resolveOutcome(Math.random, engine.traj, swing,
+    engine.foot.x, engine.foot.z, forcedOutcome);
+  const boundary = pendingOutcome.kind === "four" || pendingOutcome.kind === "six";
+  camMode = boundary ? "followBoundary" : "follow";
+
   const winTxt = swing.window.replace("_", " ").toUpperCase();
   const col = swing.window === "perfect" ? "#ffd23f" : swing.window === "good" ? "#5eff8a"
     : (swing.window === "early" || swing.window === "late") ? "#ffb14a" : "#ff6a5e";
-  showPopup(swing.selection.name.toUpperCase() + "  -  " + winTxt, col, 1.0);
+  const isEdge = pendingOutcome.kind === "top_edge" || pendingOutcome.kind === "inside_edge"
+    || pendingOutcome.kind === "outside_edge";
+  showPopup(isEdge ? pendingOutcome.label : swing.selection.name.toUpperCase() + "  -  " + winTxt,
+    isEdge ? "#ffa15e" : col, 1.0);
+  if (swing.window === "perfect" && !isEdge) showTimingFlash("#ffd23f");
 }
 
-function settleBall(runsScored, boundary, six) {
+function settleFromOutcome() {
   if (resolvedThisBall) return;
   resolvedThisBall = true;
-  runs += runsScored;
+  const o = pendingOutcome || { kind: "dot", label: "DOT BALL", runs: 0 };
+  runs += o.runs;
   balls++;
-  if (six) showPopup("SIX!", "#ffd23f", 1.3);
-  else if (boundary) showPopup("FOUR!", "#5ecfff", 1.3);
-  else if (runsScored > 0) showPopup("+" + runsScored, "#ffffff", 0.9);
-  else showPopup("DOT", "#b9c2cc", 0.7);
+  if (o.kind === "six") showBanner("SIX!", "#ffd23f");
+  else if (o.kind === "four") showBanner("FOUR!", "#5ecfff");
+  else if (o.kind === "top_edge" || o.kind === "inside_edge" || o.kind === "outside_edge")
+    showPopup(o.label + (o.runs > 0 ? "  +" + o.runs : ""), "#ffa15e", 1.0);
+  else if (o.runs > 0) showPopup("+" + o.runs, "#ffffff", 0.9);
+  else if (o.kind === "defensive") showPopup(o.runs > 0 ? "BLOCKED  +1" : "BLOCKED", "#bcd2ff", 0.7);
+  else showPopup(o.label, "#b9c2cc", 0.7);
   camMode = "game";
   flight.mode = "hidden";
   phase = "between"; phaseT = 0;
@@ -272,6 +310,22 @@ function ballPassedCollected() {
   if (resolvedThisBall) return;
   resolvedThisBall = true;
   balls++;
+
+  // Unstruck ball: bowled / LBW / beaten / left alone.
+  const o = resolveOutcome(Math.random, engine.traj, engine.lastSwing,
+    engine.foot.x, engine.foot.z, forcedOutcome);
+  pendingOutcome = o;
+  if (o.wicket) {
+    wickets++;
+    stumpKnock = 0.0001;
+    showBanner(o.kind === "lbw" ? "LBW!" : "BOWLED!", "#ff4a3c");
+    camMode = "wicket";
+  } else if (o.kind === "beaten") {
+    showPopup("BEATEN!", "#ffbf5e", 0.9);
+  } else {
+    showPopup("LEFT ALONE", "#cfe2ff", 0.8);
+  }
+
   flight.mode = "keeper";
   flight.pos = { x: KEEPER_POS.x + 0.25, y: 1.0, z: KEEPER_POS.z };
   phase = "between"; phaseT = 0;
@@ -295,26 +349,35 @@ function stepFreeFlight(dt) {
   }
   const dist = Math.hypot(p.x, p.z);
   if (dist >= 62) {
-    const six = !flight.grounded && p.y > 0.4;
-    settleBall(six ? 6 : 4, true, six);
+    settleFromOutcome();
     return;
   }
   if (flight.grounded && Math.hypot(v.x, v.z) < 0.5 && p.y < 0.12) {
     flight.restTimer += dt;
-    if (flight.restTimer > 0.25) {
-      const r = dist >= 45 ? 3 : dist >= 25 ? 2 : dist >= 9 ? 1 : 0;
-      settleBall(r, false, false);
-    }
+    if (flight.restTimer > 0.25) settleFromOutcome();
   } else {
     flight.restTimer = 0;
   }
 }
 
 /* ================= camera ================= */
+const WICKET_POS = { x: 1.9, y: 1.5, z: -3.4 }, WICKET_LOOK = { x: 0, y: 0.5, z: -1 };
+
 function updateCamera(dt) {
   let desiredPos, desiredLook;
   if (camMode === "setup") {
     desiredPos = SETUP_POS; desiredLook = SETUP_LOOK;
+  } else if (camMode === "wicket") {
+    desiredPos = WICKET_POS; desiredLook = WICKET_LOOK;
+  } else if (camMode === "followBoundary" && flight.mode === "free") {
+    // Boundary chase: drift back and up so the flight stays framed to the rope.
+    desiredLook = flight.pos;
+    const depth = clamp(flight.pos.z * 0.10, 0, 5.5);
+    desiredPos = {
+      x: GAME_POS.x + clamp(flight.pos.x * 0.10, -3.5, 3.5),
+      y: GAME_POS.y + 0.4 + depth * 0.55,
+      z: GAME_POS.z - depth * 0.35,
+    };
   } else if (camMode === "follow" && (flight.mode === "free")) {
     desiredLook = flight.pos;
     desiredPos = { x: GAME_POS.x + clamp(flight.pos.x * 0.06, -1.2, 1.2), y: GAME_POS.y + 0.3, z: GAME_POS.z };
@@ -395,6 +458,19 @@ function drawWorld(cam) {
       ctx.fill();
     }
     circle3(cam, flight.pos, 0.065, "#e03131");
+  }
+
+  // pitch-dust puffs at bounce points
+  for (const puff of dusts) {
+    const a = 0.5 * (1 - puff.t / 0.32);
+    if (a <= 0) continue;
+    const r = 0.25 + 0.85 * (puff.t / 0.32);
+    const pr = project(cam, { x: puff.x, y: 0.03, z: puff.z });
+    if (!pr) continue;
+    ctx.fillStyle = `rgba(200,180,135,${a.toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(pr.x, pr.y, r * pr.s, r * pr.s * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   drawBatsman(cam);
@@ -501,6 +577,11 @@ const scoreEl = document.getElementById("scoreboard");
 const popupEl = document.getElementById("popup");
 let popupTimer = null;
 
+const toastEl = document.getElementById("toast");
+const bannerEl = document.getElementById("banner");
+const flashEl = document.getElementById("flash");
+let toastTimer = null, bannerTimer = null, flashTimer = null;
+
 function updateScoreboard() {
   scoreEl.textContent = `SCORE ${runs}   WKTS ${wickets}   BALLS ${balls}      TARGET —   REQ —`;
 }
@@ -510,6 +591,25 @@ function showPopup(text, color, secs) {
   popupEl.style.opacity = 1;
   if (popupTimer) clearTimeout(popupTimer);
   popupTimer = setTimeout(() => { popupEl.style.opacity = 0; }, secs * 1000);
+}
+function showToast(text) {
+  toastEl.textContent = text;
+  toastEl.style.opacity = 1;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.style.opacity = 0; }, 1700);
+}
+function showBanner(text, color) {
+  bannerEl.textContent = text;
+  bannerEl.style.color = color;
+  bannerEl.style.opacity = 1;
+  if (bannerTimer) clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => { bannerEl.style.opacity = 0; }, 1400);
+}
+function showTimingFlash(color) {
+  flashEl.style.background = color;
+  flashEl.style.opacity = 0.20;
+  if (flashTimer) clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { flashEl.style.opacity = 0; }, 220);
 }
 
 const debugEl = document.getElementById("debug");
@@ -528,18 +628,23 @@ const sliders = {
   length: document.getElementById("sLength"),
   swing: document.getElementById("sSwing"),
 };
-sliders.speed.addEventListener("input", (e) => bowlerCfg.speed = +e.target.value);
-sliders.line.addEventListener("input", (e) => bowlerCfg.line = +e.target.value);
-sliders.length.addEventListener("input", (e) => bowlerCfg.length = +e.target.value);
-sliders.swing.addEventListener("input", (e) => bowlerCfg.swing = +e.target.value);
-function applyPreset(p) {
-  if (p === "full") Object.assign(bowlerCfg, { speed: 118, line: 0, length: 0.12, swing: 0 });
-  if (p === "good") Object.assign(bowlerCfg, { speed: 126, line: 0.15, length: 0.52, swing: 0 });
-  if (p === "short") Object.assign(bowlerCfg, { speed: 134, line: -0.1, length: 0.88, swing: 0 });
+function markManual() { manualActive = true; updateTypeBtn(); }
+sliders.speed.addEventListener("input", (e) => { bowlerCfg.speed = +e.target.value; markManual(); });
+sliders.line.addEventListener("input", (e) => { bowlerCfg.line = +e.target.value; markManual(); });
+sliders.length.addEventListener("input", (e) => { bowlerCfg.length = +e.target.value; markManual(); });
+sliders.swing.addEventListener("input", (e) => { bowlerCfg.swing = +e.target.value; markManual(); });
+function syncSliders() {
   sliders.speed.value = bowlerCfg.speed;
   sliders.line.value = bowlerCfg.line;
   sliders.length.value = bowlerCfg.length;
   sliders.swing.value = bowlerCfg.swing;
+}
+function applyPreset(p) {
+  if (p === "full") { Object.assign(bowlerCfg, { speed: 118, line: 0, length: 0.12, swing: 0 }); manualType = "full_ball"; }
+  if (p === "good") { Object.assign(bowlerCfg, { speed: 126, line: 0.15, length: 0.52, swing: 0 }); manualType = "good_length"; }
+  if (p === "short") { Object.assign(bowlerCfg, { speed: 134, line: -0.1, length: 0.88, swing: 0 }); manualType = "short_ball"; }
+  syncSliders();
+  markManual();
 }
 document.getElementById("bFull").addEventListener("pointerdown", (e) => { e.stopPropagation(); applyPreset("full"); });
 document.getElementById("bGood").addEventListener("pointerdown", (e) => { e.stopPropagation(); applyPreset("good"); });
@@ -547,6 +652,55 @@ document.getElementById("bShort").addEventListener("pointerdown", (e) => { e.sto
 document.getElementById("bReset").addEventListener("pointerdown", (e) => {
   e.stopPropagation(); engine.foot = { x: 0, z: 0, vx: 0, vz: 0 };
 });
+
+/* ---- Phase 2 debug toggles ---- */
+const bPerfect = document.getElementById("bPerfect");
+const bType = document.getElementById("bType");
+const bOutcome = document.getElementById("bOutcome");
+const bSlow = document.getElementById("bSlow");
+const OUTCOME_CYCLE = [null, "dot", "defensive", "one", "two", "four", "six", "edge", "bowled", "lbw"];
+
+function updateTypeBtn() {
+  bType.textContent = manualActive ? "TYPE: MANUAL"
+    : forcedType ? "TYPE: " + DELIVERY_LABELS[forcedType] : "TYPE: AUTO";
+}
+function updateOutcomeBtn() {
+  bOutcome.textContent = "OUTCOME: " + (forcedOutcome ? forcedOutcome.toUpperCase() : "NONE");
+}
+bPerfect.addEventListener("pointerdown", (e) => {
+  e.stopPropagation(); forcePerfect = !forcePerfect;
+  bPerfect.textContent = "PERFECT: " + (forcePerfect ? "ON" : "OFF");
+});
+let typeIdx = -1;
+bType.addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  manualActive = false;               // leaving manual mode
+  typeIdx++;
+  if (typeIdx >= DELIVERY_TYPES.length) { typeIdx = -1; forcedType = null; }
+  else forcedType = DELIVERY_TYPES[typeIdx];
+  updateTypeBtn();
+});
+let outcomeIdx = 0;
+bOutcome.addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  outcomeIdx = (outcomeIdx + 1) % OUTCOME_CYCLE.length;
+  forcedOutcome = OUTCOME_CYCLE[outcomeIdx];
+  updateOutcomeBtn();
+});
+bSlow.addEventListener("pointerdown", (e) => {
+  e.stopPropagation(); slowMo = !slowMo;
+  bSlow.textContent = "SLOW-MO: " + (slowMo ? "ON" : "OFF");
+});
+document.getElementById("bRebowl").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  if (!lastDeliveryData) return;
+  redeliverNext = true;
+  resolvedThisBall = true;
+  struckApplied = true;
+  flight.mode = "hidden";
+  phase = "between"; phaseT = 0.6;    // short pause, then same ball again
+});
+updateTypeBtn(); updateOutcomeBtn();
 
 let debugTimer = 0;
 function updateDebug(dt) {
@@ -559,18 +713,26 @@ function updateDebug(dt) {
   const j = inputState.joy;
   let txt = "";
   if (d) {
-    txt += `BALL   ${d.speed_kph.toFixed(0)} kph   line ${d.line >= 0 ? "+" : ""}${d.line.toFixed(2)} (${d.line < -0.25 ? "leg" : d.line > 0.25 ? "off" : "mid"})   len ${d.length.toFixed(2)} (${lengthZone(d.length)})   swing ${d.swing >= 0 ? "+" : ""}${d.swing.toFixed(2)}\n`;
+    txt += `BALL   ${DELIVERY_LABELS[d.dtype]}  ${d.speed_kph.toFixed(0)} kph\n`;
+    txt += `  line ${d.line >= 0 ? "+" : ""}${d.line.toFixed(2)}  len ${d.length.toFixed(2)}  swing ${d.swing >= 0 ? "+" : ""}${d.swing.toFixed(2)}  seam ${d.seam >= 0 ? "+" : ""}${d.seam.toFixed(2)}  bounce ${d.bounce.toFixed(2)}\n`;
   }
   txt += `BATTER x ${f.x >= 0 ? "+" : ""}${f.x.toFixed(2)}  z ${f.z >= 0 ? "+" : ""}${f.z.toFixed(2)} (${footPose(f)})\n`;
   txt += `FOOTWORK INPUT ${j ? (j.vx >= 0 ? "+" : "") + j.vx.toFixed(2) + "," + (j.vy >= 0 ? "+" : "") + j.vy.toFixed(2) + " (stick held)" : "0.00,0.00"}\n`;
   if (s) {
-    txt += `SWIPE  dir ${s.direction.direction.x >= 0 ? "+" : ""}${s.direction.direction.x.toFixed(2)},${s.direction.direction.y >= 0 ? "+" : ""}${s.direction.direction.y.toFixed(2)}  sector ${sectorName(sectorOf(s.direction.angle))}\n`;
+    const dirX = Math.sin(s.direction.angle), dirY = Math.cos(s.direction.angle);
+    txt += `SWIPE  dir ${dirX >= 0 ? "+" : ""}${dirX.toFixed(2)},${dirY >= 0 ? "+" : ""}${dirY.toFixed(2)}  sector ${sectorName(sectorOf(s.direction.angle))}\n`;
     txt += `INTENT ${s.intent}   FOOT ${footPose(engine.foot)}\n`;
     txt += `TIMING ${s.window.replace("_", " ").toUpperCase()} (${(s.offset * 1000) >= 0 ? "+" : ""}${(s.offset * 1000).toFixed(0)} ms)  reach ${s.direction.reach.toFixed(2)}\n`;
     txt += `SHOT   ${s.selection.name}${s.selection.awkward ? "  [AWKWARD]" : ""}\n`;
-    txt += s.will_contact
-      ? `CONTACT ${s.contact.outcome.replace("_", " ").toUpperCase()}  q=${s.contact.quality.toFixed(2)}  exit ${s.contact.exit_kph.toFixed(0)} kph`
-      : `CONTACT MISS`;
+    if (s.will_contact) {
+      txt += `CONTACT ${s.contact.outcome.replace("_", " ").toUpperCase()}  q=${s.contact.quality.toFixed(2)}  exit ${s.contact.exit_kph.toFixed(0)} kph  elev ${s.contact.elevation.toFixed(0)}°\n`;
+    } else {
+      txt += `CONTACT MISS\n`;
+    }
+  }
+  if (pendingOutcome) {
+    txt += `OUTCOME ${pendingOutcome.label}${pendingOutcome.runs > 0 ? "  +" + pendingOutcome.runs : ""}`
+      + `${pendingOutcome.wicket ? "  [WICKET]" : ""}${pendingOutcome.forced ? "  [FORCED]" : ""}`;
   }
   debugBody.textContent = txt;
 }
@@ -579,14 +741,26 @@ function updateDebug(dt) {
 let lastT = performance.now();
 
 function frame(now) {
-  const dt = Math.min(0.033, (now - lastT) / 1000);
+  let dt = Math.min(0.033, (now - lastT) / 1000);
   lastT = now;
+  if (slowMo) dt *= 0.35;   // debug slow motion
   phaseT += dt;
 
   // Advance footwork + delivery clock in all live phases; block swings once
   // the ball is struck or the delivery is over.
   const inputFrame = sampleInputFrame();
   if (struckApplied || resolvedThisBall) inputFrame.swing = false;
+
+  // Debug: force a PERFECT swing at the exact ideal frame.
+  if (forcePerfect && phase === "delivery" && !inputFrame.swing
+      && !engine.swingTaken && !engine.contactWillHappen && engine.traj) {
+    const windup = windupTime(inputFrame.intent);
+    const ideal = engine.traj.time_to_contact - windup;
+    if (engine.t + dt >= ideal && engine.t <= ideal + 0.02) {
+      inputFrame.swing = true; inputFrame.dirX = 0; inputFrame.dirY = 1; inputFrame.strength = 1;
+    }
+  }
+
   if (phase === "delivery" || phase === "struck" || phase === "between") {
     engine.update(dt, inputFrame);
   }
@@ -628,6 +802,15 @@ function frame(now) {
     if (swingAnim.t >= swingAnim.dur) swingAnim.active = false;
   }
   if (stumpKnock > 0 && stumpKnock < 1) stumpKnock = Math.min(1, stumpKnock + dt * 3.5);
+
+  // dust puff lifetimes
+  for (let i = dusts.length - 1; i >= 0; i--) {
+    dusts[i].t += dt;
+    if (dusts[i].t > 0.32) dusts.splice(i, 1);
+  }
+
+  // wicket reaction camera hands back to gameplay once the moment has landed
+  if (camMode === "wicket" && phase === "between" && phaseT > 1.0) camMode = "game";
 
   updateCamera(dt);
 

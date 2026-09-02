@@ -21,6 +21,9 @@ namespace CricketGame.Core.Batting
         public const float StumpHalfWidth = 0.18f;
         public const float StumpTopHeight = 0.72f;
 
+        /// <summary>Post-bounce lateral drift (m/s) per unit of seam.</summary>
+        public const float SeamRate = 0.9f;
+
         public DeliveryData Delivery { get; private set; }
 
         /// <summary>Time from release until the ball reaches the contact plane.</summary>
@@ -28,6 +31,9 @@ namespace CricketGame.Core.Batting
 
         /// <summary>Time from release until the ball reaches the stump plane.</summary>
         public float TimeToStumps { get; private set; }
+
+        /// <summary>Time from release until the ball pitches (bounce event).</summary>
+        public float BounceTime { get { return t1; } }
 
         public Vec3 ContactPoint { get; private set; }
         public Vec3 BouncePoint { get; private set; }
@@ -38,6 +44,7 @@ namespace CricketGame.Core.Batting
         /// <summary>Lateral position (m) when it reaches the contact plane.</summary>
         public float XAtContact { get; private set; }
 
+        private float releaseHeight;    // effective release height
         private float speed;            // m/s before bounce
         private float postBounceSpeed;  // m/s after bounce
         private float t1;               // release -> bounce
@@ -46,18 +53,25 @@ namespace CricketGame.Core.Batting
         private float bounceX;
         private float swingAmp;
         private float vyAfter;          // vertical velocity just after bounce
-        private float vxAfter;          // tiny seam drift after bounce
+        private float vxAfter;          // seam/carry/turn drift after bounce
 
-        public DeliveryTrajectory(DeliveryData d)
+        public DeliveryTrajectory(DeliveryData d) : this(d, PitchProfile.Normal)
+        {
+        }
+
+        public DeliveryTrajectory(DeliveryData d, PitchProfile pitch)
         {
             Delivery = d;
 
             float length = Clamp01(d.Length);
             float line = Clamp(d.Line, -1.25f, 1.25f);
             float swing = Clamp(d.Swing, -1.5f, 1.5f);
+            float seam = Clamp(d.Seam, -1.5f, 1.5f);
+            float bounceScale = d.Bounce > 0f ? d.Bounce : 1f;
+            releaseHeight = d.ReleaseHeight > 0f ? d.ReleaseHeight : ReleaseHeight;
 
             speed = System.Math.Max(8f, d.SpeedKph / 3.6f);
-            postBounceSpeed = speed * 0.92f;
+            postBounceSpeed = speed * 0.92f * pitch.PaceFactor;
 
             float bounceZ = 1.6f + 9.2f * length;
             bounceX = line * 0.45f;
@@ -67,17 +81,18 @@ namespace CricketGame.Core.Batting
             BouncePoint = new Vec3(bounceX, 0f, bounceZ);
 
             t1 = (ReleaseZ - bounceZ) / speed;
-            v0y = (0.5f * Gravity * t1 * t1 - ReleaseHeight) / t1;
+            v0y = (0.5f * Gravity * t1 * t1 - releaseHeight) / t1;
 
             // Restitution bounce: fuller balls skid on lower, shorter balls rear up.
             float vImpact = v0y - Gravity * t1; // downward (negative) at pitch
             float restitution = 0.78f - 0.20f * length;
-            vyAfter = -vImpact * restitution;
+            vyAfter = -vImpact * restitution * bounceScale * pitch.BounceEnergy;
 
             float t2 = (bounceZ - ContactZ) / postBounceSpeed;
             HeightAtContact = vyAfter * t2 - 0.5f * Gravity * t2 * t2;
             if (HeightAtContact < 0.05f) HeightAtContact = 0.05f;
-            vxAfter = swing * 0.05f;
+            // Post-bounce lateral movement: swing carry-through, seam cut, pitch turn.
+            vxAfter = swing * 0.05f + seam * SeamRate + pitch.Turn;
 
             TimeToContact = t1 + t2;
             TimeToStumps = t1 + (bounceZ - StumpsZ) / postBounceSpeed;
@@ -96,7 +111,7 @@ namespace CricketGame.Core.Batting
                 float p = t / t1;
                 float x = Lerp(releaseX, bounceX, p) + swingAmp * (float)System.Math.Sin(System.Math.PI * p);
                 float z = ReleaseZ - speed * t;
-                float y = ReleaseHeight + v0y * t - 0.5f * Gravity * t * t;
+                float y = releaseHeight + v0y * t - 0.5f * Gravity * t * t;
                 return new Vec3(x, y > 0f ? y : 0f, z);
             }
 
@@ -107,12 +122,19 @@ namespace CricketGame.Core.Batting
             return new Vec3(xa, ya > 0f ? ya : 0f, za);
         }
 
+        /// <summary>Lateral position and height where the ball crosses the stump plane.</summary>
+        public void AtStumps(out float x, out float y)
+        {
+            float dt = (BouncePoint.Z - StumpsZ) / postBounceSpeed;
+            x = bounceX + vxAfter * dt;
+            y = vyAfter * dt - 0.5f * Gravity * dt * dt;
+        }
+
         /// <summary>True if, unobstructed, the ball would hit the stumps.</summary>
         public bool HitsStumps()
         {
-            float dt = (BouncePoint.Z - StumpsZ) / postBounceSpeed;
-            float x = bounceX + vxAfter * dt;
-            float y = vyAfter * dt - 0.5f * Gravity * dt * dt;
+            float x, y;
+            AtStumps(out x, out y);
             return System.Math.Abs(x) <= StumpHalfWidth && y >= 0f && y <= StumpTopHeight;
         }
 

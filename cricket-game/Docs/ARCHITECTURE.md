@@ -20,10 +20,11 @@ Assets/_Project/
 ├── Core/               CricketGame.Core        (noEngineReferences: true)
 │   ├── Rules/          Super Over state machine (future match mode)
 │   ├── Simulation/     RNG, outcome model, AI policies, headless simulator
-│   └── Batting/        Phase 1 batting engine (input-agnostic)
+│   ├── Batting/        batting engine + shot outcome resolver (input-agnostic)
+│   └── Bowling/        delivery specs, bowler plans, delivery factory
 ├── Core.Tests/         CricketGame.Core.Tests  (NUnit, Edit Mode Test Runner)
-├── BattingPrototype/   CricketGame.BattingPrototype (touch input, world, rigs,
-│                       ball, camera, HUD, debug UI, runner, bootstrap)
+├── BattingPrototype/   CricketGame.BattingPrototype (touch input, world + stadium,
+│                       rigs, ball, bowling, camera, HUD, debug UI, runner, bootstrap)
 └── Scenes/             BattingPrototype.unity
 ```
 
@@ -49,6 +50,33 @@ release of the swipe against the analytic ball-arrival time; contact produces
 a real velocity vector applied to the ball's Rigidbody. See
 `Docs/PHASE1_BATTING_DESIGN.md` for the full design.
 
+## Bowling + outcomes (Phase 2)
+
+```
+BowlerProfile (SO) ─▶ BowlingController ─▶ DeliveryData (typed, seeded)
+                             │                     │
+                             ▼                     ▼
+                      BowlerController      BattingEngine.BeginDelivery
+                      (run-up visual)              │
+                                                   ▼
+                              trajectory (swing → bounce → seam cut)
+                                                   │
+                  swing committed ─▶ BatBallContact ─▶ ContactResult
+                                                   │
+                                   ShotOutcomeResolver (deterministic +
+                                   bounded luck: bowled / LBW / edges /
+                                   carry+roll → dot..6)
+                                                   │
+                                   GameplayEvents (OnBallReleased, OnBallBounced,
+                                   OnShotPlayed, OnBallContact, OnWicket,
+                                   OnBoundary, OnDeliveryComplete)
+```
+
+`ShotOutcomeResolver` extends Phase 1 instead of replacing it: contact still
+comes from `BatBallContact`; the resolver turns the contact (or its absence)
+into cricket: runs, boundaries, wickets. Full design in
+`Docs/PHASE2_BOWLING_DESIGN.md`.
+
 ## Rules engine (Core/Rules)
 
 `SuperOverMatch` is the single source of truth for SUPER OVER — HUMAN VS AI:
@@ -73,6 +101,10 @@ analytics, future web bridge) can observe without coupling.
 | Rules | `Core.Tests/` (Unity Edit Mode) | NUnit scenarios + randomized soak |
 | Rules | `harness/test_superover.py` | Python reference mirror of the same scenarios, runnable without Unity |
 | Simulation | `Core.Tests/SimulationTests.cs` | deterministic seeded matches, replay-consistency, policy sanity |
+| Batting | `Core.Tests/BattingEngineTests.cs` | trajectory, footwork, timing, selection, contact, engine flow |
+| Bowling/Outcomes | `Core.Tests/BowlingSystemTests.cs` | factory, plans, seam/bounce/pitch, yorker rules, resolver, LBW |
+| All engines | `harness/test_*.py` (95 tests) | Python mirrors, incl. a 2,500-ball soak (no Unity needed) |
+| Browser preview | `harness/webpreview/smoke.cjs`, `dom_smoke.cjs` | JS-port parity + headless 14 s gameplay run |
 
 The Python harness is a 1:1 reference port used for environments without a
 .NET toolchain. **If rules change, both implementations must change.**

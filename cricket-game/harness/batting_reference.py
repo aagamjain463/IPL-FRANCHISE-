@@ -40,11 +40,20 @@ class Vec2:
 # --- delivery ----------------------------------------------------------------
 
 class Delivery:
-    def __init__(self, speed_kph=125.0, line=0.0, length=0.5, swing=0.0):
+    """One delivery. Phase 1 fields stay authoritative; Phase 2 adds type,
+    seam (post-bounce lateral cut), bounce (vertical energy multiplier) and an
+    optional release height. All Phase 2 fields default to Phase 1 behaviour."""
+
+    def __init__(self, speed_kph=125.0, line=0.0, length=0.5, swing=0.0,
+                 dtype="fast_straight", seam=0.0, bounce=0.0, release_height=0.0):
         self.speed_kph = speed_kph
         self.line = line
         self.length = length
         self.swing = swing
+        self.dtype = dtype
+        self.seam = seam          # -1 (into batter) .. +1 (away); 0 = none
+        self.bounce = bounce      # <=0 means "use 1.0" (Phase 1 behaviour)
+        self.release_height = release_height  # <=0 means "use 2.05"
 
     @staticmethod
     def full(speed=118.0, line=0.0, swing=0.0):
@@ -59,15 +68,38 @@ class Delivery:
         return Delivery(speed, line, 0.88, swing)
 
 
+class Pitch:
+    """Pitch surface parameters. Only 'normal' is tuned for now; the fields
+    exist so slower/batting/spinning pitches can be added without API churn."""
+
+    def __init__(self, bounce_energy=1.0, pace_factor=1.0, turn=0.0, name="normal"):
+        self.bounce_energy = bounce_energy
+        self.pace_factor = pace_factor
+        self.turn = turn
+        self.name = name
+
+
+NORMAL_PITCH = Pitch()
+
+SEAM_RATE = 0.9  # m/s of post-bounce lateral drift per unit of seam
+
+
 class Trajectory:
-    def __init__(self, d: Delivery):
+    def __init__(self, d: Delivery, pitch: Pitch = None):
+        if pitch is None:
+            pitch = NORMAL_PITCH
         self.delivery = d
+        self.pitch = pitch
         length = clamp(d.length, 0, 1)
         line = clamp(d.line, -1.25, 1.25)
         swing = clamp(d.swing, -1.5, 1.5)
+        seam = clamp(d.seam, -1.5, 1.5)
+        bounce_scale = d.bounce if d.bounce > 0 else 1.0
+        release_height = d.release_height if d.release_height > 0 else RELEASE_HEIGHT
 
+        self.release_height = release_height
         self.speed = max(8.0, d.speed_kph / 3.6)
-        self.post_speed = self.speed * 0.92
+        self.post_speed = self.speed * 0.92 * pitch.pace_factor
         bounce_z = 1.6 + 9.2 * length
         self.bounce_x = line * 0.45
         self.release_x = self.bounce_x - swing * 0.35
@@ -75,21 +107,23 @@ class Trajectory:
         self.bounce_z = bounce_z
 
         self.t1 = (RELEASE_Z - bounce_z) / self.speed
-        self.v0y = (0.5 * GRAVITY * self.t1 ** 2 - RELEASE_HEIGHT) / self.t1
+        self.v0y = (0.5 * GRAVITY * self.t1 ** 2 - release_height) / self.t1
 
         # Restitution bounce: fuller balls skid on lower, shorter balls rear up.
         v_impact = self.v0y - GRAVITY * self.t1  # downward (negative) at pitch
         restitution = 0.78 - 0.20 * length
-        self.vy_after = -v_impact * restitution
+        self.vy_after = -v_impact * restitution * bounce_scale * pitch.bounce_energy
 
         t2 = (bounce_z - CONTACT_Z) / self.post_speed
         self.height_at_contact = max(0.05, self.vy_after * t2 - 0.5 * GRAVITY * t2 ** 2)
-        self.vx_after = swing * 0.05
+        # Post-bounce lateral movement: carry-through of swing, seam cut, pitch turn.
+        self.vx_after = swing * 0.05 + seam * SEAM_RATE + pitch.turn
 
         self.time_to_contact = self.t1 + t2
         self.time_to_stumps = self.t1 + (bounce_z - STUMPS_Z) / self.post_speed
         self.x_at_contact = self.bounce_x + self.vx_after * t2
         self.contact_point = (self.x_at_contact, self.height_at_contact, CONTACT_Z)
+        self.bounce_time = self.t1
 
     def position(self, t):
         t = max(0.0, t)
@@ -98,17 +132,22 @@ class Trajectory:
             x = self.release_x + (self.bounce_x - self.release_x) * p \
                 + self.swing_amp * math.sin(math.pi * p)
             z = RELEASE_Z - self.speed * t
-            y = RELEASE_HEIGHT + self.v0y * t - 0.5 * GRAVITY * t * t
+            y = self.release_height + self.v0y * t - 0.5 * GRAVITY * t * t
             return (x, max(0.0, y), z)
         dt = t - self.t1
         return (self.bounce_x + self.vx_after * dt,
                 max(0.0, self.vy_after * dt - 0.5 * GRAVITY * dt * dt),
                 self.bounce_z - self.post_speed * dt)
 
-    def hits_stumps(self):
+    def at_stumps(self):
+        """(x, y) of the ball when it crosses the stump plane."""
         dt = (self.bounce_z - STUMPS_Z) / self.post_speed
         x = self.bounce_x + self.vx_after * dt
         y = self.vy_after * dt - 0.5 * GRAVITY * dt * dt
+        return x, y
+
+    def hits_stumps(self):
+        x, y = self.at_stumps()
         return abs(x) <= STUMP_HALF_WIDTH and 0 <= y <= STUMP_TOP_HEIGHT
 
 
@@ -237,6 +276,11 @@ def length_zone(length):
     return "short"
 
 
+def is_yorker(length):
+    """Extreme fullness: at the toes. Needs front-foot work to dig out."""
+    return length < 0.12
+
+
 def sector_of(angle_rad):
     deg = math.degrees(angle_rad)
     a = abs(deg)
@@ -277,7 +321,8 @@ def select_shot(intent, pose, delivery: Delivery, direction):
             sel["kind"], sel["name"] = "lofted_straight", "Lofted Straight"
         else:
             sel["kind"], sel["name"] = "lofted_drive", "Lofted Drive"
-        sel["awkward"] = (pose == "back" and length == "full")
+        # Lofting a ball at the toes is a heave, not a real shot.
+        sel["awkward"] = (pose == "back" and length == "full") or is_yorker(delivery.length)
         return sel
 
     sel["base_power"] = 1.0 if intent == "aggressive" else 0.68
@@ -285,6 +330,9 @@ def select_shot(intent, pose, delivery: Delivery, direction):
 
     if length == "full":
         if pose == "back":
+            sel["awkward"] = True
+        # A ball at the toes wants the front foot dug in.
+        if is_yorker(delivery.length) and pose != "front":
             sel["awkward"] = True
         if square_or_behind:
             sel.update(kind="awkward_poke", name="Awkward Stab", awkward=True)
@@ -409,24 +457,28 @@ def resolve_contact(rng: random.Random, delivery: Delivery, shot, direction,
 # --- engine ---------------------------------------------------------------------------
 
 class Engine:
-    def __init__(self, seed):
+    def __init__(self, seed, pitch=None):
         self.rng = random.Random(seed)
+        self.pitch = pitch if pitch is not None else NORMAL_PITCH
         self.foot = Footwork()
         self.traj = None
         self.t = 0.0
         self.swing_taken = False
         self.contact_will_happen = False
         self.passed_reported = False
+        self.bounce_reported = False
         self.last_swing = None
         self.swing_reports = []
         self.passed_reports = []
+        self.on_bounce = None
 
     def begin_delivery(self, d: Delivery):
-        self.traj = Trajectory(d)
+        self.traj = Trajectory(d, self.pitch)
         self.t = 0.0
         self.swing_taken = False
         self.contact_will_happen = False
         self.passed_reported = False
+        self.bounce_reported = False
         self.last_swing = None
 
     def update(self, dt, footwork_input=Vec2(), swing=False, shot_dir=Vec2(0, 1),
@@ -435,6 +487,11 @@ class Engine:
         if self.traj is None:
             return
         self.t += dt
+
+        if not self.bounce_reported and self.t >= self.traj.bounce_time:
+            self.bounce_reported = True
+            if self.on_bounce:
+                self.on_bounce(self.traj.position(self.traj.bounce_time))
 
         if not self.swing_taken and not self.passed_reported and swing:
             windup = windup_time(intent)

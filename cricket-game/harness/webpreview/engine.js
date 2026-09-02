@@ -1,76 +1,102 @@
+/* Phase 2 engine port for the browser preview.
+ * 1:1 mirror of harness/batting_reference.py + harness/bowling_reference.py
+ * (which mirror Assets/_Project/Core). Keep all three in sync. */
 "use strict";
-/* CricketGame.Core.Batting — JS port of the Unity batting engine.
- * 1:1 with harness/batting_reference.py (which mirrors the C# engine).
- * If the C# changes, all three must change together. */
 
+/* ---------------- constants ---------------- */
 const G = 9.81;
-const RELEASE_HEIGHT = 2.05;
+const RELEASE_HEIGHT = 20.1 * 0 + 2.05;
 const RELEASE_Z = 20.1;
 const CONTACT_Z = 0.35;
 const STUMPS_Z = -1.0;
 const STUMP_HW = 0.18;
 const STUMP_TOP = 0.72;
+const SEAM_RATE = 0.9;
+const BOUNDARY_RADIUS = 62;
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const clamp01 = (v) => clamp(v, 0, 1);
 
-function makeDelivery(speed_kph, line, length, swing) {
-  return { speed_kph, line, length, swing };
+/* ---------------- deliveries & pitch ---------------- */
+function makeDelivery(speed_kph, line, length, swing, opts) {
+  const o = opts || {};
+  return {
+    speed_kph, line, length, swing,
+    dtype: o.dtype || "fast_straight",
+    seam: o.seam || 0,
+    bounce: o.bounce || 0,          // <=0 means 1.0
+    release_height: o.release_height || 0, // <=0 means 2.05
+  };
 }
 
+const NORMAL_PITCH = { bounce_energy: 1, pace_factor: 1, turn: 0, name: "normal" };
+
 class Trajectory {
-  constructor(d) {
+  constructor(d, pitch) {
+    pitch = pitch || NORMAL_PITCH;
     this.delivery = d;
-    const length = clamp(d.length, 0, 1);
+    const length = clamp01(d.length);
     const line = clamp(d.line, -1.25, 1.25);
     const swing = clamp(d.swing, -1.5, 1.5);
+    const seam = clamp(d.seam, -1.5, 1.5);
+    const bounce_scale = d.bounce > 0 ? d.bounce : 1;
+    const release_height = d.release_height > 0 ? d.release_height : RELEASE_HEIGHT;
 
+    this.release_height = release_height;
     this.speed = Math.max(8, d.speed_kph / 3.6);
-    this.post = this.speed * 0.92;
-    const bz = 1.6 + 9.2 * length;
+    this.post_speed = this.speed * 0.92 * pitch.pace_factor;
+    const bounce_z = 1.6 + 9.2 * length;
     this.bounce_x = line * 0.45;
     this.release_x = this.bounce_x - swing * 0.35;
     this.swing_amp = swing * 0.65;
-    this.bounce_z = bz;
+    this.bounce_z = bounce_z;
 
-    this.t1 = (RELEASE_Z - bz) / this.speed;
-    this.v0y = (0.5 * G * this.t1 * this.t1 - RELEASE_HEIGHT) / this.t1;
+    this.t1 = (RELEASE_Z - bounce_z) / this.speed;
+    this.v0y = (0.5 * G * this.t1 * this.t1 - release_height) / this.t1;
 
+    const v_impact = this.v0y - G * this.t1;
     const restitution = 0.78 - 0.20 * length;
-    const vImpact = this.v0y - G * this.t1;
-    this.vy_after = -vImpact * restitution;
+    this.vy_after = -v_impact * restitution * bounce_scale * pitch.bounce_energy;
 
-    const t2 = (bz - CONTACT_Z) / this.post;
+    const t2 = (bounce_z - CONTACT_Z) / this.post_speed;
     this.height_at_contact = Math.max(0.05, this.vy_after * t2 - 0.5 * G * t2 * t2);
-    this.vx_after = swing * 0.05;
+    this.vx_after = swing * 0.05 + seam * SEAM_RATE + pitch.turn;
 
     this.time_to_contact = this.t1 + t2;
-    this.time_to_stumps = this.t1 + (bz - STUMPS_Z) / this.post;
+    this.time_to_stumps = this.t1 + (bounce_z - STUMPS_Z) / this.post_speed;
     this.x_at_contact = this.bounce_x + this.vx_after * t2;
+    this.bounce_time = this.t1;
   }
 
   position(t) {
     t = Math.max(0, t);
     if (t <= this.t1) {
       const p = t / this.t1;
-      const x = this.release_x + (this.bounce_x - this.release_x) * p +
-        this.swing_amp * Math.sin(Math.PI * p);
+      const x = this.release_x + (this.bounce_x - this.release_x) * p
+        + this.swing_amp * Math.sin(Math.PI * p);
       const z = RELEASE_Z - this.speed * t;
-      const y = RELEASE_HEIGHT + this.v0y * t - 0.5 * G * t * t;
+      const y = this.release_height + this.v0y * t - 0.5 * G * t * t;
       return { x, y: Math.max(0, y), z };
     }
     const dt = t - this.t1;
     return {
       x: this.bounce_x + this.vx_after * dt,
       y: Math.max(0, this.vy_after * dt - 0.5 * G * dt * dt),
-      z: this.bounce_z - this.post * dt,
+      z: this.bounce_z - this.post_speed * dt,
+    };
+  }
+
+  atStumps() {
+    const dt = (this.bounce_z - STUMPS_Z) / this.post_speed;
+    return {
+      x: this.bounce_x + this.vx_after * dt,
+      y: this.vy_after * dt - 0.5 * G * dt * dt,
     };
   }
 
   hitsStumps() {
-    const dt = (this.bounce_z - STUMPS_Z) / this.post;
-    const x = this.bounce_x + this.vx_after * dt;
-    const y = this.vy_after * dt - 0.5 * G * dt * dt;
-    return Math.abs(x) <= STUMP_HW && y >= 0 && y <= STUMP_TOP;
+    const s = this.atStumps();
+    return Math.abs(s.x) <= STUMP_HW && s.y >= 0 && s.y <= STUMP_TOP;
   }
 }
 
@@ -78,18 +104,14 @@ class Trajectory {
 const FOOT = { accel: 26, damp: 18, maxSpeed: 3.6, xMin: -1.15, xMax: 1.15, zMin: -0.85, zMax: 1.35 };
 
 function footAdvance(f, ix, iy, dt) {
-  const m = Math.hypot(ix, iy);
-  if (m > 1) { ix /= m; iy /= m; }
-  const approach = (cur, target, maxDelta) =>
-    cur < target ? Math.min(cur + maxDelta, target) : Math.max(cur - maxDelta, target);
+  const approach = (cur, target, maxD) => cur < target ? Math.min(cur + maxD, target) : Math.max(cur - maxD, target);
   f.vx = approach(f.vx, ix * FOOT.maxSpeed, (Math.abs(ix) > 0.02 ? FOOT.accel : FOOT.damp) * dt);
   f.vz = approach(f.vz, iy * FOOT.maxSpeed, (Math.abs(iy) > 0.02 ? FOOT.accel : FOOT.damp) * dt);
-  f.x += f.vx * dt;
-  f.z += f.vz * dt;
-  if (f.x < FOOT.xMin) { f.x = FOOT.xMin; if (f.vx < 0) f.vx = 0; }
-  if (f.x > FOOT.xMax) { f.x = FOOT.xMax; if (f.vx > 0) f.vx = 0; }
-  if (f.z < FOOT.zMin) { f.z = FOOT.zMin; if (f.vz < 0) f.vz = 0; }
-  if (f.z > FOOT.zMax) { f.z = FOOT.zMax; if (f.vz > 0) f.vz = 0; }
+  f.x += f.vx * dt; f.z += f.vz * dt;
+  if (f.x < FOOT.xMin) { f.x = FOOT.xMin; f.vx = Math.max(0, f.vx); }
+  if (f.x > FOOT.xMax) { f.x = FOOT.xMax; f.vx = Math.min(0, f.vx); }
+  if (f.z < FOOT.zMin) { f.z = FOOT.zMin; f.vz = Math.max(0, f.vz); }
+  if (f.z > FOOT.zMax) { f.z = FOOT.zMax; f.vz = Math.min(0, f.vz); }
 }
 
 function footPose(f) {
@@ -114,7 +136,7 @@ function classifyTiming(offset) {
   return a <= OK_W ? "late" : "very_late";
 }
 
-const sstep = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+const sstep = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); };
 function powerCurve(off) { return Math.abs(off) < MAX_W ? 1 - 0.85 * sstep(Math.abs(off) / MAX_W) : 0.10; }
 function controlCurve(off) { return Math.abs(off) < MAX_W ? 1 - sstep(Math.abs(off) / MAX_W) : 0; }
 
@@ -122,7 +144,7 @@ function edgeProbability(absOff, reach, speedKph) {
   let p = 0.02;
   if (absOff > 0.045) p += (absOff - 0.045) * 2.4;
   p += (1 - reach) * 0.18;
-  p += clamp((speedKph - 90) / 150, 0, 1) * 0.06;
+  p += clamp01((speedKph - 90) / 150) * 0.06;
   return clamp(p, 0.01, 0.55);
 }
 
@@ -131,103 +153,102 @@ const MIN_DIR_STRENGTH = 0.25, REACH_FALLOFF = 0.85;
 
 function resolveDirection(dx, dy, swipeStrength, ballX, delivery, footX, timingOffset) {
   const mag = Math.hypot(dx, dy);
-  const hasDirection = mag >= MIN_DIR_STRENGTH && swipeStrength > 0.05;
-  let ux = 0, uy = 1;
-  if (hasDirection) { ux = dx / mag; uy = dy / mag; }
-  const angle = Math.atan2(ux, uy) + timingOffset * 1.6;
+  const hasDir = mag >= MIN_DIR_STRENGTH && swipeStrength > 0.05;
+  let nx = 0, ny = 1;
+  if (hasDir) { nx = dx / mag; ny = dy / mag; }
+  let angle = Math.atan2(nx, ny) + timingOffset * 1.6;
   const gap = ballX - (footX + 0.10);
-  const reach = clamp(1 - Math.abs(gap) / REACH_FALLOFF, 0, 1);
-  return {
-    direction: { x: Math.sin(angle), y: Math.cos(angle) },
-    angle, reach, gap, has_direction: hasDirection,
-  };
+  const reach = clamp01(1 - Math.abs(gap) / REACH_FALLOFF);
+  return { angle, reach, gap, has_direction: hasDir };
 }
 
 /* ---------------- shot selector ---------------- */
 function lengthZone(l) { return l < 0.35 ? "full" : l < 0.72 ? "good" : "short"; }
+function isYorker(l) { return l < 0.12; }
 
 function sectorOf(angleRad) {
-  const deg = angleRad * 57.29578, a = Math.abs(deg);
-  if (a <= 20) return "straight";
-  if (a <= 55) return deg > 0 ? "cover" : "mid_wicket";
-  if (a <= 100) return deg > 0 ? "point" : "square_leg";
+  const deg = angleRad * 57.29578, abs = Math.abs(deg);
+  if (abs <= 20) return "straight";
+  if (abs <= 55) return deg > 0 ? "cover" : "mid_wicket";
+  if (abs <= 100) return deg > 0 ? "point" : "square_leg";
   return deg > 0 ? "third_man" : "fine_leg";
 }
 
 function sectorName(s) {
-  return { straight: "STRAIGHT", cover: "COVER", mid_wicket: "MID-WICKET", point: "POINT",
-           square_leg: "SQUARE LEG", third_man: "THIRD MAN", fine_leg: "FINE LEG" }[s];
+  return { fine_leg: "FINE LEG", square_leg: "SQUARE LEG", mid_wicket: "MID-WICKET",
+           straight: "STRAIGHT", cover: "COVER", point: "POINT", third_man: "THIRD MAN" }[s];
 }
 
 function selectShot(intent, pose, delivery, direction) {
   const length = lengthZone(delivery.length);
   const sector = sectorOf(direction.angle);
-  const squareOrBehind = ["point", "square_leg", "third_man", "fine_leg"].includes(sector);
-  const sel = { kind: null, name: null, lofted: false, awkward: false, base_power: 0, base_loft: 0 };
+  const squareOrBehind = sector === "point" || sector === "square_leg" ||
+                         sector === "third_man" || sector === "fine_leg";
+  const s = { kind: null, name: null, lofted: false, awkward: false, base_power: 0, base_loft: 0 };
 
   if (intent === "defensive") {
-    if (length === "short") { sel.kind = "back_foot_defense"; sel.name = "Back-Foot Defence"; }
-    else { sel.kind = "front_foot_defense"; sel.name = "Front-Foot Defence"; }
-    sel.base_power = 0.30; sel.base_loft = 2;
-    sel.awkward = direction.reach < 0.2;
-    return sel;
+    if (length === "short") { s.kind = "back_foot_defense"; s.name = "Back-Foot Defence"; }
+    else { s.kind = "front_foot_defense"; s.name = "Front-Foot Defence"; }
+    s.base_power = 0.30; s.base_loft = 2;
+    s.awkward = direction.reach < 0.2;
+    return s;
   }
 
   if (intent === "lofted") {
-    sel.lofted = true; sel.base_power = 0.90; sel.base_loft = 30;
+    s.lofted = true; s.base_power = 0.90; s.base_loft = 30;
     if (length === "short") {
-      sel.kind = "pull"; sel.name = "Lofted Pull";
-      sel.awkward = pose === "front";
-      return sel;
+      s.kind = "pull"; s.name = "Lofted Pull"; s.awkward = pose === "front";
+      return s;
     }
-    if (["mid_wicket", "square_leg", "fine_leg"].includes(sector)) {
-      sel.kind = "lofted_leg_side"; sel.name = "Lofted Leg-Side Shot";
+    if (sector === "mid_wicket" || sector === "square_leg" || sector === "fine_leg") {
+      s.kind = "lofted_leg_side"; s.name = "Lofted Leg-Side Shot";
     } else if (sector === "straight") {
-      sel.kind = "lofted_straight"; sel.name = "Lofted Straight";
+      s.kind = "lofted_straight"; s.name = "Lofted Straight";
     } else {
-      sel.kind = "lofted_drive"; sel.name = "Lofted Drive";
+      s.kind = "lofted_drive"; s.name = "Lofted Drive";
     }
-    sel.awkward = pose === "back" && length === "full";
-    return sel;
+    s.awkward = (pose === "back" && length === "full") || isYorker(delivery.length);
+    return s;
   }
 
-  sel.base_power = intent === "aggressive" ? 1.0 : 0.68;
-  sel.base_loft = intent === "aggressive" ? 12 : 6;
+  s.base_power = intent === "aggressive" ? 1.0 : 0.68;
+  s.base_loft = intent === "aggressive" ? 12 : 6;
 
   if (length === "full") {
-    if (pose === "back") sel.awkward = true;
+    if (pose === "back") s.awkward = true;
+    if (isYorker(delivery.length) && pose !== "front") s.awkward = true;
     if (squareOrBehind) {
-      sel.kind = "awkward_poke"; sel.name = "Awkward Stab"; sel.awkward = true;
-      sel.base_power *= 0.5;
-      return sel;
+      s.kind = "awkward_poke"; s.name = "Awkward Stab"; s.awkward = true; s.base_power *= 0.5;
+      return s;
     }
-    if (sector === "cover") { sel.kind = "cover_drive"; sel.name = "Cover Drive"; }
-    else if (["mid_wicket", "square_leg", "fine_leg"].includes(sector)) { sel.kind = "flick"; sel.name = "Flick"; }
-    else { sel.kind = "straight_drive"; sel.name = "Straight Drive"; }
-    return sel;
+    if (sector === "cover") { s.kind = "cover_drive"; s.name = "Cover Drive"; }
+    else if (sector === "mid_wicket" || sector === "square_leg" || sector === "fine_leg") {
+      s.kind = "flick"; s.name = "Flick";
+    } else { s.kind = "straight_drive"; s.name = "Straight Drive"; }
+    return s;
   }
 
   if (length === "short") {
-    if (pose === "front") sel.awkward = true;
-    if (["cover", "point", "third_man"].includes(sector)) {
-      sel.kind = "cut"; sel.name = intent === "aggressive" ? "Hard Cut" : "Cut";
+    if (pose === "front") s.awkward = true;
+    if (sector === "cover" || sector === "point" || sector === "third_man") {
+      s.kind = "cut"; s.name = intent === "aggressive" ? "Hard Cut" : "Cut";
     } else if (sector === "straight") {
-      if (intent === "aggressive") { sel.kind = "pull"; sel.name = "Pull (straight)"; }
-      else { sel.kind = "awkward_poke"; sel.name = "Awkward Poke"; sel.awkward = true; }
+      if (intent === "aggressive") { s.kind = "pull"; s.name = "Pull (straight)"; }
+      else { s.kind = "awkward_poke"; s.name = "Awkward Poke"; s.awkward = true; }
     } else {
-      sel.kind = "pull"; sel.name = intent === "aggressive" ? "Pull" : "Pull Shot";
+      s.kind = "pull"; s.name = intent === "aggressive" ? "Pull" : "Pull Shot";
     }
-    return sel;
+    return s;
   }
 
   // good length
-  if (sector === "cover") { sel.kind = "cover_drive"; sel.name = "Cover Drive"; }
-  else if (sector === "point") { sel.kind = "square_drive"; sel.name = "Square Drive"; }
-  else if (sector === "third_man") { sel.kind = "cut"; sel.name = "Late Cut"; sel.awkward = pose === "front"; }
-  else if (sector === "mid_wicket") { sel.kind = "flick"; sel.name = "Flick"; }
-  else if (["square_leg", "fine_leg"].includes(sector)) { sel.kind = "leg_glance"; sel.name = "Leg Glance"; }
-  else { sel.kind = "straight_drive"; sel.name = "Straight Drive"; }
-  return sel;
+  if (sector === "cover") { s.kind = "cover_drive"; s.name = "Cover Drive"; }
+  else if (sector === "point") { s.kind = "square_drive"; s.name = "Square Drive"; }
+  else if (sector === "third_man") { s.kind = "cut"; s.name = "Late Cut"; s.awkward = pose === "front"; }
+  else if (sector === "mid_wicket") { s.kind = "flick"; s.name = "Flick"; }
+  else if (sector === "square_leg" || sector === "fine_leg") { s.kind = "leg_glance"; s.name = "Leg Glance"; }
+  else { s.kind = "straight_drive"; s.name = "Straight Drive"; }
+  return s;
 }
 
 /* ---------------- contact ---------------- */
@@ -265,11 +286,11 @@ function resolveContact(rand, delivery, shot, direction, timingOffset, windowKin
     return r;
   }
 
-  let quality = powerCurve(timingOffset) *
-    (0.45 + 0.55 * direction.reach) *
-    (0.78 + 0.22 * swipeStrength) *
-    (shot.awkward ? 0.60 : 1.0);
-  quality = clamp(quality, 0, 1);
+  let quality = powerCurve(timingOffset)
+    * (0.45 + 0.55 * direction.reach)
+    * (0.78 + 0.22 * swipeStrength)
+    * (shot.awkward ? 0.60 : 1.0);
+  quality = clamp01(quality);
   r.quality = quality;
 
   if (shot.lofted && quality >= 0.70) r.outcome = "lofted_clean";
@@ -292,26 +313,182 @@ function resolveContact(rand, delivery, shot, direction, timingOffset, windowKin
   return r;
 }
 
+/* ---------------- bowling factory ---------------- */
+const DELIVERY_TYPES = ["fast_straight", "fast_inswinger", "fast_outswinger", "yorker",
+                        "full_ball", "good_length", "short_ball", "bouncer"];
+
+const DELIVERY_SPECS = {
+  fast_straight:   { speed: [132, 142], line: [-0.18, 0.18], length: [0.45, 0.65], swing: [-0.15, 0.15], seam: [-0.25, 0.25], bounce: [0.95, 1.05] },
+  fast_inswinger:  { speed: [127, 137], line: [0.15, 0.50], length: [0.30, 0.55], swing: [-0.95, -0.55], seam: [-0.55, -0.10], bounce: [0.95, 1.05] },
+  fast_outswinger: { speed: [127, 137], line: [-0.10, 0.30], length: [0.30, 0.55], swing: [0.55, 0.95], seam: [0.05, 0.40], bounce: [0.95, 1.05] },
+  yorker:          { speed: [135, 146], line: [-0.15, 0.20], length: [0.00, 0.07], swing: [-0.30, 0.30], seam: [-0.15, 0.15], bounce: [0.85, 0.95] },
+  full_ball:       { speed: [114, 126], line: [-0.25, 0.35], length: [0.08, 0.24], swing: [-0.40, 0.40], seam: [-0.30, 0.30], bounce: [0.90, 1.00] },
+  good_length:     { speed: [121, 133], line: [-0.20, 0.40], length: [0.45, 0.62], swing: [-0.35, 0.35], seam: [-0.40, 0.40], bounce: [0.95, 1.05] },
+  short_ball:      { speed: [129, 140], line: [-0.50, 0.10], length: [0.72, 0.86], swing: [-0.20, 0.20], seam: [-0.25, 0.25], bounce: [1.00, 1.15] },
+  bouncer:         { speed: [133, 145], line: [-0.55, 0.05], length: [0.88, 0.97], swing: [-0.15, 0.15], seam: [-0.15, 0.15], bounce: [1.10, 1.30] },
+};
+
+const DEFAULT_PLAN = {
+  good_length: 0.20, fast_straight: 0.15, full_ball: 0.12, short_ball: 0.13,
+  fast_inswinger: 0.12, fast_outswinger: 0.10, yorker: 0.10, bouncer: 0.08,
+};
+
+const DELIVERY_LABELS = {
+  fast_straight: "FAST STRAIGHT", fast_inswinger: "INSWINGER", fast_outswinger: "OUTSWINGER",
+  yorker: "YORKER", full_ball: "FULL", good_length: "GOOD LENGTH",
+  short_ball: "SHORT", bouncer: "BOUNCER",
+};
+
+function randRange(rand, lohi) { return lohi[0] + (lohi[1] - lohi[0]) * rand(); }
+
+function buildDelivery(dtype, rand, accuracy) {
+  const spec = DELIVERY_SPECS[dtype];
+  let line = randRange(rand, spec.line);
+  let length = randRange(rand, spec.length);
+  const disp = 1 - clamp01(accuracy);
+  line = clamp(line + (rand() * 2 - 1) * 0.45 * disp, -1.2, 1.2);
+  length = clamp01(length + (rand() * 2 - 1) * 0.30 * disp);
+  return makeDelivery(
+    Math.round(randRange(rand, spec.speed) * 10) / 10,
+    line, length, randRange(rand, spec.swing),
+    { dtype, seam: randRange(rand, spec.seam), bounce: randRange(rand, spec.bounce) });
+}
+
+function nextDeliveryType(rand, plan) {
+  plan = plan || DEFAULT_PLAN;
+  let total = 0;
+  for (const t of DELIVERY_TYPES) total += plan[t] || 0;
+  let roll = rand() * total, acc = 0;
+  for (const t of DELIVERY_TYPES) {
+    acc += plan[t] || 0;
+    if (roll < acc) return t;
+  }
+  return "good_length";
+}
+
+/* ---------------- shot outcome resolver ---------------- */
+const LBW_HALF_WIDTH = 0.22, LBW_MAX_HEIGHT = 0.85, LBW_MIN_FOOT_Z = -0.60;
+
+const OUTCOME_LABELS = {
+  leave: "LEFT ALONE", beaten: "BEATEN", bowled: "BOWLED!", lbw: "LBW!",
+  defensive: "BLOCKED", dot: "DOT BALL", single: "SINGLE", two: "TWO RUNS",
+  three: "THREE RUNS", four: "FOUR!", six: "SIX!",
+  top_edge: "TOP EDGE", inside_edge: "INSIDE EDGE", outside_edge: "OUTSIDE EDGE",
+};
+
+function predictCarry(exitKph, elevationDeg, startHeight) {
+  const e = clamp(elevationDeg, 0, 70) * Math.PI / 180;
+  const v = exitKph / 3.6;
+  const vx = v * Math.cos(e), vy = v * Math.sin(e);
+  const carry = vx * ((vy + Math.sqrt(Math.max(0, vy * vy + 2 * G * startHeight))) / G);
+  return { carry, vx, vy };
+}
+
+function resolveOutcome(rand, traj, swing, footX, footZ, force) {
+  const r = { kind: null, label: null, runs: 0, wicket: false, forced: !!force };
+
+  if (force) {
+    const table = {
+      dot: ["dot", 0], defensive: ["defensive", 0], one: ["single", 1], two: ["two", 2],
+      four: ["four", 4], six: ["six", 6], edge: ["outside_edge", 0],
+      bowled: ["bowled", 0], lbw: ["lbw", 0],
+    };
+    const [kind, runs] = table[force] || ["dot", 0];
+    r.kind = kind; r.runs = runs;
+    r.label = OUTCOME_LABELS[kind] || "DOT BALL";
+    r.wicket = kind === "bowled" || kind === "lbw";
+    return r;
+  }
+
+  const struck = swing && swing.will_contact;
+
+  if (!struck) {
+    if (traj.hitsStumps()) {
+      const s = traj.atStumps();
+      const bodyOnLine = Math.abs(s.x - footX) <= LBW_HALF_WIDTH;
+      const lowEnough = s.y >= 0 && s.y <= LBW_MAX_HEIGHT;
+      const inFront = footZ > LBW_MIN_FOOT_Z;
+      if (bodyOnLine && lowEnough && inFront) {
+        r.kind = "lbw"; r.label = OUTCOME_LABELS.lbw; r.wicket = true;
+      } else {
+        r.kind = "bowled"; r.label = OUTCOME_LABELS.bowled; r.wicket = true;
+      }
+      return r;
+    }
+    r.kind = swing ? "beaten" : "leave";
+    r.label = swing ? OUTCOME_LABELS.beaten : OUTCOME_LABELS.leave;
+    return r;
+  }
+
+  const c = swing.contact;
+  const angle = Math.atan2(c.direction.x, c.direction.z);
+
+  if (c.outcome === "edge") {
+    let kind;
+    if (c.elevation > 26) kind = "top_edge";
+    else if (angle < 0) kind = "inside_edge";
+    else kind = "outside_edge";
+    let runs = 0;
+    if (kind === "outside_edge" && c.exit_kph > 70 && rand() < 0.35) runs = 1;
+    r.kind = kind; r.label = OUTCOME_LABELS[kind]; r.runs = runs;
+    return r;
+  }
+
+  if (c.outcome === "defensive_solid") {
+    const forward = Math.abs(angle) < 1.2;
+    const runs = (forward && c.exit_kph > 26 && rand() < 0.35) ? 1 : 0;
+    r.kind = "defensive"; r.label = OUTCOME_LABELS.defensive; r.runs = runs;
+    return r;
+  }
+
+  const startHeight = Math.max(0.35, traj.height_at_contact);
+  const pc = predictCarry(c.exit_kph, c.elevation, startHeight);
+  const distToRope = BOUNDARY_RADIUS - 0.4;
+  const elev = clamp(c.elevation, 0, 70);
+
+  if (pc.carry >= distToRope) {
+    const tRope = distToRope / Math.max(pc.vx, 0.5);
+    const yAtRope = startHeight + pc.vy * tRope - 0.5 * G * tRope * tRope;
+    if (yAtRope > 0.05) { r.kind = "six"; r.label = OUTCOME_LABELS.six; r.runs = 6; return r; }
+  }
+
+  const rollTime = 2.0 * (1 - 0.8 * clamp01(elev / 35));
+  const rest = pc.carry + pc.vx * rollTime * 0.75;
+
+  if (rest >= distToRope) { r.kind = "four"; r.label = OUTCOME_LABELS.four; r.runs = 4; return r; }
+  if (rest >= 45) { r.kind = "three"; r.label = OUTCOME_LABELS.three; r.runs = 3; return r; }
+  if (rest >= 25) { r.kind = "two"; r.label = OUTCOME_LABELS.two; r.runs = 2; return r; }
+  if (rest >= 9) { r.kind = "single"; r.label = OUTCOME_LABELS.single; r.runs = 1; return r; }
+
+  r.kind = "dot";
+  r.label = (c.outcome === "weak" || c.outcome === "mistimed") ? "MISTIMED" : OUTCOME_LABELS.dot;
+  return r;
+}
+
 /* ---------------- engine ---------------- */
 class BattingEngine {
-  constructor() {
+  constructor(pitch) {
+    this.pitch = pitch || NORMAL_PITCH;
     this.foot = { x: 0, z: 0, vx: 0, vz: 0 };
     this.traj = null;
     this.t = 0;
     this.swingTaken = false;
     this.contactWillHappen = false;
     this.passedReported = false;
+    this.bounceReported = false;
     this.lastSwing = null;
     this.onSwing = null;
     this.onPassed = null;
+    this.onBounce = null;
   }
 
   beginDelivery(d) {
-    this.traj = new Trajectory(d);
+    this.traj = new Trajectory(d, this.pitch);
     this.t = 0;
     this.swingTaken = false;
     this.contactWillHappen = false;
     this.passedReported = false;
+    this.bounceReported = false;
     this.lastSwing = null;
   }
 
@@ -319,6 +496,11 @@ class BattingEngine {
     footAdvance(this.foot, input.footX || 0, input.footY || 0, dt);
     if (!this.traj) return;
     this.t += dt;
+
+    if (!this.bounceReported && this.t >= this.traj.bounce_time) {
+      this.bounceReported = true;
+      if (this.onBounce) this.onBounce(this.traj.position(this.traj.bounce_time));
+    }
 
     if (!this.swingTaken && !this.passedReported && input.swing) {
       const windup = windupTime(input.intent);

@@ -5,36 +5,44 @@ from the IPL Franchise web application. No web integration exists yet; see
 [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md).
 
 All code and visuals are original; the project draws only on the *depth* of
-modern simulation batting, never on proprietary assets or implementations.
+modern cricket games, never on proprietary assets or implementations.
 
 ---
 
-## Current focus: PHASE 1 — Mobile Batting Control System
+## Current focus: PHASE 2 — Bowling, Ball Physics & Shot Outcomes
 
-A responsive, mobile-first **batting foundation** (Android/iOS, touch is the
-primary input). The engine is input-agnostic: controller/keyboard adapters can
-be added later without rewriting anything.
+Phase 1's mobile batting controls now run against a real **bowling system**:
+eight delivery types, seam/bounce/swing physics, contextual shot outcomes,
+bowled + simplified LBW detection, broadcast cameras and a complete
+delivery-after-delivery loop. See
+[Docs/PHASE2_BOWLING_DESIGN.md](Docs/PHASE2_BOWLING_DESIGN.md).
 
 ### Definition of done (all met)
 
-1. ✅ Move the batsman with the **left virtual joystick** (analog footwork:
-   forward/back stride + leg/off movement, smooth, no teleporting).
-2. ✅ Receive deliveries from the **test bowler** (full / good length / short,
-   configurable pace, line, length, swing).
-3. ✅ Read the ball's line and length (camera + ball shadow + debug readout).
-4. ✅ Move into position — **footwork changes reach quality**.
-5. ✅ **Swipe on the right side** to indicate shot direction (continuous,
-   not 4 buttons); release plays the shot.
-6. ✅ Choose **Defensive / Normal / Power / Lofted** intent (4 compact buttons).
-7. ✅ **Manually time** the shot — PERFECT/GOOD/EARLY/LATE/VERY… windows.
-8. ✅ Hit clean, mistime, edge, and miss — all possible outcomes exist.
-9. ✅ The final shot **emerges** from footwork + direction + intent + line +
-   length + timing (contextual selection: cover drive, pull, cut, flick,
-   leg glance, defenses, lofted shots…). Unrealistic combinations become
-   awkward/mistimed instead of forced.
-10. ✅ The ball **physically flies/rolls** into the field (real exit velocity
-    on a Rigidbody; boundaries, runs, and BOWLED detection).
-11. ✅ Repeatable delivery loop, score/wickets/balls HUD, debug/tuning panel.
+1. ✅ Bowler runs up and delivers continuously, ball after ball, no restart.
+2. ✅ Eight delivery types: fast straight / inswinger / outswinger / yorker /
+   full / good length / short / bouncer — data-driven (`DeliverySpec`,
+   `BowlerProfile` ScriptableObject), weighted by a bowler plan + accuracy.
+3. ✅ Realistic trajectory: gravity, pre-bounce swing, pitch bounce, post-bounce
+   seam cut, configurable bounce energy and release height; `PitchProfile`
+   ready for slower/batting/spinning surfaces (Normal implemented).
+4. ✅ Phase 1 mobile controls unchanged: joystick footwork, swipe direction,
+   DEF/NOR/POW/LOFT intent, manual timing.
+5. ✅ Contact quality emerges from timing + footwork + reach + intent +
+   line/length — clean, mistimed, weak, edge, defense all feel different.
+6. ✅ Struck balls physically fly/roll into a 62 m field; boundaries, runs,
+   bowled, LBW, edges (top/inside/outside) all resolve via the deterministic
+   `ShotOutcomeResolver` (bounded randomness, ballistic carry + roll).
+7. ✅ Yorkshire realism: poor footwork vs a yorker ⇒ awkward dig-out or
+   bowled risk; poor positioning vs the short ball ⇒ top-edge risk.
+8. ✅ Broadcast-style cameras: pre-delivery wide, delivery, shot follow,
+   boundary chase, wicket reaction — all damped, no shake.
+9. ✅ Subtle feedback: delivery toast, timing popups, PERFECT pulse,
+   FOUR/SIX/WICKET banner, pitch dust, stump knock.
+10. ✅ Debug panel: full readout (type/speed/line/length/swing/seam/bounce,
+    batsman, timing, contact, outcome, exit velocity, launch angle) +
+    force-perfect-timing, force delivery type, force outcome, slow-mo,
+    re-bowl.
 
 ## Quickstart
 
@@ -43,7 +51,7 @@ be added later without rewriting anything.
    Input System package automatically.
 2. Open scene `Assets/_Project/Scenes/BattingPrototype.unity` and press Play.
 3. **Editor/desktop testing:** drag with the left mouse button = joystick,
-   drag with the right side = swipe. On device: left thumb / right thumb.
+   drag on the right side = swipe. On device: left thumb / right thumb.
 4. Landscape orientation is configured; `activeInputHandler` is set to
    **Both** (new Input System drives touch).
 
@@ -55,36 +63,26 @@ be added later without rewriting anything.
 | Right thumb (swipe) | Shot direction; **release = play the shot** (timed) |
 | Tiny tap (right) | Plays straight |
 | DEF / NOR / POW / LOFT buttons | Shot intent |
-| Debug panel sliders | Pace, line, length, swing of the next deliveries |
-| FULL / GOOD / SHORT buttons | Delivery presets |
+| Debug sliders | Pace, line, length, swing of a MANUAL delivery |
+| FULL / GOOD / SHORT buttons | Manual delivery presets |
+| TYPE: AUTO button | Cycles forced delivery type (AUTO = bowler's plan) |
+| OUTCOME: NONE button | Cycles forced shot outcome (debug) |
+| PERFECT / SLOW-MO / RE-BOWL | Debug toggles |
 | RESET POS | Re-centre the batsman |
 
 ## Running the tests
 
 - **In Unity:** Window → General → Test Runner → Edit Mode → Run All.
-  Covers the Super Over rules, the simulation layer, and the batting engine
-  (trajectory, footwork, timing windows, direction resolver, contextual shot
-  selection, contact outcomes, end-to-end engine flow).
+  Covers Super Over rules, the simulation layer, the Phase 1 batting engine
+  and the Phase 2 bowling/outcome systems.
 - **Without Unity:** from `cricket-game/`:
   `python3 -m unittest discover -s harness -p 'test_*.py'`
-  runs a 1:1 Python reference of every deterministic engine through the same
-  scenario battery (70 tests incl. 24,000-match and 4,000-delivery soaks).
-
-## Browser preview (no Unity required)
-
-`harness/webpreview/` contains a standalone, mobile-friendly browser build of
-the Phase 1 batting engine — a 1:1 JavaScript port of
-`harness/batting_reference.py` (verified against it by `node smoke.cjs`).
-It reproduces the exact same math: footwork, swipe direction, intent, timing
-windows, contextual shot selection, and bat-ball contact.
-
-- Serve it: `python3 -m http.server 4000 --bind 0.0.0.0` from
-  `harness/webpreview/`, then open the URL on a phone or desktop browser.
-- Controls mirror the Unity prototype: left thumb = joystick footwork,
-  right side = swipe (release plays the timed shot), DEF/NOR/POW/LOFT
-  buttons, sliders + presets in the DEBUG panel.
-- This is a **feel-testing preview only**. The Unity prototype remains the
-  real deliverable; the JS port is not wired into the React app.
+  runs 1:1 Python references of every deterministic engine — **95 tests**,
+  including a 2,500-ball soak asserting cricket-like outcome distributions.
+- **Browser play-preview:** `harness/webpreview/` — serve the folder
+  (`python3 -m http.server 4000 --bind 0.0.0.0`) and open it on a phone or
+  desktop. Same engine math, touch controls, full debug toggles. Parity is
+  checked with `node smoke.cjs`; the loop itself with `node dom_smoke.cjs`.
 
 ## Project layout
 
@@ -94,10 +92,12 @@ cricket-game/
 │   ├── Core/                  pure C# engine (no UnityEngine)
 │   │   ├── Rules/             Super Over match state machine (future match mode)
 │   │   ├── Simulation/        RNG, outcome model (used by contacts & future AI)
-│   │   └── Batting/           Phase 1 batting engine (input-agnostic)
+│   │   ├── Batting/           batting engine + shot outcome resolver
+│   │   └── Bowling/           delivery specs, plans, factory
 │   ├── Core.Tests/            NUnit tests (Edit Mode)
-│   ├── BattingPrototype/      Unity layer: touch input, world, rigs, ball,
-│   │                          camera, HUD, debug UI, runner, bootstrap
+│   ├── BattingPrototype/      Unity layer: input, world+stadium, rigs, ball,
+│   │   │                      bowling, camera, HUD, debug UI, runner, bootstrap
+│   │   └── Bowling/           BowlingController + BowlerProfile (+ default asset)
 │   └── Scenes/                BattingPrototype.unity
 ├── Docs/                      architecture & phase design docs
 ├── Packages/                  manifest (ugui, Input System, test framework)
@@ -106,50 +106,53 @@ cricket-game/
     └── webpreview/            browser play-preview (JS port of the engine)
 ```
 
-## Module map (Phase 1)
+## Module map (Phase 1 + 2)
 
 | Spec module | Implementation |
 | --- | --- |
-| MobileBattingInput | `Input/MobileBattingInput.cs` (touch → generic input) |
-| BattingInput | `Core/Batting/BattingTypes.cs` (`BattingInputFrame`) |
-| FootworkController | `Core/Batting/FootworkController.cs` |
+| BowlingController | `Bowling/BowlingController.cs` |
+| BowlerController (visual) | `Bowling/BowlerController.cs` |
+| DeliveryController (flight) | `Ball/BallController.cs` (kinematic flight + bounce event) |
+| DeliveryData | `Core/Batting/BattingTypes.cs` |
+| BowlingType / specs / plan | `Core/Bowling/DeliveryFactory.cs`, `Bowling/BowlerProfile.cs` |
+| BallReleasePoint | `DeliveryData.ReleaseHeight` + bowler release transform |
+| BallTrajectoryCalculator | `Core/Batting/DeliveryTrajectory.cs` |
+| BallPhysics (pitch) | `PitchProfile` + trajectory restitution/bounce model |
+| BattingController | `Game/BattingPrototypeRunner.cs` (loop + input → engine) |
+| BatBallContact | `Core/Batting/BatBallContact.cs` |
 | ShotDirectionResolver | `Core/Batting/ShotDirectionResolver.cs` |
 | ShotIntentController | intent buttons in `Hud/BattingHud.cs` + `ShotIntent` enum |
-| ShotSelector | `Core/Batting/ShotSelector.cs` |
 | TimingSystem | `Core/Batting/TimingSystem.cs` |
-| BatSwingController | `Batsman/BatSwingController.cs` |
-| BatBallContact | `Core/Batting/BatBallContact.cs` |
-| BatsmanController | `Batsman/BatsmanRig.cs` + `BattingAnimationController.cs` |
-| BallController | `Ball/BallController.cs` |
-| DeliveryData / ShotData | `Core/Batting/BattingTypes.cs`, `ShotSelector.cs` |
-| BattingDebugUI | `Hud/BattingDebugUI.cs` |
-| (test bowler) | `Bowler/TestBowler.cs` |
-| (camera) | `Camera/CameraController.cs` |
-| (orchestrator) | `Game/BattingPrototypeRunner.cs` |
+| ShotSelector | `Core/Batting/ShotSelector.cs` (+ yorker rules) |
+| ShotOutcomeResolver | `Core/Batting/ShotOutcomeResolver.cs` |
+| WicketResolver | inside `ShotOutcomeResolver` (bowled + simplified LBW) |
+| CameraController | `Camera/CameraController.cs` |
+| GameplayLoopController | `Game/BattingPrototypeRunner.cs` + `Game/GameplayEvents.cs` |
 
 ## Not built (deliberately, per the phase plan)
 
-AI batting, multiplayer/networking, full fielding, career/franchise modes,
-IPL/web integration, player databases, commentary, tournaments, advanced
-graphics, monetization, backend/cloud. Batting foundation first.
+AI batting, multiplayer/networking, fielding (edges currently fly through
+where slips would be), career/franchise modes, IPL/web integration, player
+databases, commentary, tournaments, advanced graphics, monetization,
+backend/cloud.
 
-## Known limitations (Phase 1)
+## Known limitations (Phase 2)
 
-- Placeholder primitive characters and procedural animation (by design).
-- Test bowler only: no run-up variations, no extras, no real bowling AI.
-- Boundary/run mapping after a grounded shot is a distance heuristic.
-- No sound yet. Camera follow is simple (position-locked, look-tracked).
-- Desktop testing uses mouse-drag; real multi-touch needs a device build.
+- Placeholder primitive characters/stadium and procedural animation (by design).
+- Runs come from the deterministic resolver at contact time; the visual ball
+  flight is presentation (fielders will reconcile this in a later phase).
+- LBW is simplified and configurable — not the full Laws of Cricket.
+- No fielding/catching yet; edged balls land freely behind square.
+- No sound yet. One bowler archetype (right-arm pace), one pitch surface.
 
-## Recommended Phase 2 (proposal, not started)
+## Recommended Phase 3 (proposal, not started)
 
-1. Real bowling foundation: run-up + release animation, bowling variations
-   (seam/swing/spin archetypes), difficulty-tuned dispersion.
-2. Shot direction refinement: placement targeting (drag length = power),
-   fielder-aware risk/reward.
-3. Fielding stubs: ring fielders that intercept/collect, proper run calling.
-4. Scoring mode hookup: connect the batting prototype to the existing Super
-   Over rules engine (a human innings vs AI bowling).
-5. Animation upgrade pass: rigged placeholder humanoid + blended procedural
-   shot animations per shot family.
-6. Feel pass: haptics, impact audio, slow-mo on perfect timing.
+1. Fielding foundation: ring fielders that intercept/collect, catch chances
+   for edges and mistimed lofts, real run calling vs resolver runs.
+2. Bowling depth: bowler archetypes (seam/swing/spin), run-up + release
+   animation, difficulty-tuned plans that adapt to the batter.
+3. Match hookup: connect the batting+bowling loop to the Super Over rules
+   engine (human innings vs AI bowling, proper chase HUD).
+4. Animation upgrade: rigged placeholder humanoid + blended procedural shot
+   animations per shot family.
+5. Feel pass: haptics, impact audio, slow-mo on perfect timing, replays.

@@ -1,9 +1,11 @@
 using System.Collections;
 using CricketGame.Core.Batting;
+using CricketGame.Core.Bowling;
 using CricketGame.Core.Simulation;
 using CricketGame.BattingPrototype.Ball;
 using CricketGame.BattingPrototype.Batsman;
 using CricketGame.BattingPrototype.Bowler;
+using CricketGame.BattingPrototype.Bowling;
 using CricketGame.BattingPrototype.Camera;
 using CricketGame.BattingPrototype.Hud;
 using CricketGame.BattingPrototype.Input;
@@ -13,16 +15,18 @@ using UnityEngine;
 namespace CricketGame.BattingPrototype.Game
 {
     /// <summary>
-    /// Orchestrates the prototype loop: bowler run-up -> delivery -> footwork +
-    /// swing input -> contact or pass -> result -> next ball. The engine does the
-    /// rules; this class only sequences presentation around it.
+    /// The gameplay loop (spec section 12 + 15): waiting -> run-up -> release ->
+    /// flight -> contact/miss -> outcome -> ball travels -> result -> reset ->
+    /// next delivery. The core engine decides everything deterministic; this
+    /// class sequences presentation, resolves cricket outcomes and fires events.
     /// </summary>
     public class BattingPrototypeRunner : MonoBehaviour
     {
         private BattingWorld world;
         private BattingHud hud;
         private MobileBattingInput input;
-        private TestBowler bowler;
+        private BowlingController bowling;
+        private BowlerController bowler;
         private CameraController cam;
         private BatSwingController swingCtrl;
         private BattingAnimationController animCtrl;
@@ -36,30 +40,67 @@ namespace CricketGame.BattingPrototype.Game
         private bool struckApplied;
         private bool ballResolved;
         private bool keeperCollected;
+        private bool redeliverNext;
         private DeliveryData? lastDelivery;
+        private ShotOutcomeResult pendingOutcome;
+        private bool hasPendingOutcome;
 
-        // ------------------------------------------------------------------ debug API
+        // ---------------------------------------------------------------- debug API
+
+        /// <summary>Debug: engine timing is overridden so every swing is PERFECT.</summary>
+        public bool ForcePerfectTiming;
+
+        /// <summary>Debug: force a specific cricket outcome (None = physics).</summary>
+        public ForcedOutcome ForcedOutcome = ForcedOutcome.None;
+
+        /// <summary>Debug: slow-motion for tuning.</summary>
+        public bool SlowMotion
+        {
+            get { return slowMotion; }
+            set
+            {
+                slowMotion = value;
+                Time.timeScale = value ? 0.35f : 1f;
+                Time.fixedDeltaTime = 0.02f * Time.timeScale;
+            }
+        }
+        private bool slowMotion;
+
+        public GameplayEvents Events { get; private set; }
 
         public BattingEngine Engine { get { return engine; } }
         public DeliveryData? LastDelivery { get { return lastDelivery; } }
         public FootworkState EngineFoot { get { return engine.Foot; } }
         public SwingReport? LastSwing { get { return engine.LastSwing; } }
+        public ShotOutcomeResult? LastOutcome { get { return hasPendingOutcome ? pendingOutcome : (ShotOutcomeResult?)null; } }
 
         public void ResetBatsmanPosition()
         {
             engine.SetFootworkPosition(0f, 0f);
         }
 
+        /// <summary>Debug: replay the current delivery immediately, same ball.</summary>
+        public void RedeliverSameBall()
+        {
+            if (lastDelivery == null) return;
+            redeliverNext = true;
+            ballResolved = true;   // release the loop's wait
+            keeperCollected = true;
+        }
+
         // ------------------------------------------------------------------ wiring
 
         public void Init(BattingWorld w, BattingHud hudRef, MobileBattingInput inputRef,
-                         TestBowler bowlerRef, CameraController camRef)
+                         BowlingController bowlingRef, BowlerController bowlerRef,
+                         CameraController camRef)
         {
             world = w;
             hud = hudRef;
             input = inputRef;
+            bowling = bowlingRef;
             bowler = bowlerRef;
             cam = camRef;
+            Events = new GameplayEvents();
 
             swingCtrl = world.BatsmanRoot.GetComponentInChildren<BatSwingController>();
             animCtrl = world.BatsmanRoot.GetComponentInChildren<BattingAnimationController>();
@@ -70,6 +111,7 @@ namespace CricketGame.BattingPrototype.Game
             engine = new BattingEngine(new SystemRng());
             engine.SwingCommitted += OnSwingCommitted;
             engine.BallPassed += OnBallPassed;
+            engine.BounceReached += OnBounceReached;
             world.Ball.BallSettled += OnBallSettled;
 
             bowler.AttachRig(world.BowlerRoot, world.BowlerArm);
@@ -78,7 +120,18 @@ namespace CricketGame.BattingPrototype.Game
             StartCoroutine(DeliveryLoop());
         }
 
+        private void OnDestroy()
+        {
+            // Never leave the sim in slow motion when the prototype stops.
+            Time.timeScale = 1f;
+        }
+
         // ------------------------------------------------------------------ engine events
+
+        private void OnBounceReached()
+        {
+            Events.FireBallBounced(world.Ball.transform.position);
+        }
 
         private void OnSwingCommitted(SwingReport report)
         {
@@ -90,6 +143,7 @@ namespace CricketGame.BattingPrototype.Game
                 report.Selection.Awkward,
                 TimingSystem.PowerCurve(report.TimingOffset));
             animCtrl.NotifySwingPlayed();
+            Events.FireShotPlayed(report);
 
             if (!report.WillContact && report.Window == TimingWindow.Missed)
                 hud.ShowPopup("TOO LATE!", new Color(1f, 0.4f, 0.3f), 0.7f);
@@ -97,11 +151,21 @@ namespace CricketGame.BattingPrototype.Game
 
         private void OnBallPassed(BallPassedReport report)
         {
-            if (report.HitStumps)
+            // Unstruck ball: resolve cricket outcome (bowled / LBW / beaten / left).
+            ShotOutcomeResult outcome = ShotOutcomeResolver.Resolve(
+                engineRng, engine.ActiveDelivery, engine.LastSwing,
+                engine.Foot.X, engine.Foot.Z, true, ForcedOutcome);
+
+            pendingOutcome = outcome;
+            hasPendingOutcome = true;
+
+            if (outcome.IsWicket)
             {
                 wickets++;
-                hud.ShowPopup("BOWLED!", new Color(1f, 0.25f, 0.2f), 1.4f);
+                hud.ShowWicketBanner(outcome.Kind == ShotOutcomeKind.Lbw ? "LBW!" : "BOWLED!");
+                cam.OnWicket();
                 StartCoroutine(KnockStumps());
+                Events.FireWicket(outcome);
             }
             else if (report.Swung)
             {
@@ -111,17 +175,52 @@ namespace CricketGame.BattingPrototype.Game
             {
                 hud.ShowPopup("LEFT ALONE", new Color(0.8f, 0.9f, 1f), 0.8f);
             }
-            cam.ReturnToGameplay();
+
+            Events.FireDeliveryComplete(outcome);
+            hud.SetScoreboard(runs, wickets, balls + 1);
+            if (!outcome.IsWicket) cam.ReturnToGameplay();
         }
 
         private void OnBallSettled(BallEndResult result)
         {
-            runs += result.Runs;
-            if (result.Six) hud.ShowPopup("SIX!", new Color(1f, 0.85f, 0.2f), 1.3f);
-            else if (result.CrossedBoundary) hud.ShowPopup("FOUR!", new Color(0.4f, 0.9f, 1f), 1.3f);
-            else if (result.Runs > 0) hud.ShowPopup("+" + result.Runs, Color.white, 0.9f);
-            else hud.ShowPopup("DOT", new Color(0.75f, 0.75f, 0.75f), 0.7f);
+            // Runs come from the deterministic outcome resolved at contact time.
+            ShotOutcomeResult outcome = hasPendingOutcome
+                ? pendingOutcome
+                : new ShotOutcomeResult { Kind = ShotOutcomeKind.Dot, Label = "DOT BALL", Runs = 0 };
 
+            runs += outcome.Runs;
+            switch (outcome.Kind)
+            {
+                case ShotOutcomeKind.Six:
+                    hud.ShowBoundaryBanner("SIX!", new Color(1f, 0.85f, 0.2f));
+                    Events.FireBoundary(6, true);
+                    break;
+                case ShotOutcomeKind.Four:
+                    hud.ShowBoundaryBanner("FOUR!", new Color(0.4f, 0.9f, 1f));
+                    Events.FireBoundary(4, false);
+                    break;
+                case ShotOutcomeKind.TopEdge:
+                case ShotOutcomeKind.InsideEdge:
+                case ShotOutcomeKind.OutsideEdge:
+                    hud.ShowPopup(outcome.Label, new Color(1f, 0.65f, 0.4f), 1.0f);
+                    if (outcome.Runs > 0) hud.ShowPopup(outcome.Label + "  +" + outcome.Runs,
+                        new Color(1f, 0.65f, 0.4f), 1.0f);
+                    break;
+                case ShotOutcomeKind.Single:
+                case ShotOutcomeKind.Two:
+                case ShotOutcomeKind.Three:
+                    hud.ShowPopup("+" + outcome.Runs, Color.white, 0.9f);
+                    break;
+                case ShotOutcomeKind.Defensive:
+                    hud.ShowPopup(outcome.Runs > 0 ? "BLOCKED  +1" : "BLOCKED",
+                        new Color(0.75f, 0.85f, 1f), 0.7f);
+                    break;
+                default:
+                    hud.ShowPopup(outcome.Label, new Color(0.75f, 0.75f, 0.75f), 0.7f);
+                    break;
+            }
+
+            Events.FireDeliveryComplete(outcome);
             cam.ReturnToGameplay();
             ballResolved = true;
         }
@@ -132,19 +231,34 @@ namespace CricketGame.BattingPrototype.Game
         {
             while (true)
             {
-                // --- pre-delivery: wide view, bowler walks back
-                bowler.ResetPosition();
-                ResetStumps();
-                cam.ShowSetup();
-                hud.SetScoreboard(runs, wickets, balls);
-                yield return new WaitForSeconds(0.9f);
+                DeliveryData data;
 
-                // --- run-up (camera blends to the gameplay view meanwhile)
-                cam.BeginRunUp();
-                bowler.StartRunUp();
-                yield return new WaitForSeconds(bowler.RunUpDuration);
+                if (redeliverNext)
+                {
+                    // Debug redeliver: same ball again, no run-up ceremony.
+                    redeliverNext = false;
+                    ResetStumps();
+                    cam.ReturnToGameplay();
+                    data = bowling.Redeliver();
+                }
+                else
+                {
+                    // --- pre-delivery: wide broadcast view, bowler walks back
+                    bowler.ResetPosition();
+                    ResetStumps();
+                    cam.ShowSetup();
+                    hud.SetScoreboard(runs, wickets, balls);
+                    yield return new WaitForSeconds(0.75f);
 
-                Deliver();
+                    // --- run-up (camera blends to gameplay meanwhile)
+                    cam.BeginRunUp();
+                    bowler.StartRunUp();
+                    yield return new WaitForSeconds(bowler.RunUpDuration);
+
+                    data = bowling.NextDelivery();
+                }
+
+                Deliver(data);
 
                 // --- wait for the ball to resolve
                 while (!ballResolved && !keeperCollected)
@@ -152,13 +266,12 @@ namespace CricketGame.BattingPrototype.Game
 
                 balls++;
                 hud.SetScoreboard(runs, wickets, balls);
-                yield return new WaitForSeconds(1.15f);
+                yield return new WaitForSeconds(1.05f);
             }
         }
 
-        private void Deliver()
+        private void Deliver(DeliveryData data)
         {
-            var data = bowler.NextDelivery();
             lastDelivery = data;
 
             engine.BeginDelivery(data);
@@ -167,7 +280,11 @@ namespace CricketGame.BattingPrototype.Game
             struckApplied = false;
             ballResolved = false;
             keeperCollected = false;
+            hasPendingOutcome = false;
 
+            hud.ShowDeliveryToast(DeliveryLabels.Name(data.Type) + "  -  " +
+                                  Mathf.RoundToInt(data.SpeedKph) + " KPH");
+            Events.FireBallReleased(data);
             cam.OnRelease();
         }
 
@@ -178,6 +295,7 @@ namespace CricketGame.BattingPrototype.Game
             float dt = Time.deltaTime;
 
             BattingInputFrame frame = input.Sample();
+            InjectForcedSwing(ref frame);
             engine.Update(dt, frame);
 
             world.Ball.AdvanceFlight(dt);
@@ -199,10 +317,19 @@ namespace CricketGame.BattingPrototype.Game
                     {
                         ContactResult contact = swing.Value.Contact;
                         world.Ball.Strike(contact.Direction, contact.ExitSpeedKph);
-                        cam.FollowShot(world.Ball.transform.position);
-                        hud.ShowPopup(
-                            swing.Value.Selection.Name.ToUpper() + "  -  " + swing.Value.Window.ToString().ToUpper(),
-                            WindowColor(swing.Value.Window), 0.95f);
+                        Events.FireBallContact(contact);
+
+                        // Resolve the cricket outcome NOW (deterministic), apply on settle.
+                        pendingOutcome = ShotOutcomeResolver.Resolve(
+                            engineRng, traj, swing, engine.Foot.X, engine.Foot.Z,
+                            true, ForcedOutcome);
+                        hasPendingOutcome = true;
+
+                        bool boundaryLikely = pendingOutcome.Kind == ShotOutcomeKind.Four
+                                              || pendingOutcome.Kind == ShotOutcomeKind.Six;
+                        cam.FollowShot(world.Ball.transform.position, boundaryLikely);
+
+                        ShowContactFeedback(swing.Value, pendingOutcome);
                     }
                 }
 
@@ -211,7 +338,51 @@ namespace CricketGame.BattingPrototype.Game
                     // Ball passed the batter unstruck: hand it to the keeper.
                     world.Ball.CollectAtKeeper(world.KeeperMark.position + new Vector3(0.25f, 0.35f, 0f));
                     keeperCollected = true;
+                    if (!hasPendingOutcome)
+                    {
+                        // Nothing was ever resolved (e.g. forced redeliver race): dot.
+                        ballResolved = true;
+                    }
                 }
+            }
+        }
+
+        private void ShowContactFeedback(SwingReport swing, ShotOutcomeResult outcome)
+        {
+            string text = swing.Selection.Name.ToUpper() + "  -  " + swing.Window.ToString().ToUpper();
+            Color color = WindowColor(swing.Window);
+
+            // Edges speak for themselves instead of the shot name.
+            if (outcome.Kind == ShotOutcomeKind.TopEdge ||
+                outcome.Kind == ShotOutcomeKind.InsideEdge ||
+                outcome.Kind == ShotOutcomeKind.OutsideEdge)
+            {
+                text = outcome.Label;
+                color = new Color(1f, 0.65f, 0.4f);
+            }
+
+            hud.ShowPopup(text, color, 0.95f);
+            if (swing.Window == TimingWindow.Perfect) hud.FlashTiming(color);
+        }
+
+        /// <summary>
+        /// Debug: with ForcePerfectTiming the runner fires the player's swing at
+        /// exactly the ideal frame (bat arrives with offset ~0).
+        /// </summary>
+        private void InjectForcedSwing(ref BattingInputFrame frame)
+        {
+            if (!ForcePerfectTiming || frame.SwingTriggered) return;
+            DeliveryTrajectory traj = engine.ActiveDelivery;
+            if (traj == null || engine.SwingTaken || engine.ContactWillHappen) return;
+            if (!world.Ball.InFlight) return;
+
+            float windup = TimingSystem.WindupTime(frame.Intent);
+            float ideal = traj.TimeToContact - windup;
+            if (engine.DeliveryTime + Time.deltaTime >= ideal && engine.DeliveryTime <= ideal + 0.02f)
+            {
+                frame.SwingTriggered = true;
+                frame.ShotDirection = new Vec2(0f, 1f);
+                frame.SwipeStrength = 1f;
             }
         }
 
@@ -234,6 +405,10 @@ namespace CricketGame.BattingPrototype.Game
                 default: return new Color(1f, 0.4f, 0.35f);
             }
         }
+
+        // The outcome resolver needs an RNG for its bounded luck (edge runs etc.).
+        // It is only used for presentation-side rolls, never for timing.
+        private readonly IRng engineRng = new SystemRng();
 
         // ------------------------------------------------------------------ stump reactions
 

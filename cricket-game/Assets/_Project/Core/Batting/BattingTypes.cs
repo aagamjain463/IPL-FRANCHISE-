@@ -127,10 +127,12 @@ namespace CricketGame.Core.Batting
     }
 
     /// <summary>
-    /// Everything describing one test delivery. The trajectory built from this
+    /// Everything describing one delivery. The trajectory built from this
     /// is fully deterministic, so timing is never random.
     /// Line: -1 (leg stump) .. +1 (off stump). Length: 0 (full) .. 1 (short).
     /// Swing: -1 (into the batter) .. +1 (away) lateral air movement.
+    /// Phase 2 adds Type/Seam/Bounce/ReleaseHeight; all default to Phase 1
+    /// behaviour so existing deliveries are unchanged.
     /// </summary>
     public struct DeliveryData
     {
@@ -138,6 +140,18 @@ namespace CricketGame.Core.Batting
         public float Line;
         public float Length;
         public float Swing;
+
+        /// <summary>Which stock delivery this is (drives selection, debug, HUD).</summary>
+        public DeliveryType Type;
+
+        /// <summary>Post-bounce lateral cut: -1 (into batter) .. +1 (away). 0 = none.</summary>
+        public float Seam;
+
+        /// <summary>Vertical bounce energy multiplier. &lt;=0 means 1.0 (Phase 1).</summary>
+        public float Bounce;
+
+        /// <summary>Custom release height (m). &lt;=0 means 2.05 (default).</summary>
+        public float ReleaseHeight;
 
         public static DeliveryData Full(float speedKph = 118f, float line = 0f, float swing = 0f)
         {
@@ -152,6 +166,46 @@ namespace CricketGame.Core.Batting
         public static DeliveryData Short(float speedKph = 134f, float line = -0.1f, float swing = 0f)
         {
             return new DeliveryData { SpeedKph = speedKph, Line = line, Length = 0.88f, Swing = swing };
+        }
+    }
+
+    /// <summary>The eight stock Phase 2 delivery types (spec section 1).</summary>
+    public enum DeliveryType
+    {
+        FastStraight,
+        FastInswinger,
+        FastOutswinger,
+        Yorker,
+        FullBall,
+        GoodLength,
+        ShortBall,
+        Bouncer
+    }
+
+    /// <summary>
+    /// Pitch surface parameters. Only Normal is tuned today; the fields exist
+    /// so slower / batting-friendly / spinning pitches can be added later
+    /// without any API churn (spec section 3).
+    /// </summary>
+    public struct PitchProfile
+    {
+        /// <summary>Multiplier on vertical bounce energy (1 = normal).</summary>
+        public float BounceEnergy;
+
+        /// <summary>Multiplier on pace kept after the bounce (1 = normal).</summary>
+        public float PaceFactor;
+
+        /// <summary>Constant lateral drift after the bounce (m/s); 0 = no turn.</summary>
+        public float Turn;
+
+        public string Name;
+
+        public static PitchProfile Normal
+        {
+            get
+            {
+                return new PitchProfile { BounceEnergy = 1f, PaceFactor = 1f, Turn = 0f, Name = "normal" };
+            }
         }
     }
 }

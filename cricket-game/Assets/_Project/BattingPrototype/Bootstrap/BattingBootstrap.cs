@@ -1,4 +1,5 @@
 using CricketGame.BattingPrototype.Bowler;
+using CricketGame.BattingPrototype.Bowling;
 using CricketGame.BattingPrototype.Camera;
 using CricketGame.BattingPrototype.Game;
 using CricketGame.BattingPrototype.Hud;
@@ -10,13 +11,17 @@ namespace CricketGame.BattingPrototype.Bootstrap
 {
     /// <summary>
     /// The only object placed in the scene by hand. On Awake it builds the
-    /// entire prototype: world, rigs, camera, HUD, input and the runner.
-    /// This keeps the scene file trivial and everything reproducible in code.
+    /// entire prototype: world, rigs, camera, HUD, input, bowling and the
+    /// runner. This keeps the scene file trivial and everything reproducible
+    /// in code.
     /// </summary>
     public class BattingBootstrap : MonoBehaviour
     {
         [Tooltip("Show the tuning/debug panel on start.")]
         [SerializeField] private bool debugPanelVisible = true;
+
+        [Tooltip("Optional designer-tuned bowler profile asset. Empty = code default.")]
+        [SerializeField] private BowlerProfile bowlerProfile;
 
         private void Awake()
         {
@@ -28,7 +33,7 @@ namespace CricketGame.BattingPrototype.Bootstrap
             var root = new GameObject("BattingPrototype");
             root.transform.SetParent(transform, false);
 
-            // World (field, rigs, ball, lights, camera).
+            // World (field, stadium dressing, rigs, ball, lights, camera).
             BattingWorld world = BattingWorldBuilder.Build(root.transform);
 
             // Camera controller drives the built camera.
@@ -44,10 +49,15 @@ namespace CricketGame.BattingPrototype.Bootstrap
             inputGo.transform.SetParent(root.transform, false);
             var input = inputGo.AddComponent<MobileBattingInput>();
 
-            // Test bowler.
-            var bowlerGo = new GameObject("TestBowler");
+            // Bowling: plan orchestrator + visual bowler.
+            var bowlingGo = new GameObject("Bowling");
+            bowlingGo.transform.SetParent(root.transform, false);
+            var bowling = bowlingGo.AddComponent<BowlingController>();
+            bowling.Init(bowlerProfile); // null-safe: falls back to the code default
+
+            var bowlerGo = new GameObject("Bowler");
             bowlerGo.transform.SetParent(root.transform, false);
-            var bowler = bowlerGo.AddComponent<TestBowler>();
+            var bowler = bowlerGo.AddComponent<BowlerController>();
 
             // HUD.
             var hudGo = new GameObject("HudRoot");
@@ -67,8 +77,8 @@ namespace CricketGame.BattingPrototype.Bootstrap
             var runner = runnerGo.AddComponent<BattingPrototypeRunner>();
 
             debug.StartVisible = debugPanelVisible;
-            debug.Build(hud.Canvas, bowler, runner, input);
-            runner.Init(world, hud, input, bowler, camCtrl);
+            debug.Build(hud.Canvas, bowling, runner, input);
+            runner.Init(world, hud, input, bowling, bowler, camCtrl);
         }
     }
 }

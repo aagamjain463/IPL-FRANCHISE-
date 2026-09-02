@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: abf7b9ebc29b383fa71957ab8893fcbe, type: 3}
+  m_Name: DefaultBowlerProfile
+  m_EditorClassIdentifier: 
+  Accuracy: 0.75
+  FastStraight: 0.15
+  FastInswinger: 0.12
+  FastOutswinger: 0.1
+  Yorker: 0.1
+  FullBall: 0.12
+  GoodLength: 0.2
+  ShortBall: 0.13
+  Bouncer: 0.08

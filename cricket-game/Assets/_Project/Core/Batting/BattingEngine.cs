@@ -33,6 +33,7 @@ namespace CricketGame.Core.Batting
     public sealed class BattingEngine
     {
         private readonly IRng rng;
+        private readonly PitchProfile pitch;
 
         private FootworkState foot;
         private DeliveryTrajectory trajectory;
@@ -41,6 +42,7 @@ namespace CricketGame.Core.Batting
         private bool swingTaken;
         private bool contactWillHappen;
         private bool passedReported;
+        private bool bounceReported;
 
         /// <summary>Fired when the player commits a swing.</summary>
         public event Action<SwingReport> SwingCommitted;
@@ -48,12 +50,20 @@ namespace CricketGame.Core.Batting
         /// <summary>Fired when the ball passes the stumps unstruck.</summary>
         public event Action<BallPassedReport> BallPassed;
 
+        /// <summary>Fired once, the frame the ball pitches (spec: OnBallBounced).</summary>
+        public event Action BounceReached;
+
         /// <summary>Last swing report, for debug display.</summary>
         public SwingReport? LastSwing;
 
-        public BattingEngine(IRng rng)
+        public BattingEngine(IRng rng) : this(rng, PitchProfile.Normal)
+        {
+        }
+
+        public BattingEngine(IRng rng, PitchProfile pitchProfile)
         {
             this.rng = rng;
+            pitch = pitchProfile;
         }
 
         public FootworkState Foot { get { return foot; } }
@@ -61,6 +71,7 @@ namespace CricketGame.Core.Batting
         public float DeliveryTime { get { return deliveryTime; } }
         public bool SwingTaken { get { return swingTaken; } }
         public bool ContactWillHappen { get { return contactWillHappen; } }
+        public bool HasBounced { get { return bounceReported; } }
 
         public void SetFootworkPosition(float x, float z)
         {
@@ -70,14 +81,15 @@ namespace CricketGame.Core.Batting
             foot.VelZ = 0f;
         }
 
-        /// <summary>Starts a new delivery. Call once per ball from the test bowler.</summary>
+        /// <summary>Starts a new delivery. Call once per ball from the bowling system.</summary>
         public void BeginDelivery(DeliveryData delivery)
         {
-            trajectory = new DeliveryTrajectory(delivery);
+            trajectory = new DeliveryTrajectory(delivery, pitch);
             deliveryTime = 0f;
             swingTaken = false;
             contactWillHappen = false;
             passedReported = false;
+            bounceReported = false;
             LastSwing = null;
         }
 
@@ -88,6 +100,12 @@ namespace CricketGame.Core.Batting
 
             if (trajectory == null) return;
             deliveryTime += dt;
+
+            if (!bounceReported && deliveryTime >= trajectory.BounceTime)
+            {
+                bounceReported = true;
+                if (BounceReached != null) BounceReached();
+            }
 
             // --- capture the swing on the frame it is released
             if (!swingTaken && !passedReported && input.SwingTriggered)

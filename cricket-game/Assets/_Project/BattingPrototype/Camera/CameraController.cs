@@ -13,12 +13,14 @@ namespace CricketGame.BattingPrototype.Camera
     /// </summary>
     public class CameraController : MonoBehaviour
     {
-        private enum State { Setup, BlendToGameplay, Gameplay, Follow, Return }
+        private enum State { Setup, BlendToGameplay, Gameplay, Follow, FollowLong, Wicket, Return }
 
         private static readonly Vector3 SetupPos = new Vector3(11.5f, 4.6f, 10f);
         private static readonly Vector3 SetupLook = new Vector3(0f, 1.0f, 10f);
         private static readonly Vector3 GameplayPos = new Vector3(0.42f, 2.75f, -5.4f);
         private static readonly Vector3 GameplayLook = new Vector3(0f, 1.05f, 9f);
+        private static readonly Vector3 WicketPos = new Vector3(1.9f, 1.5f, -3.4f);
+        private static readonly Vector3 WicketLook = new Vector3(0f, 0.5f, -1f);
 
         private State state = State.Setup;
         private float stateTime;
@@ -61,12 +63,22 @@ namespace CricketGame.BattingPrototype.Camera
             stateTime = 0f;
         }
 
-        /// <summary>Shot played: follow the ball into the field for a while.</summary>
-        public void FollowShot(Vector3 ballPosition)
+        /// <summary>
+        /// Shot played: follow the ball into the field. Boundary shots stay
+        /// followed until the ball settles (untilReturn = true).
+        /// </summary>
+        public void FollowShot(Vector3 ballPosition, bool untilReturn)
         {
-            state = State.Follow;
+            state = untilReturn ? State.FollowLong : State.Follow;
             stateTime = 0f;
             followLook = ballPosition;
+        }
+
+        /// <summary>Wicket fallen: brief cinematic push-in on the stumps.</summary>
+        public void OnWicket()
+        {
+            state = State.Wicket;
+            stateTime = 0f;
         }
 
         /// <summary>Ball settled/passed: ease back to the gameplay view.</summary>
@@ -79,7 +91,8 @@ namespace CricketGame.BattingPrototype.Camera
         /// <summary>While the ball is moving the camera keeps an eye on it.</summary>
         public void TrackBall(Vector3 ballPosition)
         {
-            if (state == State.Gameplay || state == State.Follow) followLook = ballPosition;
+            if (state == State.Gameplay || state == State.Follow || state == State.FollowLong)
+                followLook = ballPosition;
         }
 
         private void LateUpdate()
@@ -117,6 +130,27 @@ namespace CricketGame.BattingPrototype.Camera
                     pos = GameplayPos + new Vector3(Mathf.Clamp(followLook.x * 0.06f, -1.2f, 1.2f), 0.3f, 0f);
                     look = Vector3.Lerp(lastLook, followLook, 0.25f);
                     if (stateTime > 1.6f) state = State.Return;
+                    break;
+
+                case State.FollowLong:
+                {
+                    // Boundary chase: drift back and up as the ball travels, so
+                    // the flight stays framed all the way to the rope.
+                    float depth = Mathf.Clamp(followLook.z * 0.10f, 0f, 5.5f);
+                    pos = GameplayPos + new Vector3(
+                        Mathf.Clamp(followLook.x * 0.10f, -3.5f, 3.5f),
+                        0.4f + depth * 0.55f,
+                        -depth * 0.35f);
+                    look = Vector3.Lerp(lastLook, followLook, 0.30f);
+                    break;
+                }
+
+                case State.Wicket:
+                    // Slow push-in on the broken stumps, then auto-return.
+                    pos = Vector3.Lerp(WicketPos + new Vector3(0.6f, 0.35f, -0.8f), WicketPos,
+                                       Mathf.Clamp01(stateTime / 0.9f));
+                    look = WicketLook;
+                    if (stateTime > 1.5f) state = State.Return;
                     break;
 
                 case State.Return:

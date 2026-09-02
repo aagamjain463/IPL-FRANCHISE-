@@ -29,6 +29,12 @@ namespace CricketGame.Core.Batting
             return LengthZone.Short;
         }
 
+        /// <summary>Extreme fullness: at the toes. Wants front-foot work to dig out.</summary>
+        public static bool IsYorker(float length)
+        {
+            return length < 0.12f;
+        }
+
         public static LineZone LineOf(float line)
         {
             if (line < -0.25f) return LineZone.Leg;
@@ -102,7 +108,9 @@ namespace CricketGame.Core.Batting
                     s.Kind = ShotKind.LoftedDrive;
                     s.Name = "Lofted Drive";
                 }
-                s.Awkward = pose == FootPose.BackFoot && length == LengthZone.Full; // full balls want a stride
+                // Full balls want a stride; lofting a ball at the toes is a heave.
+                s.Awkward = (pose == FootPose.BackFoot && length == LengthZone.Full)
+                            || IsYorker(delivery.Length);
                 return s;
             }
 
@@ -114,6 +122,8 @@ namespace CricketGame.Core.Batting
             {
                 case LengthZone.Full:
                     if (pose == FootPose.BackFoot) s.Awkward = true; // full balls want a front stride
+                    // A ball at the toes wants the front foot dug in.
+                    if (IsYorker(delivery.Length) && pose != FootPose.FrontFoot) s.Awkward = true;
                     if (askedSquareOrBehind)
                     {
                         // Cutting a full ball is not on: an awkward stab instead.

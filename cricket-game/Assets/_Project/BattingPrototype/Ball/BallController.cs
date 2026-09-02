@@ -28,7 +28,14 @@ namespace CricketGame.BattingPrototype.Ball
         private bool inFlight;
         private bool struck;
         private bool groundedSinceStrike;
+        private bool bounceFired;
         private float restTimer;
+
+        // Pooled pitch-dust puff (one quad, reused for every delivery).
+        private Transform dust;
+        private Material dustMat;
+        private float dustClock = -1f;
+        private const float DustLife = 0.32f;
 
         public bool InFlight { get { return inFlight; } }
         public bool Struck { get { return struck; } }
@@ -36,6 +43,9 @@ namespace CricketGame.BattingPrototype.Ball
 
         /// <summary>Raised when a struck ball finishes (boundary or rest).</summary>
         public event System.Action<BallEndResult> BallSettled;
+
+        /// <summary>Raised once per delivery when the ball pitches (OnBallBounced).</summary>
+        public event System.Action<Vector3> BallBounced;
 
         public static BallController Attach(GameObject ballGo)
         {
@@ -47,7 +57,31 @@ namespace CricketGame.BattingPrototype.Ball
             ball.rigidbody.isKinematic = true;
             ball.rigidbody.useGravity = true;
             ball.rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+            ball.BuildDustPuff();
             return ball;
+        }
+
+        private void BuildDustPuff()
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            go.name = "PitchDust";
+            go.transform.SetParent(transform.parent, false);
+            go.transform.localEulerAngles = new Vector3(90f, 0, 0);
+            go.transform.localScale = Vector3.zero;
+            Object.Destroy(go.GetComponent<Collider>());
+            var r = go.GetComponent<Renderer>();
+            dustMat = new Material(Shader.Find("Unlit/Transparent"));
+            dustMat.color = new Color(0.78f, 0.70f, 0.52f, 0f);
+            r.sharedMaterial = dustMat;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            dust = go.transform;
+        }
+
+        private void PlayDust(Vector3 position)
+        {
+            if (dust == null) return;
+            dust.position = new Vector3(position.x, 0.03f, position.z);
+            dustClock = 0f;
         }
 
         /// <summary>Begins following a new delivery trajectory from release.</summary>
@@ -58,6 +92,7 @@ namespace CricketGame.BattingPrototype.Ball
             inFlight = true;
             struck = false;
             groundedSinceStrike = false;
+            bounceFired = false;
             restTimer = 0f;
             rigidbody.isKinematic = true;
             rigidbody.velocity = Vector3.zero;
@@ -71,6 +106,13 @@ namespace CricketGame.BattingPrototype.Ball
             if (!inFlight) return;
             flightTime += dt;
             transform.position = ToUnity(trajectory.Position(flightTime));
+
+            if (!bounceFired && flightTime >= trajectory.BounceTime)
+            {
+                bounceFired = true;
+                PlayDust(ToUnity(trajectory.BouncePoint));
+                if (BallBounced != null) BallBounced(ToUnity(trajectory.BouncePoint));
+            }
         }
 
         /// <summary>Applies the contact result: dynamic ball with a real exit velocity.</summary>
@@ -94,6 +136,26 @@ namespace CricketGame.BattingPrototype.Ball
 
         private void Update()
         {
+            // --- dust puff fade (cheap, pooled)
+            if (dustClock >= 0f)
+            {
+                dustClock += Time.deltaTime;
+                float t = dustClock / DustLife;
+                if (t >= 1f)
+                {
+                    dustClock = -1f;
+                    dust.localScale = Vector3.zero;
+                }
+                else
+                {
+                    float s = 0.25f + 0.85f * t;
+                    dust.localScale = new Vector3(s, s, 1f);
+                    var c = dustMat.color;
+                    c.a = 0.5f * (1f - t);
+                    dustMat.color = c;
+                }
+            }
+
             if (inFlight && trajectory != null)
             {
                 // Runner drives AdvanceFlight; nothing else to do here.

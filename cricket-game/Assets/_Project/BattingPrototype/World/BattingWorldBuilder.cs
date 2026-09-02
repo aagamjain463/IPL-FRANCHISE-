@@ -160,6 +160,9 @@ namespace CricketGame.BattingPrototype.World
             Object.Destroy(shadowGo.GetComponent<Collider>());
             world.BallShadow = shadowGo.transform;
 
+            // ------------------------------------------------ stadium dressing
+            BuildStadiumDressing(root.transform);
+
             // ------------------------------------------------ lights & camera
             var sunGo = new GameObject("Sun");
             sunGo.transform.SetParent(root.transform, false);
@@ -181,6 +184,62 @@ namespace CricketGame.BattingPrototype.World
             world.Camera = cam;
 
             return world;
+        }
+
+        /// <summary>
+        /// Broadcast-style surroundings from cheap primitives: a stand ring
+        /// beyond the rope, a sightscreen behind the bowler and four floodlight
+        /// towers. No colliders, shadows off - pure backdrop (spec section 2/11).
+        /// </summary>
+        private static void BuildStadiumDressing(Transform root)
+        {
+            var stadium = new GameObject("Stadium");
+            stadium.transform.SetParent(root, false);
+
+            // Stand ring: segmented blocks just outside the boundary.
+            Color standDark = new Color(0.16f, 0.20f, 0.30f);
+            Color standLite = new Color(0.24f, 0.29f, 0.42f);
+            for (int i = 0; i < 24; i++)
+            {
+                float a = i * Mathf.Deg2Rad * 15f;
+                // Leave a gap behind the keeper for the broadcast sightline.
+                if (i == 12) continue;
+                float r = 74f;
+                Primitive("Stand" + i, PrimitiveType.Cube, stadium.transform,
+                    (i & 1) == 0 ? standDark : standLite,
+                    new Vector3(Mathf.Sin(a) * r, 3.2f, Mathf.Cos(a) * r),
+                    new Vector3(19f, 9f, 6f),
+                    new Vector3(0, -a * Mathf.Rad2Deg, 0));
+            }
+
+            // Advertising boards inside the rope (solid muted colour, no text).
+            Color board = new Color(0.10f, 0.30f, 0.55f);
+            for (int i = 0; i < 30; i++)
+            {
+                float a = i * Mathf.Deg2Rad * 12f;
+                Primitive("Board" + i, PrimitiveType.Cube, stadium.transform, board,
+                    new Vector3(Mathf.Sin(a) * 65f, 0.45f, Mathf.Cos(a) * 65f),
+                    new Vector3(13f, 0.9f, 0.25f),
+                    new Vector3(0, -a * Mathf.Rad2Deg, 0));
+            }
+
+            // Sightscreen behind the bowler.
+            Primitive("Sightscreen", PrimitiveType.Cube, stadium.transform,
+                new Color(0.85f, 0.87f, 0.9f), new Vector3(0, 4f, 34f), new Vector3(11f, 8f, 0.4f));
+
+            // Floodlight towers at four diagonal corners.
+            Color pole = new Color(0.55f, 0.58f, 0.62f);
+            for (int i = 0; i < 4; i++)
+            {
+                float a = (45f + 90f * i) * Mathf.Deg2Rad;
+                Vector3 basePos = new Vector3(Mathf.Sin(a) * 84f, 0, Mathf.Cos(a) * 84f);
+                Primitive("FloodPole" + i, PrimitiveType.Cylinder, stadium.transform, pole,
+                    basePos + new Vector3(0, 14f, 0), new Vector3(0.9f, 14f, 0.9f));
+                Primitive("FloodHead" + i, PrimitiveType.Cube, stadium.transform,
+                    new Color(0.92f, 0.92f, 0.85f),
+                    basePos + new Vector3(0, 28.5f, 0), new Vector3(4.5f, 2.6f, 0.8f),
+                    new Vector3(0, -a * Mathf.Rad2Deg, 0));
+            }
         }
     }
 }

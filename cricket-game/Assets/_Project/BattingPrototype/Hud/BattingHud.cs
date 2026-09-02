@@ -20,6 +20,11 @@ namespace CricketGame.BattingPrototype.Hud
         private Text scoreText;
         private Text popupText;
         private Text hintSwipe;
+        private Text toastText;
+        private Image toastBg;
+        private Text bannerText;
+        private Image bannerBg;
+        private Image timingFlash;
         private Image joyBase;
         private Image joyKnob;
         private Image swipeIndicator;
@@ -29,6 +34,9 @@ namespace CricketGame.BattingPrototype.Hud
 
         private Input.MobileBattingInput input;
         private Coroutine popupRoutine;
+        private Coroutine toastRoutine;
+        private Coroutine bannerRoutine;
+        private Coroutine flashRoutine;
         private ShotIntent currentIntent = ShotIntent.Normal;
 
         private static readonly Color Dim = new Color(1f, 1f, 1f, 0.14f);
@@ -65,6 +73,9 @@ namespace CricketGame.BattingPrototype.Hud
             BuildJoystickVisuals();
             BuildSwipeZone();
             BuildPopup();
+            BuildToast();
+            BuildBanner();
+            BuildTimingFlash();
 
             input.JoystickStarted += () => SetJoystickVisible(true);
             input.JoystickEnded += () => SetJoystickVisible(false);
@@ -167,6 +178,54 @@ namespace CricketGame.BattingPrototype.Hud
             popupText.rectTransform.sizeDelta = new Vector2(1200, 120);
         }
 
+        /// <summary>Broadcast lower-left toast: delivery type + pace.</summary>
+        private void BuildToast()
+        {
+            toastBg = World.UiKit.AddImage(CanvasRect, "ToastBg", new Color(0.04f, 0.06f, 0.12f, 0f));
+            toastBg.sprite = World.UiKit.WhiteSprite;
+            toastBg.raycastTarget = false;
+            var r = toastBg.rectTransform;
+            r.anchorMin = new Vector2(0f, 0f);
+            r.anchorMax = new Vector2(0f, 0f);
+            r.pivot = new Vector2(0f, 0f);
+            r.anchoredPosition = new Vector2(16, 34);
+            r.sizeDelta = new Vector2(360, 44);
+
+            toastText = World.UiKit.AddText(toastBg.transform, "ToastText", "", 24,
+                TextAnchor.MiddleLeft, new Color(1f, 1f, 1f, 0f));
+            World.UiKit.Anchor(toastText.rectTransform, Vector2.zero, Vector2.one,
+                new Vector2(14, 0), new Vector2(-10, 0));
+        }
+
+        /// <summary>Full-width centre band for FOUR / SIX / WICKET moments.</summary>
+        private void BuildBanner()
+        {
+            bannerBg = World.UiKit.AddImage(CanvasRect, "BannerBg", new Color(0.05f, 0.07f, 0.14f, 0f));
+            bannerBg.sprite = World.UiKit.WhiteSprite;
+            bannerBg.raycastTarget = false;
+            var r = bannerBg.rectTransform;
+            r.anchorMin = new Vector2(0f, 0.62f);
+            r.anchorMax = new Vector2(1f, 0.62f);
+            r.pivot = new Vector2(0.5f, 0.5f);
+            r.anchoredPosition = Vector2.zero;
+            r.sizeDelta = new Vector2(0, 96);
+
+            bannerText = World.UiKit.AddText(bannerBg.transform, "BannerText", "", 64,
+                TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0f));
+            World.UiKit.Anchor(bannerText.rectTransform, Vector2.zero, Vector2.one,
+                Vector2.zero, Vector2.zero);
+        }
+
+        /// <summary>Subtle full-screen tint pulse for PERFECT timing.</summary>
+        private void BuildTimingFlash()
+        {
+            timingFlash = World.UiKit.AddImage(CanvasRect, "TimingFlash", new Color(1f, 0.85f, 0.2f, 0f));
+            timingFlash.sprite = World.UiKit.WhiteSprite;
+            timingFlash.raycastTarget = false;
+            World.UiKit.Anchor(timingFlash.rectTransform, Vector2.zero, Vector2.one,
+                Vector2.zero, Vector2.zero);
+        }
+
         // ------------------------------------------------------------------ runtime
 
         public void SetIntent(ShotIntent intent)
@@ -208,6 +267,85 @@ namespace CricketGame.BattingPrototype.Hud
                 yield return null;
             }
             popupText.text = "";
+        }
+
+        /// <summary>Small broadcast-style delivery info toast (fades after ~1.6 s).</summary>
+        public void ShowDeliveryToast(string message)
+        {
+            if (toastRoutine != null) StopCoroutine(toastRoutine);
+            toastRoutine = StartCoroutine(ToastRoutine(message));
+        }
+
+        private IEnumerator ToastRoutine(string message)
+        {
+            toastText.text = message;
+            float t = 0f;
+            const float life = 1.6f;
+            while (t < life)
+            {
+                t += Time.deltaTime;
+                float inA = Mathf.Clamp01(t / 0.15f);
+                float outA = t > life - 0.4f ? Mathf.Clamp01((life - t) / 0.4f) : 1f;
+                float a = inA * outA;
+                var tc = toastText.color; tc.a = a; toastText.color = tc;
+                var bc = toastBg.color; bc.a = 0.62f * a; toastBg.color = bc;
+                yield return null;
+            }
+            toastText.text = "";
+        }
+
+        /// <summary>Centre band for boundary/wicket moments.</summary>
+        public void ShowBoundaryBanner(string message, Color color)
+        {
+            if (bannerRoutine != null) StopCoroutine(bannerRoutine);
+            bannerRoutine = StartCoroutine(BannerRoutine(message, color, 1.25f));
+        }
+
+        public void ShowWicketBanner(string message)
+        {
+            if (bannerRoutine != null) StopCoroutine(bannerRoutine);
+            bannerRoutine = StartCoroutine(BannerRoutine(message, new Color(1f, 0.22f, 0.18f), 1.5f));
+        }
+
+        private IEnumerator BannerRoutine(string message, Color color, float life)
+        {
+            bannerText.text = message;
+            bannerText.color = color;
+            float t = 0f;
+            while (t < life)
+            {
+                t += Time.deltaTime;
+                float inA = Mathf.Clamp01(t / 0.12f);
+                float outA = t > life - 0.45f ? Mathf.Clamp01((life - t) / 0.45f) : 1f;
+                float a = inA * outA;
+                var tc = bannerText.color; tc.a = a; bannerText.color = tc;
+                var bc = bannerBg.color; bc.a = 0.55f * a; bannerBg.color = bc;
+                yield return null;
+            }
+            bannerText.text = "";
+        }
+
+        /// <summary>One soft pulse of colour when the timing is PERFECT.</summary>
+        public void FlashTiming(Color color)
+        {
+            if (flashRoutine != null) StopCoroutine(flashRoutine);
+            flashRoutine = StartCoroutine(FlashRoutine(color));
+        }
+
+        private IEnumerator FlashRoutine(Color color)
+        {
+            float t = 0f;
+            const float life = 0.35f;
+            while (t < life)
+            {
+                t += Time.deltaTime;
+                float a = 0.16f * Mathf.Sin(Mathf.PI * Mathf.Clamp01(t / life));
+                var c = color; c.a = a;
+                timingFlash.color = c;
+                yield return null;
+            }
+            var done = color; done.a = 0f;
+            timingFlash.color = done;
         }
 
         private void SetJoystickVisible(bool visible)

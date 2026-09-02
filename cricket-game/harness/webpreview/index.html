@@ -59,13 +59,32 @@
     bottom: max(6px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
     color: rgba(255,255,255,0.35); font-size: clamp(10px, 1.8vmin, 14px); pointer-events: none; white-space: nowrap;
   }
+  #toast {
+    bottom: max(52px, calc(env(safe-area-inset-bottom) + 46px)); left: 12px;
+    background: rgba(8,12,22,0.66); color: #e8eefc; font-size: clamp(12px, 2vmin, 18px);
+    letter-spacing: 0.08em; padding: 7px 14px; border-radius: 8px; opacity: 0;
+    transition: opacity 0.25s; pointer-events: none; white-space: nowrap;
+  }
+  #banner {
+    top: 34%; left: 50%; transform: translate(-50%, -50%); width: 100%;
+    text-align: center; color: #fff; font-size: clamp(34px, 8vmin, 76px); font-weight: 900;
+    letter-spacing: 0.12em; text-shadow: 0 4px 18px rgba(0,0,0,0.7); opacity: 0;
+    transition: opacity 0.22s; pointer-events: none; background: rgba(6,10,20,0.35);
+    padding: 10px 0;
+  }
+  #flash {
+    inset: 0; background: #ffd23f; opacity: 0; transition: opacity 0.22s; pointer-events: none;
+  }
 </style>
 </head>
 <body>
 <canvas id="view"></canvas>
 
+<div id="flash" class="ui"></div>
 <div id="scoreboard" class="ui"></div>
 <div id="popup" class="ui"></div>
+<div id="banner" class="ui"></div>
+<div id="toast" class="ui"></div>
 
 <div id="intentBar" class="ui">
   <button class="intent" data-intent="defensive">DEF</button>
@@ -86,6 +105,15 @@
     <button id="bGood">GOOD</button>
     <button id="bShort">SHORT</button>
     <button id="bReset">RESET POS</button>
+  </div>
+  <div class="dbtns">
+    <button id="bPerfect">PERFECT: OFF</button>
+    <button id="bSlow">SLOW-MO: OFF</button>
+    <button id="bRebowl">RE-BOWL</button>
+  </div>
+  <div class="dbtns">
+    <button id="bType">TYPE: AUTO</button>
+    <button id="bOutcome">OUTCOME: NONE</button>
   </div>
 </div>
 
