@@ -46,6 +46,23 @@
 ### 🛠️ Verified
 - `tsc --noEmit` clean, production build succeeds; all flows verified in headless Chromium (completion panel both paths, per-phase tactics, injury badges + auto-build exclusion).
 
+## v2.3 — Post-Match Flow Fixes
+
+### 🖥️ Post-Match "Media & Ceremony" — no more black screen
+- `completeCurrentMatch` now pushes the real URL (`/post-match`) so the route-sync effect can't re-parse the stale `/match` path and blank the screen.
+- `PostMatchPresentation` has its own route (`/post-match`); the URL, screen and the route loader all agree.
+
+### 🎤 Press Q&A — every option answerable, no skipped questions
+- Fixed the double-advance bug: `answerPressQuestion` no longer auto-advances the question index. It only records the answered option, and the view calls the new `advancePressQuestion()` when the user presses **Next Question**.
+- Result: after answering Q1, Q2 loads with **all options enabled** (previously they were locked and Q2 was skipped), and the final question is answerable before concluding.
+
+### 🏠 "Conclude & Return to Hub" — actually returns home
+- `setActiveTab` now treats post-match / press conference as standalone screens and demotes them to the Dashboard hub (previously the demotion list missed them, so Conclude re-pushed `/post-match` — the loop you saw).
+- Browser route sync uses an atomic `syncRouteFromPath` (screen + tab set together) so no stale state read can downgrade the destination.
+
+### 🛠️ Verified
+- `tsc --noEmit` clean, production build succeeds; full flow verified in headless Chromium: complete match → Post-Match presentation (instant, correct screen) → Press Q1 answer → Next → Q2 options enabled → answer → Conclude → Franchise Hub home.
+
 ## v2.0 — "FC 26 of Cricket" Overhaul
 
 ### 🎨 Design — FC 26 Ultra

@@ -59,6 +59,10 @@ interface GameContextType {
   showToast: (message: string, tone?: 'info' | 'success' | 'warn' | 'danger') => void;
   setCurrentScreen: (screen: GameScreen) => void;
   setActiveTab: (tab: AppTab) => void;
+  // Atomic browser-route sync: sets both screen + tab from the URL WITHOUT the
+  // tab-demotion logic, so standalone flows (post-match, match, auction) are
+  // never downgraded to Dashboard by a stale state read during navigation.
+  syncRouteFromPath: (screen: GameScreen, tab: AppTab) => void;
   toggleMute: () => void;
   setSelectedPlayerForModal: (p: Player | null) => void;
   startNewFranchise: (teamId: string, managerName: string, autoSimulateAuction?: boolean, startMultiplayerAuction?: boolean) => void;
@@ -105,6 +109,7 @@ interface GameContextType {
   validateUserSquad: () => { valid: boolean; issues: string[] };
   submitPressAnswer: (option: { text: string; moraleChange: number; ownerTrustChange: number }) => void;
   answerPressQuestion: (optionIndex: number) => void;
+  advancePressQuestion: () => void;
   // Scouting Department
   upgradeScoutLevel: () => { success: boolean; message: string };
   addToWatchlist: (playerId: string, priority?: PriorityLevel, notes?: string) => void;
@@ -174,11 +179,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           ? 'MatchLive'
           : tab === 'Walkout'
             ? 'Walkout'
-            : currentScreen === 'Auction' || currentScreen === 'MatchLive' || currentScreen === 'MultiplayerAuction' || currentScreen === 'Walkout'
+            : currentScreen === 'Auction' || currentScreen === 'MatchLive' || currentScreen === 'MultiplayerAuction' || currentScreen === 'Walkout' || currentScreen === 'PostMatchPresentation' || currentScreen === 'PressConference'
               ? 'Dashboard'
               : currentScreen;
     setCurrentScreenState(nextScreen);
     pushGameRoute(nextScreen, tab);
+  };
+
+  const syncRouteFromPath = (screen: GameScreen, tab: AppTab) => {
+    setCurrentScreenState(screen);
+    setActiveTabState(tab);
   };
 
   const showToast = (message: string, tone: 'info' | 'success' | 'warn' | 'danger' = 'info') => {
@@ -1662,6 +1672,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setGameState(newState);
     setCurrentScreen(targetScreen);
     if (targetScreen === 'Dashboard') setActiveTab('Dashboard');
+    // Keep the URL in sync with the screen — otherwise the route-sync effect
+    // re-parses the stale /match path and yanks the user off the post-match
+    // presentation (the "black screen"), and "return to hub" never lands home.
+    pushGameRoute(targetScreen, targetScreen === 'Dashboard' ? 'Dashboard' : 'News');
     if (match.matchType === 'Final') {
       showToast(finalFixture ? '🏆 Season complete! Open the Season Recap.' : 'Match complete.', 'success');
     } else if (isUserMatch) {
@@ -1694,17 +1708,32 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
-    const nextIdx = (press.currentQuestionIndex || 0) + 1;
-    const updatedPress = {
-      ...press,
-      currentQuestionIndex: nextIdx
-    };
-
+    // Mark the answer applied WITHOUT advancing — the views own the pacing and
+    // call advancePressQuestion() when the user hits Next, so every question
+    // stays answerable and none are skipped.
     setGameState({
       ...gameState,
-      pressConferenceState: updatedPress
+      pressConferenceState: {
+        ...press,
+        answeredQuestionIds: [...(press.answeredQuestionIds || []), currentQ.id]
+      }
     });
     soundFx.playBatHit();
+    saveCurrentGame();
+  };
+
+  const advancePressQuestion = () => {
+    if (!gameState) return;
+    const press = gameState.pressConferenceState;
+    if (!press || !press.questions) return;
+    const nextIdx = Math.min((press.currentQuestionIndex || 0) + 1, press.questions.length);
+    setGameState({
+      ...gameState,
+      pressConferenceState: {
+        ...press,
+        currentQuestionIndex: nextIdx
+      }
+    });
     saveCurrentGame();
   };
 
@@ -2108,6 +2137,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         showToast,
         setCurrentScreen,
         setActiveTab,
+        syncRouteFromPath,
         toggleMute,
         setSelectedPlayerForModal,
         startNewFranchise,
@@ -2149,6 +2179,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         validateUserSquad,
         submitPressAnswer,
         answerPressQuestion,
+        advancePressQuestion,
         upgradeScoutLevel,
         addToWatchlist,
         removeFromWatchlist,

@@ -9,7 +9,7 @@ import { deriveRewardProgression, ensureRewardEcosystem } from '../rewards/rewar
 import { XPBar } from '../rewards/components/RewardPrimitives';
 
 export const PostMatchPresentationView: React.FC = () => {
-  const { gameState, answerPressQuestion, setActiveTab, setCurrentScreen } = useGame();
+  const { gameState, answerPressQuestion, advancePressQuestion, setActiveTab, setCurrentScreen } = useGame();
   const [activeTab, setActivePresentationTab] = useState<'Awards' | 'Press' | 'Standings'>('Awards');
   const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(null);
   const [hasAnswered, setHasAnswered] = useState<boolean>(false);
@@ -75,6 +75,13 @@ export const PostMatchPresentationView: React.FC = () => {
   const potm: Player | undefined = momCandidates[0] || allPlayersList[0];
   const rewardView = gameState.progression ? deriveRewardProgression(ensureRewardEcosystem(gameState.progression), gameState.teams[gameState.userTeamId], gameState.allPlayers) : null;
 
+  const goToHub = () => {
+    // setActiveTab('Dashboard') demotes standalone screens (post-match, match,
+    // press) back to the hub and pushes /home, so the URL + state both land home.
+    setCurrentScreen('Dashboard');
+    setActiveTab('Dashboard');
+  };
+
   const handleSelectAnswer = (idx: number) => {
     setSelectedOptionIndex(idx);
     setHasAnswered(true);
@@ -87,14 +94,16 @@ export const PostMatchPresentationView: React.FC = () => {
     setSelectedOptionIndex(null);
     setHasAnswered(false);
     if (currentQuestionIndex >= questionsList.length - 1) {
-      setCurrentScreen('Dashboard');
-      setActiveTab('Dashboard');
+      goToHub();
+      return;
+    }
+    if (advancePressQuestion) {
+      advancePressQuestion();
     }
   };
 
   const handleFinishPresentation = () => {
-    setCurrentScreen('Dashboard');
-    setActiveTab('Dashboard');
+    goToHub();
   };
 
   return (
