@@ -8,20 +8,29 @@ function normalizeRoomCode(roomCode: string): string {
 
 function getPathParts(req: any): string[] {
   const raw = req.query?.path;
-  if (Array.isArray(raw)) return raw.map(String);
-  if (typeof raw === 'string') return [raw];
+
+  if (Array.isArray(raw)) {
+    return raw.flatMap((value) => String(value).split('/')).filter(Boolean);
+  }
+
+  if (typeof raw === 'string') {
+    return raw.split('/').filter(Boolean);
+  }
 
   const url = String(req.url || '');
   const pathname = url.split('?')[0];
+
   const prefix = '/api/multiplayer/';
 
   if (pathname.startsWith(prefix)) {
-    return pathname.slice(prefix.length).split('/').filter(Boolean);
+    return pathname
+      .slice(prefix.length)
+      .split('/')
+      .filter(Boolean);
   }
 
   return [];
 }
-
 function parseBody(req: any): any {
   if (!req.body) return {};
   if (typeof req.body === 'string') {
