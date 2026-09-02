@@ -50,9 +50,11 @@ export type AIDecisionType =
   | 'VALUE_BID' 
   | 'PRESSURE_BID' 
   | 'SAVE_BUDGET' 
-  | 'TARGET_LATER';
+  | 'TARGET_LATER'
+  | 'AUTO_BID';
 
 export interface AuctionBid {
+  id?: string;
   teamId: string;
   teamShortName?: string;
   bidAmountCr: number;
@@ -152,6 +154,8 @@ export interface AuctionState {
   isAcceleratedMode: boolean;
   autoBidUser: boolean;
   isAutoBidEnabled?: boolean;
+  userAutoBidCeilingCr?: number;
+  autoBidStrategy?: 'AI_VALUATION' | 'CUSTOM_CEILING' | 'AGGRESSIVE';
 }
 
 export interface AIAssistantAdvice {

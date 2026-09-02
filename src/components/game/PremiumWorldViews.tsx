@@ -428,7 +428,7 @@ export const PremiumAuctionView: React.FC = () => {
         <button className="clean-auction__multiplayer-entry" onClick={openMultiplayer}>LIVE MULTIPLAYER</button>
         {(['live', 'pool', 'teams'] as const).map(x => <button key={x} className={panel === x ? 'is-active' : ''} onClick={() => setPanel(x)}>{x}</button>)}
         <button onClick={togglePauseAuction}>{auc.isPaused ? 'RESUME' : 'PAUSE'}</button>
-        <button onClick={toggleAutoBid}>AUTO BID {auc.isAutoBidEnabled ? 'ON' : 'OFF'}</button>
+        <button onClick={() => toggleAutoBid()}>AUTO BID {(auc.isAutoBidEnabled || auc.autoBidUser) ? 'ON' : 'OFF'}</button>
         <button onClick={simulateCurrentAuctionSet}>SIM SET</button>
         <button onClick={() => simulateEntireAuction(false)}>SIM AUCTION</button>
       </section>
@@ -438,7 +438,7 @@ export const PremiumAuctionView: React.FC = () => {
           <article>
             <h3>Recent Bids</h3>
             <AnimatePresence initial={false}>
-              {auc.bidHistory.slice(0, 8).map((b, i) => <motion.div key={`${b.teamId}-${b.timestamp}-${b.bidAmountCr}`} className="clean-row clean-row--bid" variants={shouldReduceMotion ? undefined : bidPulseMotion} initial={shouldReduceMotion ? false : "initial"} animate="enter" exit="exit"><span>{b.teamShortName}</span><b>₹{b.bidAmountCr.toFixed(2)}Cr</b></motion.div>)}
+              {auc.bidHistory.slice(0, 8).map((b, i) => <motion.div key={b.id || `bid_${b.teamId}_${b.timestamp || Date.now()}_${b.bidAmountCr}_${i}`} className="clean-row clean-row--bid" variants={shouldReduceMotion ? undefined : bidPulseMotion} initial={shouldReduceMotion ? false : "initial"} animate="enter" exit="exit"><span>{b.teamShortName}</span><b>₹{b.bidAmountCr.toFixed(2)}Cr</b></motion.div>)}
             </AnimatePresence>
             {!auc.bidHistory.length && <p className="clean-muted">Waiting for rival paddles...</p>}
           </article>

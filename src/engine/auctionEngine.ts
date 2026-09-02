@@ -1360,6 +1360,7 @@ export function simulateAuctionBattle(
     nextBidder.bidsPlaced++;
 
     simulatedHistory.unshift({
+      id: `bid_${nextBidder.teamId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       teamId: nextBidder.teamId,
       teamShortName: nextBidder.teamShortName,
       bidAmountCr: currentPrice,

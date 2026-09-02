@@ -31,6 +31,7 @@ export const AuctionView: React.FC = () => {
     simulateEntireAuction,
     simulateCurrentAuctionSet,
     toggleAutoBid,
+    setAutoBidCeiling,
     togglePauseAuction,
     switchUserFranchise,
     restartGame,
@@ -49,6 +50,7 @@ export const AuctionView: React.FC = () => {
   const [showFranchiseModal, setShowFranchiseModal] = useState<boolean>(false);
   const [simFromBeginningOption, setSimFromBeginningOption] = useState<boolean>(false);
   const [showQuitModal, setShowQuitModal] = useState<boolean>(false);
+  const [autoBidCustomInput, setAutoBidCustomInput] = useState<string>('');
   
   // Squads view state
   const [selectedSquadTeamId, setSelectedSquadTeamId] = useState<string>(gameState?.userTeamId || 'csk');
@@ -333,16 +335,16 @@ export const AuctionView: React.FC = () => {
 
           <button
             id="btn-toggle-auto-bid"
-            onClick={toggleAutoBid}
+            onClick={() => toggleAutoBid()}
             className={`px-3.5 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition border flex items-center gap-1.5 cursor-pointer ${
-              auc.isAutoBidEnabled
+              (auc.isAutoBidEnabled || auc.autoBidUser)
                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
                 : 'bg-[#05070a] text-[#94a3b8] border-[#1e293b] hover:text-white'
             }`}
             title="Allow AI Chief Scout to automatically bid on high-value targets for your franchise"
           >
             <Cpu className="w-3.5 h-3.5" />
-            <span>Auto-Bid: {auc.isAutoBidEnabled ? 'ON' : 'OFF'}</span>
+            <span>Auto-Bid: {(auc.isAutoBidEnabled || auc.autoBidUser) ? 'ON' : 'OFF'}</span>
           </button>
         </div>
 
@@ -576,6 +578,157 @@ export const AuctionView: React.FC = () => {
                       <Play className="w-4 h-4 text-blue-400" />
                       <span>Fast Resolve Lot</span>
                     </button>
+                  </div>
+
+                  {/* AUTO-BID MANAGER PANEL FOR SINGLE-PLAYER AUCTION */}
+                  <div className={`mt-3 p-4 rounded-2xl border transition-all ${
+                    (auc.isAutoBidEnabled || auc.autoBidUser)
+                      ? 'bg-gradient-to-r from-emerald-950/60 via-[#0a1829] to-amber-950/40 border-emerald-500/50 shadow-lg shadow-emerald-500/10'
+                      : 'bg-[#05070a] border-[#1e293b]'
+                  }`}>
+                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#1e293b]/70">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                          (auc.isAutoBidEnabled || auc.autoBidUser) ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/30 animate-pulse' : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          <Cpu className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black uppercase tracking-wider text-white">
+                              Auto-Bid Assistant
+                            </span>
+                            {(auc.isAutoBidEnabled || auc.autoBidUser) && (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-black text-[10px] border border-emerald-500/40 animate-pulse">
+                                ACTIVE {auc.userAutoBidCeilingCr ? `• CAP: ₹${auc.userAutoBidCeilingCr.toFixed(2)} Cr` : '• AI VALUATION'}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-400">
+                            Automatically place bids on your behalf based on AI valuation or your custom ceiling
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        id="btn-arena-toggle-autobid"
+                        onClick={() => {
+                          const isCurrentlyOn = Boolean(auc.isAutoBidEnabled || auc.autoBidUser);
+                          toggleAutoBid(!isCurrentlyOn);
+                        }}
+                        className={`px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md cursor-pointer ${
+                          (auc.isAutoBidEnabled || auc.autoBidUser)
+                            ? 'bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40'
+                            : 'bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 text-black font-black shadow-emerald-500/20'
+                        }`}
+                      >
+                        {(auc.isAutoBidEnabled || auc.autoBidUser) ? (
+                          <>
+                            <X className="w-3.5 h-3.5" />
+                            <span>Stop Auto-Bid</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="w-3.5 h-3.5 fill-black" />
+                            <span>Enable Auto-Bid</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Ceiling Controls */}
+                    <div className="pt-3 space-y-3">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                        <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+                          Auto-Bid Ceiling Limit:
+                        </span>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          <div className="flex items-center bg-[#0e1628] rounded-xl border border-[#1e293b] p-1">
+                            <button
+                              onClick={() => {
+                                const cur = auc.userAutoBidCeilingCr || (aiAdvice?.recommendedMaxBidCr ?? player?.basePriceCr ?? 2.0);
+                                setAutoBidCeiling(Math.max(player?.basePriceCr || 0.5, Number((cur - 0.5).toFixed(2))));
+                              }}
+                              className="px-2 py-1 hover:bg-[#1e293b] text-slate-300 rounded-lg font-mono font-bold text-xs cursor-pointer"
+                              title="Decrease ceiling by ₹0.50 Cr"
+                            >
+                              -0.5
+                            </button>
+                            <div className="px-3 py-1 font-mono font-black text-amber-300 text-sm">
+                              {auc.userAutoBidCeilingCr ? `₹${auc.userAutoBidCeilingCr.toFixed(2)} Cr` : `AI (₹${aiAdvice?.recommendedMaxBidCr || 5.0} Cr)`}
+                            </div>
+                            <button
+                              onClick={() => {
+                                const cur = auc.userAutoBidCeilingCr || (aiAdvice?.recommendedMaxBidCr ?? player?.basePriceCr ?? 2.0);
+                                setAutoBidCeiling(Number((cur + 0.5).toFixed(2)));
+                              }}
+                              className="px-2 py-1 hover:bg-[#1e293b] text-slate-300 rounded-lg font-mono font-bold text-xs cursor-pointer"
+                              title="Increase ceiling by ₹0.50 Cr"
+                            >
+                              +0.5
+                            </button>
+                          </div>
+
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const parsed = parseFloat(autoBidCustomInput);
+                              if (!isNaN(parsed) && parsed > 0) {
+                                setAutoBidCeiling(parsed);
+                                setAutoBidCustomInput('');
+                              }
+                            }}
+                            className="flex items-center gap-1"
+                          >
+                            <input
+                              type="number"
+                              step="0.25"
+                              min={player?.basePriceCr || 0.2}
+                              max={userTeam?.purseCr || 120}
+                              value={autoBidCustomInput}
+                              onChange={(e) => setAutoBidCustomInput(e.target.value)}
+                              placeholder="₹ Cr"
+                              className="w-20 px-2 py-1.5 rounded-xl bg-[#0e1628] border border-[#1e293b] text-white font-mono text-xs focus:outline-none focus:border-[#D4AF37]"
+                            />
+                            <button
+                              type="submit"
+                              className="px-2.5 py-1.5 rounded-xl bg-[#1e293b] hover:bg-[#334155] text-slate-200 text-[10px] font-bold uppercase cursor-pointer"
+                            >
+                              Set
+                            </button>
+                          </form>
+                        </div>
+                      </div>
+
+                      {/* Presets */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        <span className="text-[10px] text-slate-500 uppercase font-black mr-1">Presets:</span>
+                        {[
+                          { label: 'AI Scout Valuation', val: null },
+                          { label: `Base + ₹2 Cr (₹${((player?.basePriceCr || 2.0) + 2.0).toFixed(2)})`, val: Number(((player?.basePriceCr || 2.0) + 2.0).toFixed(2)) },
+                          { label: `Base + ₹5 Cr (₹${((player?.basePriceCr || 2.0) + 5.0).toFixed(2)})`, val: Number(((player?.basePriceCr || 2.0) + 5.0).toFixed(2)) },
+                          { label: '₹8.0 Cr', val: 8.0 },
+                          { label: '₹14.0 Cr', val: 14.0 },
+                          { label: '₹20.0 Cr', val: 20.0 }
+                        ].map((preset, idx) => {
+                          const isSelected = preset.val === null ? !auc.userAutoBidCeilingCr : Math.abs((auc.userAutoBidCeilingCr || 0) - (preset.val || 0)) < 0.05;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setAutoBidCeiling(preset.val)}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition cursor-pointer border ${
+                                isSelected
+                                  ? 'bg-[#D4AF37]/20 text-[#D4AF37] border-[#D4AF37]/50 shadow-sm'
+                                  : 'bg-[#0e1628] hover:bg-[#1e293b] text-slate-400 border-[#1e293b] hover:text-white'
+                              }`}
+                            >
+                              {preset.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

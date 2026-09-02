@@ -244,7 +244,7 @@ export const AuctionLayout: React.FC<AuctionLayoutProps> = ({ children }) => {
                     {auc.soldPlayerRecords.slice().reverse().map((record, i) => {
                       const buyer = gameState.teams[record.buyingTeamId];
                       return (
-                        <div key={i} className="flex items-center justify-between p-2.5 bg-[#05070a] rounded-xl border border-[#1e293b]">
+                        <div key={record.player.id || `sold_${record.buyingTeamId}_${i}`} className="flex items-center justify-between p-2.5 bg-[#05070a] rounded-xl border border-[#1e293b]">
                           <div className="flex items-center gap-2.5">
                             <span 
                               className="px-2 py-0.5 rounded text-[10px] font-black"

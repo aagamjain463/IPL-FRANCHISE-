@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useRe
 import { GameSave, GameScreen, AppTab, FCThemeMode, GoogleAccountProfile, SAVE_VERSION, SeasonSummary } from '../types/game';
 import { Player } from '../types/cricket';
 import { Team } from '../types/team';
-import { AuctionState, AuctionBid } from '../types/auction';
+import { AuctionState, AuctionBid, AIDecisionType } from '../types/auction';
 import { MatchState, MatchPlayingXI, InningsState } from '../types/cricket';
 import { StandingsRow, TournamentFixture } from '../types/tournament';
 import { INITIAL_TEAMS } from '../data/teams';
@@ -86,7 +86,8 @@ interface GameContextType {
   fastForwardAuctionPlayer: () => void;
   simulateEntireAuction: (fromBeginning?: boolean, autoBuildUserSquad?: boolean) => void;
   simulateCurrentAuctionSet: () => void;
-  toggleAutoBid: () => void;
+  toggleAutoBid: (enabled?: boolean, ceilingCr?: number, strategy?: 'AI_VALUATION' | 'CUSTOM_CEILING' | 'AGGRESSIVE') => void;
+  setAutoBidCeiling: (ceilingCr: number | null) => void;
   togglePauseAuction: () => void;
   // Playing XI actions
   updateUserPlayingXI: (xi: MatchPlayingXI) => void;
@@ -550,6 +551,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     auc.hammerState = 'Bidding';
     auc.auctionTimerSeconds = 10;
     auc.bidHistory.unshift({
+      id: `bid_${userTeam.id}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       teamId: userTeam.id,
       teamShortName: userTeam.shortName,
       bidAmountCr: nextBid,
@@ -683,8 +685,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     saveCurrentGame();
   };
 
-  const simulateEntireAuction = (fromBeginning: boolean = false, autoBuildUserSquad: boolean = true) => {
+  const simulateEntireAuction = (fromBeginning: boolean | unknown = false, autoBuildUserSquad: boolean | unknown = true) => {
     if (!gameState || !gameState.auctionState) return;
+
+    const isFromBeginning = typeof fromBeginning === 'boolean' ? fromBeginning : false;
+    const isAutoBuild = typeof autoBuildUserSquad === 'boolean' ? autoBuildUserSquad : true;
 
     const targetIds = gameState.scoutingDepartment?.auctionTargetIds || [];
     const { updatedAuction, updatedTeams, updatedPlayers } = simulateFullAuctionPool(
@@ -693,8 +698,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       gameState.allPlayers,
       gameState.userTeamId,
       {
-        fromBeginning,
-        userAutoBid: autoBuildUserSquad,
+        fromBeginning: isFromBeginning,
+        userAutoBid: isAutoBuild,
         userPriorityTargetIds: targetIds
       }
     );
@@ -762,13 +767,38 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch {}
   };
 
-  const toggleAutoBid = () => {
+  const toggleAutoBid = (enabled?: boolean | unknown, ceilingCr?: number | unknown, strategy?: 'AI_VALUATION' | 'CUSTOM_CEILING' | 'AGGRESSIVE') => {
     if (!gameState || !gameState.auctionState) return;
+    const isCurrentlyOn = Boolean(gameState.auctionState.autoBidUser || gameState.auctionState.isAutoBidEnabled);
+    const nextState = typeof enabled === 'boolean' ? enabled : !isCurrentlyOn;
+    const safeCeiling = typeof ceilingCr === 'number' && !isNaN(ceilingCr) ? ceilingCr : gameState.auctionState.userAutoBidCeilingCr;
+    const safeStrategy = (strategy === 'AI_VALUATION' || strategy === 'CUSTOM_CEILING' || strategy === 'AGGRESSIVE')
+      ? strategy
+      : (gameState.auctionState.autoBidStrategy || 'AI_VALUATION');
+
     setGameState({
       ...gameState,
       auctionState: {
         ...gameState.auctionState,
-        autoBidUser: !gameState.auctionState.autoBidUser
+        autoBidUser: nextState,
+        isAutoBidEnabled: nextState,
+        userAutoBidCeilingCr: safeCeiling,
+        autoBidStrategy: safeStrategy
+      }
+    });
+    if (nextState) {
+      soundFx.playBatHit(false, true);
+    }
+  };
+
+  const setAutoBidCeiling = (ceilingCr: number | null | unknown) => {
+    if (!gameState || !gameState.auctionState) return;
+    const safeVal = typeof ceilingCr === 'number' && !isNaN(ceilingCr) ? ceilingCr : undefined;
+    setGameState({
+      ...gameState,
+      auctionState: {
+        ...gameState.auctionState,
+        userAutoBidCeilingCr: safeVal
       }
     });
   };
@@ -880,7 +910,50 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (prev.auctionState.isPaused) return prev; // ABSOLUTE PAUSE LOCK
         const auc = { ...prev.auctionState };
         
-        // AI bid candidate
+        // 1. User Auto-Bid logic (if Auto-Bid is active and user is not holding the leading bid)
+        const isAutoBidOn = Boolean(auc.autoBidUser || auc.isAutoBidEnabled);
+        if (isAutoBidOn && auc.currentLeadingTeamId !== prev.userTeamId && auc.activePlayer) {
+          const userTeam = prev.teams[prev.userTeamId];
+          if (userTeam) {
+            const userSquad = (userTeam.rosterPlayerIds || []).map(id => prev.allPlayers[id]).filter(Boolean);
+            const overseasCount = userSquad.filter(p => p.isOverseas).length;
+            const canOverseas = !auc.activePlayer.isOverseas || overseasCount < 8;
+            const canSquadSize = userSquad.length < 25;
+
+            if (canOverseas && canSquadSize) {
+              let userCeiling = auc.userAutoBidCeilingCr;
+              if (!userCeiling || userCeiling <= 0) {
+                const remainingTargets = Math.max(1, 25 - userSquad.length);
+                const phase = auc.currentPlayerIndex / Math.max(1, auc.allPlayerPool.length) < 0.2 ? 'EARLY' : 'MIDDLE';
+                const val = evaluatePlayerValueForTeam(auc.activePlayer, userTeam, userSquad, remainingTargets, phase, auc.allPlayerPool.slice(auc.currentPlayerIndex + 1));
+                userCeiling = Math.max(auc.activePlayer.basePriceCr, Number(val.toFixed(2)));
+              }
+
+              const nextInc = getBidIncrement(auc.currentBidCr);
+              const nextUserBid = Number((auc.currentBidCr + nextInc).toFixed(2));
+
+              if (userTeam.purseCr >= nextUserBid && nextUserBid <= userCeiling && Math.random() > 0.25) {
+                auc.currentBidCr = nextUserBid;
+                auc.currentLeadingTeamId = userTeam.id;
+                auc.hammerState = 'Bidding';
+                auc.auctionTimerSeconds = 8;
+                auc.bidHistory.unshift({
+                  id: `bid_${userTeam.id}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                  teamId: userTeam.id,
+                  teamShortName: userTeam.shortName,
+                  bidAmountCr: nextUserBid,
+                  timestamp: Date.now(),
+                  decisionType: 'AUTO_BID' as AIDecisionType,
+                  biddingWarCount: auc.bidHistory.length + 1
+                });
+                audioManager.playAuctionBid(true);
+                return { ...prev, auctionState: auc };
+              }
+            }
+          }
+        }
+
+        // 2. AI bid candidate
         const aiBid = getNextAIBid(auc, prev.teams, prev.allPlayers, prev.userTeamId);
         if (aiBid && Math.random() > 0.4) {
           const wasUserLeading = auc.currentLeadingTeamId === prev.userTeamId;
@@ -890,6 +963,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           auc.hammerState = 'Bidding';
           auc.auctionTimerSeconds = 8;
           auc.bidHistory.unshift({
+            id: `bid_${aiBid.teamId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
             teamId: aiBid.teamId,
             teamShortName: prev.teams[aiBid.teamId]?.shortName || 'AI',
             bidAmountCr: aiBid.bidAmountCr,
@@ -2153,6 +2227,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         simulateEntireAuction,
         simulateCurrentAuctionSet,
         toggleAutoBid,
+        setAutoBidCeiling,
         togglePauseAuction,
         setThemeMode,
         signInWithGoogle,

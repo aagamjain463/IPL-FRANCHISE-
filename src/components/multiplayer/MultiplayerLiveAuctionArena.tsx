@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   MultiplayerRoomState, 
   MultiplayerParticipant,
@@ -7,11 +7,13 @@ import {
 import { INITIAL_TEAMS } from '../../data/teams';
 import { 
   Gavel, Clock, Zap, ShieldCheck, Play, Pause, 
-  Users, CheckCircle2, AlertCircle, ArrowLeft, Trophy, Sparkles, X, ChevronRight
+  Users, CheckCircle2, AlertCircle, ArrowLeft, Trophy, Sparkles, X, ChevronRight,
+  Cpu, RotateCcw, Sliders, Check
 } from 'lucide-react';
 import { Player } from '../../types/cricket';
 import { getMultiplayerBidIncrement, normalizeCr } from '../../multiplayer/auctionRules';
 import { LeaderboardMiniPanel } from '../LeaderboardMiniPanel';
+import { auctionAudio } from '../../services/multiplayerAuctionClient';
 
 interface MultiplayerLiveAuctionArenaProps {
   roomState: MultiplayerRoomState;
@@ -45,6 +47,14 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
   const [customBidInput, setCustomBidInput] = useState<string>('');
   const [showFinishConfirm, setShowFinishConfirm] = useState<boolean>(false);
 
+  // Auto-Bid state
+  const [isAutoBidActive, setIsAutoBidActive] = useState<boolean>(false);
+  const [autoBidMaxCr, setAutoBidMaxCr] = useState<number>(0);
+  const [autoBidCustomInput, setAutoBidCustomInput] = useState<string>('');
+  const [autoBidStatusMessage, setAutoBidStatusMessage] = useState<string>('');
+  const isAutoBiddingPendingRef = useRef<boolean>(false);
+  const currentLotIdRef = useRef<string | null>(null);
+
   const currentParticipant = roomState.participants.find(p => p.id === currentUserId);
   const myFranchise = currentParticipant?.franchiseId ? INITIAL_TEAMS[currentParticipant.franchiseId] : null;
   const currentLot = roomState.currentLotPlayer;
@@ -69,6 +79,86 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
 
   const canPlaceAnyBid = !isUserLeading && !roomState.isPaused && roomState.status === 'in_progress' && !isOverseasCapped && !isSquadCapped;
 
+  // Recommended Auto-Bid valuation for current lot
+  const recommendedValuation = useMemo(() => {
+    if (!currentLot) return 5.0;
+    if (currentLot.overall >= 92) return Math.max(12.0, Number((currentLot.basePriceCr * 3.5).toFixed(2)));
+    if (currentLot.overall >= 88) return Math.max(8.0, Number((currentLot.basePriceCr * 2.8).toFixed(2)));
+    if (currentLot.overall >= 84) return Math.max(4.5, Number((currentLot.basePriceCr * 2.0).toFixed(2)));
+    return Math.max(1.5, Number((currentLot.basePriceCr * 1.5).toFixed(2)));
+  }, [currentLot]);
+
+  // Sync / Reset Auto-Bid on new Lot
+  useEffect(() => {
+    if (currentLot && currentLot.id !== currentLotIdRef.current) {
+      currentLotIdRef.current = currentLot.id;
+      const initialCeiling = Number(Math.max(currentLot.basePriceCr + 2.0, recommendedValuation).toFixed(2));
+      setAutoBidMaxCr(initialCeiling);
+      setAutoBidCustomInput(initialCeiling.toFixed(2));
+      setIsAutoBidActive(false);
+      setAutoBidStatusMessage('');
+      isAutoBiddingPendingRef.current = false;
+    }
+  }, [currentLot?.id, recommendedValuation]);
+
+  // Auto-Bid automated countering reaction loop
+  useEffect(() => {
+    if (!isAutoBidActive || !currentLot || roomState.isPaused || roomState.status !== 'in_progress') {
+      return;
+    }
+
+    if (roomState.currentHighBidderId !== currentUserId) {
+      const inc = getMultiplayerBidIncrement(roomState.currentHighBidCr);
+      const nextNeededBid = normalizeCr(roomState.currentHighBidCr + inc);
+
+      if (nextNeededBid <= autoBidMaxCr) {
+        if (myPurse >= nextNeededBid && !isOverseasCapped && !isSquadCapped && !isAutoBiddingPendingRef.current) {
+          isAutoBiddingPendingRef.current = true;
+          setAutoBidStatusMessage(`⚡ Auto-countering at ₹${nextNeededBid.toFixed(2)} Cr...`);
+
+          const timer = setTimeout(async () => {
+            try {
+              const success = await onPlaceBid(nextNeededBid);
+              if (success) {
+                auctionAudio.playBidPaddleSound();
+                setAutoBidStatusMessage(`⚡ Auto-bid placed: ₹${nextNeededBid.toFixed(2)} Cr`);
+              }
+            } catch {
+              setAutoBidStatusMessage('Auto-bid pending...');
+            } finally {
+              isAutoBiddingPendingRef.current = false;
+            }
+          }, 500);
+
+          return () => {
+            clearTimeout(timer);
+            isAutoBiddingPendingRef.current = false;
+          };
+        } else if (myPurse < nextNeededBid) {
+          setIsAutoBidActive(false);
+          setAutoBidStatusMessage(`❌ Auto-bid stopped: Insufficient purse (₹${myPurse.toFixed(2)} Cr)`);
+        }
+      } else {
+        setAutoBidStatusMessage(`⚠️ Bid ₹${roomState.currentHighBidCr.toFixed(2)} Cr exceeds Auto-Bid ceiling (₹${autoBidMaxCr.toFixed(2)} Cr)`);
+      }
+    } else {
+      setAutoBidStatusMessage(`✅ You hold the highest bid (₹${roomState.currentHighBidCr.toFixed(2)} Cr)`);
+    }
+  }, [
+    isAutoBidActive,
+    autoBidMaxCr,
+    roomState.currentHighBidCr,
+    roomState.currentHighBidderId,
+    roomState.isPaused,
+    roomState.status,
+    currentLot?.id,
+    currentUserId,
+    myPurse,
+    isOverseasCapped,
+    isSquadCapped,
+    onPlaceBid
+  ]);
+
   const handleCustomBid = (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(customBidInput);
@@ -76,6 +166,12 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
       onPlaceBid(amount);
       setCustomBidInput('');
     }
+  };
+
+  const handleSetAutoBidCeiling = (amount: number) => {
+    const val = Number(amount.toFixed(2));
+    setAutoBidMaxCr(val);
+    setAutoBidCustomInput(val.toFixed(2));
   };
 
   return (
@@ -377,6 +473,175 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
                     })}
                   </div>
                 )}
+              </div>
+
+              {/* AUTO-BID MANAGER PANEL */}
+              <div className={`p-4 rounded-2xl border transition-all ${
+                isAutoBidActive 
+                  ? 'bg-gradient-to-r from-emerald-950/70 via-[#0a1829] to-amber-950/50 border-emerald-500/60 shadow-lg shadow-emerald-500/10' 
+                  : 'bg-[#05070a] border-[#1e293b]'
+              }`}>
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#1e293b]/70">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                      isAutoBidActive ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/30 animate-pulse' : 'bg-slate-800 text-slate-400'
+                    }`}>
+                      <Cpu className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black uppercase tracking-wider text-white">
+                          Auto-Bid Engine
+                        </span>
+                        {isAutoBidActive && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-black text-[10px] border border-emerald-500/40 animate-pulse">
+                            ACTIVE • CAP: ₹{autoBidMaxCr.toFixed(2)} Cr
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Automatically counters rival bids up to your maximum ceiling
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Toggle Button */}
+                  <button
+                    id="btn-multiplayer-toggle-autobid"
+                    onClick={() => {
+                      if (!isAutoBidActive) {
+                        if (autoBidMaxCr <= roomState.currentHighBidCr) {
+                          const nextCeiling = Number((roomState.currentHighBidCr + 2.0).toFixed(2));
+                          setAutoBidMaxCr(nextCeiling);
+                          setAutoBidCustomInput(nextCeiling.toFixed(2));
+                        }
+                        setIsAutoBidActive(true);
+                      } else {
+                        setIsAutoBidActive(false);
+                        setAutoBidStatusMessage('');
+                      }
+                    }}
+                    className={`px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md cursor-pointer ${
+                      isAutoBidActive
+                        ? 'bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40'
+                        : 'bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 text-black font-black shadow-emerald-500/20'
+                    }`}
+                  >
+                    {isAutoBidActive ? (
+                      <>
+                        <X className="w-3.5 h-3.5" />
+                        <span>Stop Auto-Bid</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-3.5 h-3.5 fill-black" />
+                        <span>Enable Auto-Bid</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Ceiling Controls & Presets */}
+                <div className="pt-3 space-y-3">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                    <span className="text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+                      Set Maximum Ceiling:
+                    </span>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <div className="flex items-center bg-[#0e1628] rounded-xl border border-[#1e293b] p-1">
+                        <button
+                          onClick={() => handleSetAutoBidCeiling(Math.max(currentLot.basePriceCr, autoBidMaxCr - 0.5))}
+                          className="px-2 py-1 hover:bg-[#1e293b] text-slate-300 rounded-lg font-mono font-bold text-xs cursor-pointer"
+                          title="Decrease ceiling by ₹0.50 Cr"
+                        >
+                          -0.5
+                        </button>
+                        <div className="px-3 py-1 font-mono font-black text-amber-300 text-sm">
+                          ₹{autoBidMaxCr.toFixed(2)} Cr
+                        </div>
+                        <button
+                          onClick={() => handleSetAutoBidCeiling(autoBidMaxCr + 0.5)}
+                          className="px-2 py-1 hover:bg-[#1e293b] text-slate-300 rounded-lg font-mono font-bold text-xs cursor-pointer"
+                          title="Increase ceiling by ₹0.50 Cr"
+                        >
+                          +0.5
+                        </button>
+                      </div>
+
+                      {/* Manual input */}
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const parsed = parseFloat(autoBidCustomInput);
+                          if (!isNaN(parsed) && parsed > 0) {
+                            handleSetAutoBidCeiling(parsed);
+                          }
+                        }}
+                        className="flex items-center gap-1"
+                      >
+                        <input
+                          type="number"
+                          step="0.25"
+                          min={currentLot.basePriceCr}
+                          max={myPurse}
+                          value={autoBidCustomInput}
+                          onChange={(e) => setAutoBidCustomInput(e.target.value)}
+                          placeholder="₹ Cr"
+                          className="w-20 px-2 py-1.5 rounded-xl bg-[#0e1628] border border-[#1e293b] text-white font-mono text-xs focus:outline-none focus:border-[#D4AF37]"
+                        />
+                        <button
+                          type="submit"
+                          className="px-2.5 py-1.5 rounded-xl bg-[#1e293b] hover:bg-[#334155] text-slate-200 text-[10px] font-bold uppercase cursor-pointer"
+                        >
+                          Set
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  {/* Preset Ceiling Chips */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[10px] text-slate-500 uppercase font-black mr-1">Presets:</span>
+                    {[
+                      { label: `Valuation (₹${recommendedValuation} Cr)`, val: recommendedValuation },
+                      { label: `Base + ₹2 Cr (₹${(currentLot.basePriceCr + 2.0).toFixed(2)})`, val: Number((currentLot.basePriceCr + 2.0).toFixed(2)) },
+                      { label: `Base + ₹5 Cr (₹${(currentLot.basePriceCr + 5.0).toFixed(2)})`, val: Number((currentLot.basePriceCr + 5.0).toFixed(2)) },
+                      { label: '₹8.0 Cr', val: 8.0 },
+                      { label: '₹14.0 Cr', val: 14.0 },
+                      { label: '₹20.0 Cr', val: 20.0 }
+                    ].map((preset, idx) => {
+                      const isSelected = Math.abs(autoBidMaxCr - preset.val) < 0.05;
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleSetAutoBidCeiling(preset.val)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition cursor-pointer border ${
+                            isSelected
+                              ? 'bg-[#D4AF37]/20 text-[#D4AF37] border-[#D4AF37]/50 shadow-sm'
+                              : 'bg-[#0e1628] hover:bg-[#1e293b] text-slate-400 border-[#1e293b] hover:text-white'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Auto-Bid Status / Live Activity Banner */}
+                  {autoBidStatusMessage && (
+                    <div className={`p-2.5 rounded-xl text-xs flex items-center gap-2 border font-medium ${
+                      autoBidStatusMessage.includes('exceeds') || autoBidStatusMessage.includes('stopped')
+                        ? 'bg-amber-950/40 text-amber-300 border-amber-500/30'
+                        : isAutoBidActive
+                        ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30'
+                        : 'bg-[#0e1628] text-slate-300 border-[#1e293b]'
+                    }`}>
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${isAutoBidActive ? 'bg-emerald-400 animate-ping' : 'bg-slate-500'}`} />
+                      <span className="truncate">{autoBidStatusMessage}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ) : (
