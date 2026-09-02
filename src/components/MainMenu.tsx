@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { track } from '@vercel/analytics';
 import { useGame } from '../context/GameContext';
 import { INITIAL_TEAMS } from '../data/teams';
 import { classifyAIPersonality } from '../engine/auctionEngine';
@@ -79,6 +80,11 @@ export const MainMenu: React.FC = () => {
   };
 
   const begin = () => {
+    track('game_started', {
+      team: selectedTeamId,
+      mode: mode === 'season' ? 'season' : 'auction',
+    });
+
     startNewFranchise(selectedTeamId, managerName || 'Coach', mode === 'season');
   };
 
