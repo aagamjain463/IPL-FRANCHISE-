@@ -215,7 +215,8 @@ export const SCREEN_ROUTES: ScreenRouteMeta[] = [
   { path: '/leaderboard', screen: 'Dashboard', tab: 'Leaderboard', title: 'World Rankings', eyebrow: 'Global Leaderboard', subtitle: 'Competitive auction rankings backed by server-confirmed results.', variant: 'hub', isStandaloneMode: false, loadingMessages: ['Loading World Rankings', 'Validating Server Results', 'Preparing Rank Table'] },
   { path: '/whatif', screen: 'Dashboard', tab: 'WhatIfSimulator', title: 'What-If Lab', eyebrow: 'Simulation', subtitle: 'Run alternative cricket futures.', variant: 'scouting', isStandaloneMode: false, loadingMessages: ['Opening Simulation Lab', 'Loading Tactical Models', 'Preparing What-If Engine'] },
   { path: '/offseason', screen: 'Dashboard', tab: 'OffSeason', title: 'Off-Season', eyebrow: 'Dynasty Reset', subtitle: 'Retentions, pitch planning and next auction preparation.', variant: 'franchise', isStandaloneMode: false, loadingMessages: ['Opening Off-Season Room', 'Loading Retention Board', 'Preparing Next Season'] },
-  { path: '/recap', screen: 'Dashboard', tab: 'SeasonRecap', title: 'Season Recap', eyebrow: 'Awards Night', subtitle: 'Awards, champions and campaign history.', variant: 'tournament', isStandaloneMode: false, loadingMessages: ['Opening Awards Stage', 'Loading Season History', 'Preparing Trophy Presentation'] }
+  { path: '/recap', screen: 'Dashboard', tab: 'SeasonRecap', title: 'Season Recap', eyebrow: 'Awards Night', subtitle: 'Awards, champions and campaign history.', variant: 'tournament', isStandaloneMode: false, loadingMessages: ['Opening Awards Stage', 'Loading Season History', 'Preparing Trophy Presentation'] },
+  { path: '/walkout', screen: 'Walkout', tab: 'Walkout', title: 'Walkout Reveal', eyebrow: 'Marquee Card Reveal', subtitle: 'Stadium tunnel bio-metric walkout and signature card reveal.', variant: 'hub', isStandaloneMode: false, loadingMessages: ['Initializing Stadium Tunnel', 'Syncing Bio-Metric Card', 'Igniting Stadium Spotlights'] }
 ];
 
 export const ROUTE_BY_PATH = SCREEN_ROUTES.reduce<Record<string, ScreenRouteMeta>>((acc, route) => {
@@ -245,6 +246,7 @@ const PREFERRED_TAB_ROUTES: Partial<Record<AppTab, string>> = {
   WhatIfSimulator: '/whatif',
   OffSeason: '/offseason',
   SeasonRecap: '/recap',
+  Walkout: '/walkout',
   MultiplayerAuction: '/multiplayer-auction'
 };
 
@@ -254,6 +256,7 @@ export const getRouteMetaByPath = (pathname: string): ScreenRouteMeta => {
 };
 
 export const getRouteMetaForState = (screen: GameScreen, tab: AppTab): ScreenRouteMeta => {
+  if (screen === 'Walkout' || tab === 'Walkout') return ROUTE_BY_PATH['/walkout'];
   if (screen === 'MultiplayerAuction' || tab === 'MultiplayerAuction') return ROUTE_BY_PATH['/multiplayer-auction'];
   if (screen === 'Auction' || tab === 'AuctionLive') return ROUTE_BY_PATH['/auction'];
   if (screen === 'MatchLive' || tab === 'MatchLive') return ROUTE_BY_PATH['/match'];

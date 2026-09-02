@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react';
 import { useGame } from '../context/GameContext';
 import { FCPlayerCard } from './fc26/FCPlayerCard';
-import { FCPackOpeningModal } from './fc26/FCPackOpeningModal';
 import { computeTeamChemistry } from '../engine/chemistryEngine';
 import { getFranchiseLevelInfo, INITIAL_OBJECTIVES } from '../engine/progressionEngine';
 import { deriveRewardProgression, ensureRewardEcosystem } from '../rewards/rewardEngine';
@@ -281,12 +280,61 @@ export const DashboardView: React.FC = () => {
         ))}
       </motion.section>
 
+      {/* Highlight of the game: Live Multiplayer Auction marquee banner moved prominently to the top */}
+      <motion.section 
+        id="home-multiplayer-spotlight"
+        className="home-multiplayer-highlight cursor-pointer"
+        variants={shouldReduceMotion ? undefined : cardMotion}
+        onClick={() => enterWorld('MultiplayerAuction' as AppTab, 'MultiplayerAuction' as GameScreen)}
+      >
+        <div className="min-w-0">
+          <small className="flex items-center gap-1.5 text-amber-300 font-black tracking-widest text-[11px] uppercase">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <Radio className="w-3.5 h-3.5 text-emerald-400" />
+            <span>GLOBAL LIVE MULTIPLAYER</span>
+          </small>
+          <h2 className="text-white font-heading font-black text-2xl sm:text-4xl uppercase tracking-tight mt-1">
+            Live Multiplayer Auction
+          </h2>
+          <p className="text-slate-300 text-xs sm:text-sm mt-1 max-w-xl line-clamp-2">
+            Host real-time auction rooms or join friends across the globe in a live synchronized bidding war.
+          </p>
+        </div>
+
+        <div className="home-multiplayer-highlight__stats shrink-0">
+          <span><b>REAL</b> PVP</span>
+          <span><b>SYNC</b> LIVE</span>
+          <span><b>10</b> TEAMS</span>
+        </div>
+
+        <button 
+          id="btn-enter-multiplayer-top"
+          className="btn-volt shrink-0 px-5 py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            enterWorld('MultiplayerAuction' as AppTab, 'MultiplayerAuction' as GameScreen);
+          }}
+        >
+          <span>JOIN WAR ROOM</span>
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </motion.section>
+
       <section className="ultimate-hub__grid">
         <aside className="ultimate-hub__side">
           <div className="ultimate-panel ultimate-panel--star">
             <div className="ultimate-panel__head">
-              <span><Flame className="w-4 h-4" /> Franchise Icon</span>
-              {captainPlayer && <button onClick={() => setWalkoutPlayer(captainPlayer)}>Walkout</button>}
+              <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-amber-400">
+                <Flame className="w-4 h-4 text-amber-400" /> Franchise Star
+              </span>
+              {captainPlayer && (
+                <button 
+                  onClick={() => setWalkoutPlayer(captainPlayer)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-black text-[10px] uppercase tracking-wider transition cursor-pointer"
+                >
+                  Walkout
+                </button>
+              )}
             </div>
             {captainPlayer ? (
               <div className="ultimate-star" onClick={() => setSelectedPlayerForModal(captainPlayer)}>
@@ -297,49 +345,112 @@ export const DashboardView: React.FC = () => {
             )}
           </div>
 
+          {/* Objectives Section - Enhanced Typography & Modern Sports Styling */}
           <div className="ultimate-panel">
             <div className="ultimate-panel__head">
-              <span><Target className="w-4 h-4" /> Objectives</span>
-              <button onClick={() => enterWorld('Rewards')}>Vault</button>
+              <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-emerald-400">
+                <Target className="w-4 h-4 text-emerald-400" /> Target Objectives
+              </span>
+              <button 
+                onClick={() => enterWorld('Rewards')}
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-black text-[10px] uppercase tracking-wider transition cursor-pointer"
+              >
+                Vault
+              </button>
             </div>
-            <div className="ultimate-objective-meter">
-              <b>{completedObjectives}/{objectives.length || 1}</b>
-              <div><span style={{ width: `${(completedObjectives / Math.max(1, objectives.length)) * 100}%` }} /></div>
+
+            {/* Objective Progress Bar */}
+            <div className="p-2.5 rounded-xl bg-[#060a14] border border-white/10 mb-2.5">
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-300 mb-1.5">
+                <span className="text-[10px] uppercase tracking-wider text-slate-400">Level Progress</span>
+                <span className="font-mono text-amber-400 font-black">{completedObjectives} / {objectives.length || 1} Complete</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-slate-800/80 overflow-hidden border border-white/5">
+                <div 
+                  className="h-full bg-gradient-to-r from-emerald-500 via-cyan-400 to-amber-400 rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                  style={{ width: `${Math.min(100, Math.max(8, (completedObjectives / Math.max(1, objectives.length)) * 100))}%` }} 
+                />
+              </div>
             </div>
-            <div className="ultimate-list">
-              {activeObjectives.map(obj => (
-                <button key={obj.id} onClick={() => enterWorld('Rewards')}>
-                  <span>{obj.title}</span>
-                  <em>{Math.round((obj.progress / Math.max(1, obj.target)) * 100)}%</em>
-                </button>
-              ))}
+
+            {/* Objective Cards */}
+            <div className="ultimate-list space-y-1.5">
+              {activeObjectives.map(obj => {
+                const pct = Math.min(100, Math.round((obj.progress / Math.max(1, obj.target)) * 100));
+                return (
+                  <button 
+                    key={obj.id} 
+                    onClick={() => enterWorld('Rewards')}
+                    className="w-full p-2.5 rounded-xl bg-[#0a0f1d] hover:bg-[#121b2d] border border-white/10 hover:border-emerald-500/40 transition-all flex items-center justify-between gap-2.5 group cursor-pointer text-left"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="w-5 h-5 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 group-hover:scale-125 transition-transform" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-200 group-hover:text-white truncate">
+                        {obj.title}
+                      </span>
+                    </div>
+                    <span className="shrink-0 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-black">
+                      {pct}%
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
+          {/* Broadcast Wire Section - Clean Sports Feed */}
           <div className="ultimate-panel">
             <div className="ultimate-panel__head">
-              <span><Bell className="w-4 h-4" /> Broadcast Wire</span>
-              <button onClick={() => enterWorld('News')}>News</button>
+              <span className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-cyan-400">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                <Bell className="w-4 h-4 text-cyan-400" /> Broadcast Feed
+              </span>
+              <button 
+                onClick={() => enterWorld('News')}
+                className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-black text-[10px] uppercase tracking-wider transition cursor-pointer"
+              >
+                All News
+              </button>
             </div>
-            <div className="ultimate-news">
+            
+            <div className="ultimate-news space-y-1.5">
               {latestNews.length ? latestNews.map(item => (
-                <button key={item.id} onClick={() => enterWorld('News')}>
-                  <b>{item.category}</b>
-                  <span>{item.title}</span>
+                <button 
+                  key={item.id} 
+                  onClick={() => enterWorld('News')}
+                  className="w-full p-2.5 rounded-xl bg-[#0a0f1d] hover:bg-[#121b2d] border border-white/10 hover:border-cyan-500/40 transition-all flex flex-col gap-1 group cursor-pointer text-left"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                      {item.category}
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-mono font-bold">
+                      WIRE
+                    </span>
+                  </div>
+                  <span className="text-xs font-bold text-slate-200 group-hover:text-white line-clamp-2 leading-tight">
+                    {item.title}
+                  </span>
                 </button>
-              )) : <p className="ultimate-empty">No headlines yet.</p>}
+              )) : (
+                <p className="ultimate-empty text-xs text-slate-400 p-2">No headlines yet.</p>
+              )}
             </div>
           </div>
         </aside>
 
+        {/* Minimalist, Clean & Attractive Game Mode Tiles */}
         <div className="ultimate-hub__worlds">
-          <div className="ultimate-hub__section-title">
+          <div className="ultimate-hub__section-title flex items-end justify-between mb-3">
             <div>
-              <p>Game Modes</p>
-              <h2>Enter the Cricket Universe</h2>
+              <p className="text-amber-400 font-black text-[11px] uppercase tracking-widest">GAME MODES</p>
+              <h2 className="text-white font-heading font-black text-2xl sm:text-3xl uppercase tracking-tight">Enter the Cricket Universe</h2>
             </div>
-            <span>Every tile opens a routed world with cinematic loading</span>
+            <span className="text-xs text-slate-400 font-medium hidden sm:inline-block">Instant Launch</span>
           </div>
+
           <motion.div className="ultimate-hub__world-grid" variants={shouldReduceMotion ? undefined : listContainerMotion}>
             {worlds.map(world => (
               <motion.button
@@ -348,21 +459,53 @@ export const DashboardView: React.FC = () => {
                 whileHover={shouldReduceMotion ? undefined : cardHoverGesture}
                 whileTap={shouldReduceMotion ? undefined : tapGesture}
                 variants={shouldReduceMotion ? undefined : cardMotion}
-                className={`ultimate-world-card ${world.className}`}
-                style={{ '--hub-tone': world.tone } as React.CSSProperties}
+                className="group relative overflow-hidden rounded-2xl p-4 sm:p-5 text-left flex flex-col justify-between min-h-[140px] sm:min-h-[160px] border border-white/10 hover:border-white/25 transition-all duration-300 bg-gradient-to-br from-[#0c1222]/90 via-[#070b16]/95 to-[#04060d] hover:shadow-xl hover:shadow-black/60 cursor-pointer"
+                style={{
+                  boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08)`
+                }}
               >
-                <div className="ultimate-world-card__orb" />
-                <div className="ultimate-world-card__top">
-                  <span>{world.icon}</span>
-                  <em>{world.stat}</em>
+                {/* Subtle Neon Color Glow on Hover */}
+                <div 
+                  className="absolute -right-6 -bottom-6 w-28 h-28 rounded-full opacity-15 group-hover:opacity-35 transition-opacity duration-300 blur-xl pointer-events-none"
+                  style={{ backgroundColor: world.tone }}
+                />
+
+                {/* Top Row: Icon + Stat Chip */}
+                <div className="relative z-10 flex items-center justify-between gap-2">
+                  <div 
+                    className="w-10 h-10 rounded-xl flex items-center justify-center border shadow-md transition-transform duration-300 group-hover:scale-105"
+                    style={{ 
+                      backgroundColor: `${world.tone}15`, 
+                      borderColor: `${world.tone}40`,
+                      color: world.tone 
+                    }}
+                  >
+                    {world.icon}
+                  </div>
+
+                  <span 
+                    className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border font-mono-sport"
+                    style={{ 
+                      backgroundColor: `${world.tone}15`, 
+                      borderColor: `${world.tone}35`,
+                      color: world.tone 
+                    }}
+                  >
+                    {world.stat}
+                  </span>
                 </div>
-                <div>
-                  <p>{world.label}</p>
-                  <h3>{world.title}</h3>
-                  <small>{world.desc}</small>
-                </div>
-                <div className="ultimate-world-card__enter">
-                  ENTER WORLD <ArrowRight className="w-4 h-4" />
+
+                {/* Bottom Row: Minimalist Category & Bold Title */}
+                <div className="relative z-10 mt-3">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-slate-300 transition-colors">
+                    {world.label}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <h3 className="text-base sm:text-lg font-black text-white group-hover:text-amber-300 font-heading uppercase tracking-wide transition-colors">
+                      {world.title}
+                    </h3>
+                    <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-amber-300 group-hover:translate-x-1 transition-all shrink-0" />
+                  </div>
                 </div>
               </motion.button>
             ))}
@@ -381,22 +524,6 @@ export const DashboardView: React.FC = () => {
           <button onClick={() => enterWorld('Rewards')}>VIEW REWARDS <ChevronRight className="w-4 h-4" /></button>
         </motion.section>
       )}
-
-      <motion.section className="home-multiplayer-highlight" variants={shouldReduceMotion ? undefined : cardMotion}>
-        <div>
-          <small><Radio className="w-4 h-4" /> FEATURED LIVE MODE</small>
-          <h2>Live Multiplayer Auction</h2>
-          <p>Host an auction room, share the code, and battle real managers in a synchronized IPL bidding war. No fake rooms. No AI lobbies. Real players only.</p>
-        </div>
-        <div className="home-multiplayer-highlight__stats">
-          <span><b>REAL</b> ROOMS</span>
-          <span><b>SSE</b> LIVE</span>
-          <span><b>10</b> TEAMS</span>
-        </div>
-        <button onClick={() => enterWorld('MultiplayerAuction' as AppTab, 'MultiplayerAuction' as GameScreen)}>
-          ENTER LIVE AUCTION <ChevronRight className="w-4 h-4" />
-        </button>
-      </motion.section>
 
       <section className="ultimate-hub__squad-strip">
         <div className="ultimate-hub__section-title">

@@ -113,6 +113,10 @@ interface GameContextType {
   toggleAuctionTarget: (playerId: string) => void;
   completeScoutMission: (missionId: string) => void;
   markAlertRead: (alertId: string) => void;
+  // Walkout reveal actions
+  currentWalkoutPlayer: Player | null;
+  triggerWalkout: (player: Player) => void;
+  exitWalkout: () => void;
 }
 
 const GameContext = createContext<GameContextType | null>(null);
@@ -125,6 +129,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [activeTab, setActiveTabState] = useState<AppTab>('Dashboard');
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [selectedPlayerForModal, setSelectedPlayerForModal] = useState<Player | null>(null);
+  const [currentWalkoutPlayer, setCurrentWalkoutPlayer] = useState<Player | null>(null);
   const [activeChallenge, setActiveChallenge] = useState<ChallengeScenario | null>(null);
   const [toast, setToast] = useState<{ id: number; message: string; tone?: 'info' | 'success' | 'warn' | 'danger' } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -140,6 +145,21 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const triggerWalkout = (player: Player) => {
+    setCurrentWalkoutPlayer(player);
+    setSelectedPlayerForModal(null);
+    setCurrentScreenState('Walkout');
+    setActiveTabState('Walkout');
+    pushGameRoute('Walkout', 'Walkout');
+  };
+
+  const exitWalkout = () => {
+    setCurrentWalkoutPlayer(null);
+    setCurrentScreenState('Dashboard');
+    setActiveTabState('Dashboard');
+    pushGameRoute('Dashboard', 'Dashboard');
+  };
+
   const setCurrentScreen = (screen: GameScreen) => {
     setCurrentScreenState(screen);
   };
@@ -152,9 +172,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ? 'Auction'
         : tab === 'MatchLive'
           ? 'MatchLive'
-          : currentScreen === 'Auction' || currentScreen === 'MatchLive' || currentScreen === 'MultiplayerAuction'
-            ? 'Dashboard'
-            : currentScreen;
+          : tab === 'Walkout'
+            ? 'Walkout'
+            : currentScreen === 'Auction' || currentScreen === 'MatchLive' || currentScreen === 'MultiplayerAuction' || currentScreen === 'Walkout'
+              ? 'Dashboard'
+              : currentScreen;
     setCurrentScreenState(nextScreen);
     pushGameRoute(nextScreen, tab);
   };
@@ -2120,7 +2142,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         updateWatchlistNote,
         toggleAuctionTarget,
         completeScoutMission,
-        markAlertRead
+        markAlertRead,
+        currentWalkoutPlayer,
+        triggerWalkout,
+        exitWalkout
       }}
     >
       {children}

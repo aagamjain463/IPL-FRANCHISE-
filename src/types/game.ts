@@ -48,9 +48,10 @@ export type AppTab =
   | 'MatchLive'
   | 'News' // Newsroom & ticker
   | 'SeasonRecap' // End-of-season awards & recap
+  | 'Walkout' // FC 26 Marquee Player Walkout Reveal Screen
   | 'OffSeason'; // Retain / release / pre-season prep
 
-export type ScreenView = 'MainMenu' | 'Dashboard' | 'Auction' | 'MultiplayerAuction' | 'MatchLive' | 'PressConference' | 'PostMatchPresentation';
+export type ScreenView = 'MainMenu' | 'Dashboard' | 'Auction' | 'MultiplayerAuction' | 'MatchLive' | 'PressConference' | 'PostMatchPresentation' | 'Walkout';
 export type GameScreen = ScreenView;
 
 export interface NewsArticle {
