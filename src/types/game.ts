@@ -85,6 +85,7 @@ export interface PressConferenceState {
   questions: PressQuestion[];
   currentQuestionIndex: number;
   matchId: string;
+  answeredQuestionIds?: string[];
 }
 
 export interface WhatIfComparisonResult {

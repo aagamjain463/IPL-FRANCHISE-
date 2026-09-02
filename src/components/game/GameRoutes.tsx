@@ -33,7 +33,6 @@ const PressConferenceView = React.lazy(() => import('../PressConferenceView').th
 const SeasonRecapView = React.lazy(() => import('../SeasonRecapView').then(m => ({ default: m.SeasonRecapView })));
 const OffSeasonView = React.lazy(() => import('../OffSeasonView').then(m => ({ default: m.OffSeasonView })));
 const NewsRoomView = React.lazy(() => import('./PremiumWorldViews').then(m => ({ default: m.PremiumNewsView })));
-const WalkoutRevealView = React.lazy(() => import('../fc26/WalkoutRevealView').then(m => ({ default: m.WalkoutRevealView })));
 
 export const GameRoutes: React.FC = () => {
   const { currentScreen, activeTab } = useGame();
@@ -41,15 +40,15 @@ export const GameRoutes: React.FC = () => {
   const fallback = <LoadingScreen route={route} durationMs={3600} />;
 
   if (currentScreen === 'Walkout' || activeTab === 'Walkout') {
+    // Dedicated full-viewport reveal: fits the device width exactly, no page scrolling.
     return (
-      <MainAppLayout>
+      <div className="fixed inset-0 z-[90] w-full h-dvh overflow-hidden bg-[#030712]">
         <WorldScreen route={route} compact>
           <Suspense fallback={fallback}><WalkoutRevealView /></Suspense>
         </WorldScreen>
-      </MainAppLayout>
+      </div>
     );
   }
-
   if (currentScreen === 'MultiplayerAuction' || activeTab === 'MultiplayerAuction') {
     return (
       <MainAppLayout>

@@ -7,7 +7,7 @@ import { Zap, Shield, Flame, Sparkles, Award, Star, Diamond } from 'lucide-react
 interface FCPlayerCardProps {
   player: Player;
   customTier?: FCCardTier;
-  size?: 'mini' | 'sm' | 'md' | 'lg' | 'hero' | 'compact';
+  size?: 'mini' | 'pitch' | 'sm' | 'md' | 'lg' | 'hero' | 'compact';
   rankLevel?: number; // 0 to 5
   skillBoost?: number; // e.g. +5
   showDetailsModalOnClick?: boolean;
@@ -39,7 +39,7 @@ export const FCPlayerCard: React.FC<FCPlayerCardProps> = ({
 
   // Mouse tilt calculation for realistic 3D feel
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (size === 'mini' || size === 'compact') return;
+    if (size === 'mini' || size === 'pitch' || size === 'compact') return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -229,7 +229,61 @@ export const FCPlayerCard: React.FC<FCPlayerCardProps> = ({
     );
   }
 
-  // 2. COMPACT ROW / SQUAD BENCH CARD
+  // 2. PITCH TOKEN (Bigger formation card for the matchday turf / squad pitch)
+  if (size === 'pitch') {
+    return (
+      <div
+        onClick={onClick}
+        className={`relative select-none cursor-pointer flex flex-col items-center transition-all duration-200 hover:scale-110 ${className}`}
+      >
+        <div className={`w-[74px] h-[106px] sm:w-[92px] sm:h-[128px] rounded-xl p-[2.5px] bg-gradient-to-b ${theme.borderGrad} ${theme.glow} shadow-2xl relative overflow-hidden flex flex-col justify-between`}>
+          {/* Card Top Pill */}
+          <div className="flex items-center justify-between px-1.5 pt-1">
+            <span className="font-black text-sm sm:text-base font-mono-sport text-white drop-shadow">
+              {ratings.overall}
+            </span>
+            <span className="text-[8px] sm:text-[9px] font-black text-white px-1.5 rounded bg-black/40">
+              {positionBadge()}
+            </span>
+          </div>
+
+          {/* Player Mini Avatar */}
+          <div className="flex items-center justify-center my-0.5">
+            <div
+              className="w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center font-black text-[11px] sm:text-sm text-white border-2 border-white/40 shadow-lg"
+              style={{ backgroundColor: player.avatarColor || '#1e293b' }}
+            >
+              {player.shortName?.slice(0, 2).toUpperCase() || player.name.slice(0, 2).toUpperCase()}
+            </div>
+          </div>
+
+          {/* Bottom Name Pill */}
+          <div className="bg-black/90 px-1.5 py-1 rounded-b-[10px] text-center truncate">
+            <span className="text-[9px] sm:text-[11px] font-black text-white truncate block">
+              {player.shortName || player.name.split(' ').pop()}
+            </span>
+            <span className="text-[7px] sm:text-[8px] font-bold text-slate-400 tracking-wide uppercase block truncate">
+              {player.role.split(' ')[0]}
+            </span>
+          </div>
+        </div>
+
+        {/* Rank Diamonds 💎 under card */}
+        <div className="flex items-center gap-0.5 mt-1">
+          {[...Array(5)].map((_, i) => (
+            <span
+              key={i}
+              className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rotate-45 rounded-[1px] ${
+                i < rankLevel ? 'bg-[#00FF87] shadow-[0_0_6px_#00FF87]' : 'bg-slate-700'
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // 3. COMPACT ROW / SQUAD BENCH CARD
   if (size === 'compact') {
     return (
       <div
@@ -300,6 +354,7 @@ export const FCPlayerCard: React.FC<FCPlayerCardProps> = ({
     lg: 'w-[305px] h-[485px] text-sm',
     hero: 'w-[355px] h-[560px] text-base',
     mini: '',
+    pitch: '',
     compact: ''
   };
 

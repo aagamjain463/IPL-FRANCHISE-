@@ -181,6 +181,17 @@ export const SCREEN_ROUTES: ScreenRouteMeta[] = [
     loadingMessages: ['Opening Media Room', 'Loading Journalist Questions', 'Preparing Broadcast Feed']
   },
   {
+    path: '/post-match',
+    screen: 'PostMatchPresentation',
+    tab: 'News',
+    title: 'Post-Match Presentation',
+    eyebrow: 'Media Room',
+    subtitle: 'Awards, press questions and updated standings after the final ball.',
+    variant: 'press',
+    isStandaloneMode: false,
+    loadingMessages: ['Preparing Presentation', 'Loading Match Awards', 'Opening Media Room']
+  },
+  {
     path: '/news',
     screen: 'Dashboard',
     tab: 'News',
@@ -260,7 +271,8 @@ export const getRouteMetaForState = (screen: GameScreen, tab: AppTab): ScreenRou
   if (screen === 'MultiplayerAuction' || tab === 'MultiplayerAuction') return ROUTE_BY_PATH['/multiplayer-auction'];
   if (screen === 'Auction' || tab === 'AuctionLive') return ROUTE_BY_PATH['/auction'];
   if (screen === 'MatchLive' || tab === 'MatchLive') return ROUTE_BY_PATH['/match'];
-  if (screen === 'PressConference' || screen === 'PostMatchPresentation') return ROUTE_BY_PATH['/press-conference'];
+  if (screen === 'PostMatchPresentation') return ROUTE_BY_PATH['/post-match'];
+  if (screen === 'PressConference') return ROUTE_BY_PATH['/press-conference'];
   const path = PREFERRED_TAB_ROUTES[tab] || '/home';
   return ROUTE_BY_PATH[path] || ROUTE_BY_PATH['/home'];
 };
