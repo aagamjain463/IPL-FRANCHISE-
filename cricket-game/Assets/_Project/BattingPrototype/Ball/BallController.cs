@@ -22,7 +22,7 @@ namespace CricketGame.BattingPrototype.Ball
     {
         public const float BoundaryRadius = 62f;
 
-        private new Rigidbody rigidbody;
+        private Rigidbody rigidbody;
         private DeliveryTrajectory trajectory;
         private float flightTime;
         private bool inFlight;
