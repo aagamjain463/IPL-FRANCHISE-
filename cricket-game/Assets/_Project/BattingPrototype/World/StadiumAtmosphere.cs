@@ -17,6 +17,7 @@ namespace CricketGame.BattingPrototype.World
         private readonly List<Renderer> crowdBands = new List<Renderer>();
         private readonly List<Renderer> glows = new List<Renderer>();
         private readonly List<GameObject> tier2 = new List<GameObject>();
+        private readonly List<Transform> flags = new List<Transform>();
         private Color[] bandBase;
         private float waveClock;
 
@@ -127,6 +128,41 @@ namespace CricketGame.BattingPrototype.World
                 glows.Add(r);
             }
 
+            // ---- team-neutral flags on the stand roofs
+            Color[] flagPalette =
+            {
+                new Color(0f, 0.75f, 0.9f), new Color(1f, 0.7f, 0.1f),
+                new Color(0.9f, 0.9f, 0.95f), new Color(0.2f, 0.8f, 0.5f),
+            };
+            for (int i = 0; i < 24; i += 3)
+            {
+                var stand = stadium.Find("Stand" + i);
+                if (stand == null) continue;
+                var pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                pole.name = "FlagPole" + i;
+                pole.transform.SetParent(stand, false);
+                pole.transform.localPosition = new Vector3(0, 6.2f, -3.2f);
+                pole.transform.localScale = new Vector3(0.12f, 1.6f, 0.12f);
+                var pr = pole.GetComponent<Renderer>();
+                pr.sharedMaterial = new Material(Shader.Find("Standard"));
+                pr.sharedMaterial.color = new Color(0.7f, 0.72f, 0.75f);
+                pr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                Object.Destroy(pole.GetComponent<Collider>());
+
+                var flag = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                flag.name = "Flag" + i;
+                flag.transform.SetParent(pole.transform, false);
+                flag.transform.localPosition = new Vector3(0.9f, 1.3f, 0);
+                flag.transform.localScale = new Vector3(1.7f, 1.0f, 1f);
+                var fr = flag.GetComponent<Renderer>();
+                var fm = new Material(Shader.Find("Unlit/Color"));
+                fm.color = flagPalette[(i / 3) % flagPalette.Length];
+                fr.sharedMaterial = fm;
+                fr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                Object.Destroy(flag.GetComponent<Collider>());
+                flags.Add(flag.transform);
+            }
+
             // ---- extra stand tier (HIGH only)
             for (int i = 0; i < 12; i++)
             {
@@ -176,6 +212,10 @@ namespace CricketGame.BattingPrototype.World
             {
                 float w = 0.88f + 0.12f * Mathf.Sin(waveClock * 1.7f + i * 0.35f);
                 crowdBands[i].sharedMaterial.color = bandBase[i] * w;
+            }
+            for (int i = 0; i < flags.Count; i++)
+            {
+                flags[i].localEulerAngles = new Vector3(0, Mathf.Sin(waveClock * 2.3f + i) * 22f, 0);
             }
         }
     }

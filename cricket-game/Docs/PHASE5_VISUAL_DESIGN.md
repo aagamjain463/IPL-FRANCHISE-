@@ -82,3 +82,31 @@ design is verifiable live without a Unity install.
 Brace-lint on every new/rewritten C# file; `node --check` + `smoke.cjs` +
 `dom_smoke.cjs` green; full 166-test Python pack green (gameplay untouched).
 Debug panel now starts **hidden** (toggle in pause/settings for testers).
+
+---
+
+## 8. Completion pass (spec audit)
+
+Second pass closing the remaining §26 checklist items:
+
+- **Player presentation (§6)** — `World/TeamKit.cs` (original fictional kits +
+  rosters: YOU = A. Vale / J. Mercer / K. Brand in blue-cyan; AI = S. Nair /
+  T. Okafor / M. Ito in amber) and `World/PlayerPresentation.cs`: helmet peak,
+  pads and batting gloves on the batsman; caps on bowler + all 11 fielders;
+  keeper gloves; two umpires (bowler's end + square leg). Kits swap per innings
+  via `MatchController.FlowChanged`.
+- **Stadium scoreboard (§4/9)** — `World/StadiumScoreboard.cs`: 3D board above
+  the sightscreen, TextMesh driven directly by `SuperOverMatch` events.
+- **Flags (§17)** — team-neutral waving flags on stand roofs in
+  `StadiumAtmosphere`.
+- **VFX (§19)** — `Game/Vfx.cs`: pooled expanding rings (gold = PERFECT, green =
+  GOOD, amber = early/late, red = very poor; boundary rings at the rope) plus a
+  tumbling bail-pop on wickets. Subscribed to `GameplayEvents` only.
+- **HUD names (§7/9)** — striker*/non-striker + bowler names straight from
+  `Innings.Striker/NonStriker`; score-update scale pop (§15); safe-area insets
+  push the top bar / pause button below notches (§3).
+- **Preview mirror** — same kits/caps/helmet/umpires, contact + boundary rings,
+  flying bail, and batter/bowler names on the score bar.
+
+Verification: brace-lint balanced on all touched C#; `node --check`, `smoke.cjs`,
+`dom_smoke.cjs` green; 166-test Python pack green.

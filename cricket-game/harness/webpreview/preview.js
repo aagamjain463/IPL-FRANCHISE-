@@ -104,6 +104,11 @@ let resolvedThisBall = false;
 let struckApplied = false;
 let stumpKnock = 0; // 0..1 animation
 const dusts = [];   // pitch-dust puffs {x, z, t}
+const vfxRings = []; // Phase 5: expanding contact/boundary rings {x,y,z,t,life,r0,grow,color}
+const KIT_NAMES = {
+  you: ["A. Vale", "J. Mercer", "K. Brand"],
+  ai: ["S. Nair", "T. Okafor", "M. Ito"],
+};
 
 /* ---- Phase 3 match state ---- */
 let match = new SuperOverMatchJS(); match.start();
@@ -490,8 +495,12 @@ function applyContact() {
 
   const boundary = res.kind === "four" || res.kind === "six";
   camMode = boundary ? "followBoundary" : "follow";
-  if (boundary) showBanner(res.kind === "six" ? "SIX!" : "FOUR!",
-    res.kind === "six" ? "#ffd23f" : "#5ecfff");
+  if (boundary) {
+    showBanner(res.kind === "six" ? "SIX!" : "FOUR!",
+      res.kind === "six" ? "#ffd23f" : "#5ecfff");
+    vfxRings.push({ x: flight.pos.x, y: 0.2, z: flight.pos.z, t: 0, life: 0.55,
+                    r0: 1.2, grow: 9, color: res.kind === "six" ? "#ffd23f" : "#5ecfff" });
+  }
 
   // Phase 4 timing FEEL: tier label, camera punch, bat flash intensity.
   const feel = timingFeedback(swing.window, swing.intent);
@@ -499,6 +508,8 @@ function applyContact() {
     : (swing.window === "early" || swing.window === "late") ? "#ffb14a" : "#ff6a5e";
   showPopup(swing.selection.name.toUpperCase() + "  -  " + feel.label, col, 1.0);
   setTimingChip(feel.label, col);                  // Phase 5 bottom timing chip
+  vfxRings.push({ x: contactPos.x, y: 1.1, z: contactPos.z, t: 0, life: 0.5,
+                  r0: 0.4, grow: 5, color: col });  // Phase 5 contact ring
   if (swing.window === "perfect") showTimingFlash("#ffd23f");
   camPunch = feel.camera;                       // subtle zoom breath
   if (navigator.vibrate && feel.haptic > 0.05) navigator.vibrate(Math.round(30 + feel.haptic * 60));
@@ -720,11 +731,39 @@ function drawWorld(cam) {
   drawStumps(cam, 20.9, 0);
 
   // fielders (9 + keeper from the Phase 3 field setup; positions animated)
+  // Phase 5: team kits + caps; the fielding side wears its own colours.
+  const fieldShirt = playerIsBatting() ? "#e8a50a" : "#1a73e8";
+  const fieldCap = playerIsBatting() ? "#8a5a06" : "#0d3f8f";
   for (const f of fieldViews) {
-    const body = f.name === "keeper" ? "#43435c" : "#3d5f9e";
+    const body = f.name === "keeper" ? "#43435c" : fieldShirt;
     const h = f.chaseTarget ? 1.35 : 1.45;   // slight crouch while chasing
     line3(cam, { x: f.x, y: 0.15, z: f.z }, { x: f.x, y: h, z: f.z }, body, 0.42);
     circle3(cam, { x: f.x, y: h + 0.17, z: f.z }, 0.16, "#d9b08c");
+    circle3(cam, { x: f.x, y: h + 0.28, z: f.z }, 0.11, f.name === "keeper" ? "#2c2c40" : fieldCap);
+  }
+
+  // Phase 5 umpires: bowler's end + square leg, white coats.
+  for (const u of [{ x: 0.4, z: 22.8 }, { x: -16, z: 4 }]) {
+    line3(cam, { x: u.x, y: 0.1, z: u.z }, { x: u.x, y: 0.85, z: u.z }, "#14141c", 0.3);
+    line3(cam, { x: u.x, y: 0.85, z: u.z }, { x: u.x, y: 1.6, z: u.z }, "#e9ecf2", 0.42);
+    circle3(cam, { x: u.x, y: 1.78, z: u.z }, 0.15, "#d9b08c");
+    circle3(cam, { x: u.x, y: 1.9, z: u.z }, 0.11, "#14141c");
+  }
+
+  // Phase 5 VFX rings (contact / boundary)
+  for (const r of vfxRings) {
+    const k = r.t / r.life;
+    if (k >= 1) continue;
+    const pr = project(cam, { x: r.x, y: r.y, z: r.z });
+    if (!pr) continue;
+    const rad = (r.r0 + r.grow * k) * pr.s;
+    ctx.strokeStyle = r.color;
+    ctx.globalAlpha = 0.75 * (1 - k);
+    ctx.lineWidth = Math.max(1.5, 0.06 * pr.s);
+    ctx.beginPath();
+    ctx.ellipse(pr.x, pr.y, rad, rad * 0.45, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
   }
 
   // bowler
@@ -785,16 +824,26 @@ function drawStumps(cam, z, knock) {
     line3(cam, { x: dx, y: 0, z }, top, col, 0.05);
   }
   if (knock <= 0) line3(cam, { x: -0.15, y: 0.735, z }, { x: 0.15, y: 0.735, z }, col, 0.025);
+  else {
+    // Phase 5: the bail pops and tumbles on a wicket.
+    const k = Math.min(1, knock);
+    const by = 0.735 + Math.sin(k * Math.PI) * 0.65;
+    line3(cam, { x: -0.13, y: by, z: z - k * 0.55 },
+          { x: 0.13, y: by + k * 0.18, z: z - k * 0.55 }, col, 0.025);
+  }
 }
 
 function drawBowler(cam) {
   const bz = bowlerZ;
-  line3(cam, { x: 0.2, y: 0.15, z: bz }, { x: 0.2, y: 1.5, z: bz }, "#c0392b", 0.5);
+  const shirt = playerIsBatting() ? "#e8a50a" : "#1a73e8";   // fielding kit
+  const cap = playerIsBatting() ? "#8a5a06" : "#0d3f8f";
+  line3(cam, { x: 0.2, y: 0.15, z: bz }, { x: 0.2, y: 1.5, z: bz }, shirt, 0.5);
   circle3(cam, { x: 0.2, y: 1.72, z: bz }, 0.17, "#d9b08c");
+  circle3(cam, { x: 0.2, y: 1.84, z: bz }, 0.11, cap);
   const armA = bowlerArmT * Math.PI * 2;
   const ax = 0.2 + 0.1, ay = 1.45;
   line3(cam, { x: ax, y: ay, z: bz },
-    { x: ax + Math.sin(armA) * 0.15, y: ay + Math.cos(armA) * 0.55, z: bz }, "#c0392b", 0.16);
+    { x: ax + Math.sin(armA) * 0.15, y: ay + Math.cos(armA) * 0.55, z: bz }, shirt, 0.16);
 }
 
 function batScreenAngle() {
@@ -818,12 +867,15 @@ function drawBatsman(cam) {
 
   const hips = { x: bx, y: 0.92, z: bz + lean };
   const sh = { x: bx, y: 1.48, z: bz + lean * 1.4 };
-  // legs
+  const batKit = playerIsBatting() ? "#1a73e8" : "#e8a50a";   // batting kit
+  const batHelmet = playerIsBatting() ? "#0d3f8f" : "#8a5a06";
+  // legs (pads read white)
   line3(cam, { x: bx - 0.12, y: 0.02, z: bz }, hips, "#e8e8ee", 0.17);
   line3(cam, { x: bx + 0.12, y: 0.02, z: bz }, hips, "#e8e8ee", 0.17);
-  // torso + head
-  line3(cam, hips, sh, "#2456b3", 0.4);
+  // torso + head + helmet
+  line3(cam, hips, sh, batKit, 0.4);
   circle3(cam, { x: bx, y: 1.7, z: bz + lean * 1.6 }, 0.16, "#d9b08c");
+  circle3(cam, { x: bx, y: 1.78, z: bz + lean * 1.6 }, 0.15, batHelmet);
 
   // bat (screen-space around the projected shoulder)
   const psh = project(cam, { x: bx + 0.22, y: 1.45, z: bz });
@@ -1093,7 +1145,12 @@ let toastTimer = null, bannerTimer = null, flashTimer = null;
 function updateScoreboard() {
   const inn = match.currentInnings() || match.innings[1];
   const side = playerIsBatting() ? "YOU" : "AI";
-  scoreEl.textContent = `${side}  ${inn.runs}/${inn.wickets}  (${inn.legal_balls}/6)`;
+  // Phase 5 (spec 7/9): striker / non-striker + bowler names from the rules state.
+  const batNames = playerIsBatting() ? KIT_NAMES.you : KIT_NAMES.ai;
+  const bowlName = playerIsBatting() ? KIT_NAMES.ai[0] : KIT_NAMES.you[0];
+  const s = clamp(inn.striker || 0, 0, 2), n = clamp(inn.non_striker || 1, 0, 2);
+  scoreEl.textContent = `${side}  ${inn.runs}/${inn.wickets}  (${inn.legal_balls}/6)`
+    + `  ·  ${batNames[s]}* / ${batNames[n]}  ·  b. ${bowlName}`;
   const rr = inn.legal_balls > 0 ? (inn.runs / (inn.legal_balls / 6)).toFixed(1) : "0.0";
   const t = match.target();
   if (t != null) {
@@ -1540,6 +1597,10 @@ function frame(now) {
   for (let i = dusts.length - 1; i >= 0; i--) {
     dusts[i].t += dt;
     if (dusts[i].t > 0.32) dusts.splice(i, 1);
+  }
+  for (let i = vfxRings.length - 1; i >= 0; i--) {
+    vfxRings[i].t += dt;
+    if (vfxRings[i].t > vfxRings[i].life) vfxRings.splice(i, 1);
   }
 
   // wicket reaction camera hands back to gameplay once the moment has landed

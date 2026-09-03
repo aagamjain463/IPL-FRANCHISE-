@@ -133,6 +133,21 @@ namespace CricketGame.BattingPrototype.Bootstrap
             debug.StartVisible = debugPanelVisible;
             debug.Build(hud.Canvas, bowling, runner, input, matchCtl);
             runner.Init(world, hud, input, bowling, bowler, camCtrl, matchCtl, fielders, bowlingPanel);
+
+            // Phase 5: presentation layers OBSERVE the existing systems -
+            // kits/scoreboard/VFX, zero gameplay code changes.
+            var presentation = World.PlayerPresentation.Attach(root.transform, world);
+            presentation.SetSides(true);
+            matchCtl.FlowChanged += state =>
+                presentation.SetSides(state != Match.MatchFlowState.Innings2);
+
+            var board = World.StadiumScoreboard.Attach(world.Root);
+            board.BindMatch(matchCtl.Match, true);
+
+            var vfxGo = new GameObject("Vfx");
+            vfxGo.transform.SetParent(root.transform, false);
+            var vfx = vfxGo.AddComponent<Game.Vfx>();
+            vfx.Bind(runner.Events, world);
         }
     }
 }

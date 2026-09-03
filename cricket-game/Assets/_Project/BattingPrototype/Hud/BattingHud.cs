@@ -93,9 +93,18 @@ namespace CricketGame.BattingPrototype.Hud
 
         // ------------------------------------------------------------------ build
 
+        // Phase 5 (spec 3): notches/safe areas push the top bar and pause
+        // button below the hardware inset on any aspect ratio.
+        private float safeTop;
+
         public void Build(Input.MobileBattingInput inputSource)
         {
             input = inputSource;
+
+            var sa = Screen.safeArea;
+            safeTop = Screen.height > 1f
+                ? Mathf.Clamp01((Screen.height - sa.y - sa.height) / Screen.height)
+                : 0f;
 
             var canvasGo = new GameObject("HudCanvas", typeof(RectTransform));
             canvasGo.transform.SetParent(transform, false);
@@ -135,7 +144,7 @@ namespace CricketGame.BattingPrototype.Hud
         {
             var bar = UiComponents.Panel(CanvasRect, "TopBar", Vector2.zero, UITheme.RadiusCard);
             topBarRect = bar;
-            UiKit.Anchor(bar, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            UiKit.Anchor(bar, new Vector2(0.5f, 1f - safeTop), new Vector2(0.5f, 1f - safeTop),
                          new Vector2(-330f, -64f), new Vector2(330f, -12f));
 
             scoreText = UiComponents.Label(bar, "Score", "YOU  0/0", UITheme.FontScore,
@@ -168,7 +177,7 @@ namespace CricketGame.BattingPrototype.Hud
         {
             var btn = UiComponents.ThemedButton(CanvasRect, "PauseBtn", "II", new Vector2(52f, 52f),
                                                 ButtonStyle.Outline, 22);
-            UiKit.Anchor(UiKit.Rect(btn.gameObject), new Vector2(1f, 1f), new Vector2(1f, 1f),
+            UiKit.Anchor(UiKit.Rect(btn.gameObject), new Vector2(1f, 1f - safeTop), new Vector2(1f, 1f - safeTop),
                          new Vector2(-70f, -64f), new Vector2(-18f, -12f));
             btn.onClick.AddListener(() =>
             {
@@ -420,12 +429,31 @@ namespace CricketGame.BattingPrototype.Hud
         /// <summary>Phase 5: subscribe to the rules engine for over chips,
         /// partnership strip and result-screen stats. Single source of truth
         /// stays Core.Rules - the HUD only observes.</summary>
+        private SuperOverMatch matchRef;
+
         public void BindMatch(CricketGame.BattingPrototype.Match.MatchController matchCtl)
         {
             if (matchCtl == null || matchCtl.Match == null) return;
-            var match = matchCtl.Match;
-            match.BallCompleted += args => OnBallCompleted(args.Record);
-            match.InningsStarted += args => ClearOverChips();
+            matchRef = matchCtl.Match;
+            matchRef.BallCompleted += args => OnBallCompleted(args.Record);
+            matchRef.InningsStarted += args => { ClearOverChips(); UpdateBatterLine(); };
+            UpdateBatterLine();
+        }
+
+        /// <summary>Phase 5 (spec 7/9): striker / non-striker / bowler names,
+        /// straight from the rules engine's strike tracking.</summary>
+        private void UpdateBatterLine()
+        {
+            if (batterText == null || matchRef == null) return;
+            Innings inn = matchRef.CurrentInnings;
+            if (inn == null) { batterText.text = ""; return; }
+            bool playerBatting = matchRef.Phase == MatchPhase.FirstInnings;
+            var batting = playerBatting ? TeamKit.You : TeamKit.Ai;
+            var fielding = playerBatting ? TeamKit.Ai : TeamKit.You;
+            int s = Mathf.Clamp(inn.Striker, 0, batting.Batters.Length - 1);
+            int n = Mathf.Clamp(inn.NonStriker, 0, batting.Batters.Length - 1);
+            batterText.text = batting.Batters[s] + "*  ·  " + batting.Batters[n]
+                              + "   ·   b. " + fielding.Bowler;
         }
 
         private void OnBallCompleted(BallRecord record)
@@ -482,10 +510,19 @@ namespace CricketGame.BattingPrototype.Hud
             }
         }
 
+        private string lastScore = "";
+
         public void SetScoreboard(int runs, int wickets, int balls)
         {
+            string s = battingSideLabel + "  " + runs + "/" + wickets;
             if (scoreText != null)
-                scoreText.text = battingSideLabel + "  " + runs + "/" + wickets;
+            {
+                scoreText.text = s;
+                // Phase 5 (spec 15): subtle score-update pop.
+                if (s != lastScore && lastScore != "")
+                    UITweenHost.Scale(UiKit.Rect(scoreText.gameObject), 1.18f, 1f, UITheme.TweenFast);
+            }
+            lastScore = s;
             if (ballsText != null)
                 ballsText.text = "(" + balls + " of 6 balls)";
         }
@@ -512,10 +549,7 @@ namespace CricketGame.BattingPrototype.Hud
                 chaseSub.text = "TARGET " + target + "  ·  " + ballsRemaining + " BALLS  ·  " +
                                 wicketsRemaining + " WKTS  ·  RR " + runRate.ToString("0.0");
             }
-            if (batterText != null)
-                batterText.text = wicketsRemaining > 0
-                    ? battingSideLabel + " batting   ·   " + wicketsRemaining + " wickets in hand"
-                    : battingSideLabel + " all out";
+            UpdateBatterLine();
         }
 
         // ------------------------------------------------------------------ feel feedback
