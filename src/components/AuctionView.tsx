@@ -68,6 +68,28 @@ export const AuctionView: React.FC = () => {
   const isUserLeading = auc.currentLeadingTeamId === gameState.userTeamId;
   const canAfford = userTeam ? userTeam.purseCr >= nextUserBidAmount : false;
 
+  const handleUserBidClick = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      (e.currentTarget as HTMLElement)?.blur();
+    }
+    if (!canAfford || isUserLeading) return;
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(45);
+      } catch {
+        // ignore
+      }
+    }
+    const currentScroll = window.scrollY;
+    placeUserBid();
+    requestAnimationFrame(() => {
+      if (Math.abs(window.scrollY - currentScroll) > 2) {
+        window.scrollTo({ top: currentScroll, behavior: 'instant' as ScrollBehavior });
+      }
+    });
+  };
+
   const aiAdvice = (player && userTeam) ? generateAIAssistantAdvice(player, userTeam, userSquad, auc.currentBidCr) : null;
   const leadingTeam = auc.currentLeadingTeamId ? gameState.teams[auc.currentLeadingTeamId] : null;
 
@@ -552,14 +574,14 @@ export const AuctionView: React.FC = () => {
                   <div className="pt-4 border-t border-[#1e293b] grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       id="btn-raise-bid"
-                      onClick={placeUserBid}
-                      disabled={!canAfford || isUserLeading}
+                      onClick={handleUserBidClick}
+                      aria-disabled={!canAfford || isUserLeading}
                       className={`py-4 px-6 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl flex items-center justify-center gap-2.5 transition active:scale-95 ${
                         isUserLeading
-                          ? 'bg-emerald-950/80 text-emerald-300 border-2 border-emerald-500/50 cursor-not-allowed shadow-emerald-500/10'
+                          ? 'bg-emerald-950/80 text-emerald-300 border-2 border-emerald-500/50 cursor-not-allowed shadow-emerald-500/10 pointer-events-none'
                           : canAfford
                           ? 'bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#D4AF37] hover:brightness-110 text-black shadow-[#D4AF37]/25 cursor-pointer'
-                          : 'bg-[#1e293b] text-slate-500 border border-slate-700 cursor-not-allowed'
+                          : 'bg-[#1e293b] text-slate-500 border border-slate-700 cursor-not-allowed pointer-events-none'
                       }`}
                     >
                       <Zap className="w-5 h-5 fill-current" />

@@ -528,7 +528,7 @@ body.theme-stealth-carbon {
 /* Scoreboard display font */
 .fc-display { font-family: 'Bebas Neue', 'Rajdhani', sans-serif; letter-spacing: .06em; }
 
-/* Scanline overlay for broadcast vibe */
+/* Scanline overlay for broadcast vibe - GPU-optimized for mobile 60fps */
 .fc-scanlines::before {
   content: '';
   position: fixed;
@@ -537,6 +537,12 @@ body.theme-stealth-carbon {
   pointer-events: none;
   background: repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 3px);
   mix-blend-mode: overlay;
+}
+
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  .fc-scanlines::before {
+    display: none !important;
+  }
 }
 
 /* Entrance */
@@ -2921,17 +2927,63 @@ body {
   .clean-auction__pool { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .premium-mode-grid--clean { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* Mobile-first bidding performance and zero-jump styling */
+.clean-auction {
+  overflow-anchor: none;
+}
+
+.clean-auction__bid-box {
+  min-height: 4.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  position: relative;
+}
+
+/* Mobile sticky bidding dock */
+.clean-auction__mobile-dock {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  padding: 0.65rem 0.85rem calc(0.65rem + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(10, 16, 31, 0.97), rgba(3, 7, 18, 0.99));
+  border-top: 1px solid rgba(212, 175, 55, 0.4);
+  box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transform: translateZ(0);
+}
+
+@media (min-width: 769px) {
+  .clean-auction__mobile-dock {
+    display: none !important;
+  }
+}
+
 @media (max-width: 680px) {
-  .clean-auction__stage { min-height: auto; }
+  .clean-auction {
+    min-height: auto;
+    padding-bottom: 5.5rem; /* Room for fixed mobile dock */
+    gap: 0.65rem;
+  }
+  .clean-auction__stage { min-height: auto; gap: 0.65rem; }
   .clean-auction__player,
-  .clean-auction__bid { border-radius: 1.25rem; }
-  .clean-auction__player h1 { font-size: 3rem; }
-  .clean-auction__bid h2 { font-size: 4rem; }
+  .clean-auction__bid { border-radius: 1.25rem; padding: 1rem !important; }
+  .clean-auction__player h1 { font-size: clamp(1.85rem, 8vw, 2.6rem) !important; line-height: 0.95 !important; margin: 0.35rem 0 0.5rem !important; }
+  .clean-auction__bid h2 { font-size: clamp(2.6rem, 12vw, 3.8rem) !important; line-height: 0.9 !important; }
   .clean-auction__actions,
   .clean-auction__status,
   .clean-auction__pool,
   .clean-auction__teams,
   .premium-mode-grid--clean { grid-template-columns: 1fr; }
+  .clean-auction__actions button { min-height: 48px; font-size: 0.95rem !important; }
 }
 
 /* Home simplification: Franchise Operating System deck removed. Auction teams now includes opponent squad inspector. */
