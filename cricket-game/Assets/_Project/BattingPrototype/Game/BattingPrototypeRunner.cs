@@ -183,7 +183,7 @@ namespace CricketGame.BattingPrototype.Game
             FootPose pose = FootworkController.Pose(engine.Foot);
             FootPoseKind poseKind = pose == FootPose.FrontFoot ? FootPoseKind.Front
                 : pose == FootPose.BackFoot ? FootPoseKind.Back : FootPoseKind.Neutral;
-            ShotAnimationSpec spec = report.Contact != null && report.Contact.Outcome == ContactOutcome.Edge
+            ShotAnimationSpec spec = report.Contact.Outcome == ContactOutcome.Edge
                 ? ShotAnimationResolver.ResolveEdge(report)
                 : ShotAnimationResolver.Resolve(report, poseKind);
             // Honour the timing model: the bat must arrive at the contact time.
