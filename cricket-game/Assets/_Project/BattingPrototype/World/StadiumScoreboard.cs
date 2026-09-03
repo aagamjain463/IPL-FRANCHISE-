@@ -1,4 +1,5 @@
 using CricketGame.Core.Rules;
+using CricketGame.Core.Rules.LimitedOvers;
 using UnityEngine;
 
 namespace CricketGame.BattingPrototype.World
@@ -11,7 +12,7 @@ namespace CricketGame.BattingPrototype.World
     public sealed class StadiumScoreboard : MonoBehaviour
     {
         private TextMesh text;
-        private SuperOverMatch match;
+        private LimitedOversMatch match;
 
         public static StadiumScoreboard Attach(Transform worldRoot)
         {
@@ -45,7 +46,7 @@ namespace CricketGame.BattingPrototype.World
             return board;
         }
 
-        public void BindMatch(SuperOverMatch m, bool playerBatsFirst)
+        public void BindMatch(LimitedOversMatch m, bool playerBatsFirst)
         {
             match = m;
             playerFirst = playerBatsFirst;
@@ -59,12 +60,13 @@ namespace CricketGame.BattingPrototype.World
         private void Refresh()
         {
             if (match == null || text == null) return;
-            Innings inn = match.CurrentInnings;
+            LimitedOversInnings inn = match.CurrentInnings;
             if (inn == null) inn = match.SecondInnings;
             if (inn == null) return;
             bool playerBatting = match.Phase == MatchPhase.FirstInnings;
             string side = (playerBatting == playerFirst) ? TeamKit.You.SideName : TeamKit.Ai.SideName;
-            text.text = side + "  " + inn.Runs + "/" + inn.Wickets + "   (" + inn.LegalBalls + "/6)";
+            // Phase 6: cricket notation (e.g. "45/2  (7.3)") instead of ball count.
+            text.text = side + "  " + inn.Runs + "/" + inn.Wickets + "   (" + inn.OversDisplay + ")";
         }
     }
 }

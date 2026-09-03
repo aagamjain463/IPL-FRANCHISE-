@@ -5,6 +5,7 @@ using CricketGame.BattingPrototype.UI;
 using CricketGame.BattingPrototype.World;
 using CricketGame.Core.Batting;
 using CricketGame.Core.Rules;
+using CricketGame.Core.Rules.LimitedOvers;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -430,7 +431,7 @@ namespace CricketGame.BattingPrototype.Hud
         /// <summary>Phase 5: subscribe to the rules engine for over chips,
         /// partnership strip and result-screen stats. Single source of truth
         /// stays Core.Rules - the HUD only observes.</summary>
-        private SuperOverMatch matchRef;
+        private LimitedOversMatch matchRef;
 
         public void BindMatch(CricketGame.BattingPrototype.Match.MatchController matchCtl)
         {
@@ -438,6 +439,9 @@ namespace CricketGame.BattingPrototype.Hud
             matchRef = matchCtl.Match;
             matchRef.BallCompleted += args => OnBallCompleted(args.Record);
             matchRef.InningsStarted += args => { ClearOverChips(); UpdateBatterLine(); };
+            // Phase 6: chips reset every over, not just every innings.
+            matchRef.OverCompleted += args => ClearOverChips();
+            matchRef.WicketFallen += args => UpdateBatterLine();
             UpdateBatterLine();
         }
 
@@ -446,15 +450,13 @@ namespace CricketGame.BattingPrototype.Hud
         private void UpdateBatterLine()
         {
             if (batterText == null || matchRef == null) return;
-            Innings inn = matchRef.CurrentInnings;
+            LimitedOversInnings inn = matchRef.CurrentInnings;
             if (inn == null) { batterText.text = ""; return; }
-            bool playerBatting = matchRef.Phase == MatchPhase.FirstInnings;
-            var batting = playerBatting ? TeamKit.You : TeamKit.Ai;
-            var fielding = playerBatting ? TeamKit.Ai : TeamKit.You;
-            int s = Mathf.Clamp(inn.Striker, 0, batting.Batters.Length - 1);
-            int n = Mathf.Clamp(inn.NonStriker, 0, batting.Batters.Length - 1);
-            batterText.text = batting.Batters[s] + "*  ·  " + batting.Batters[n]
-                              + "   ·   b. " + fielding.Bowler;
+            int s = Mathf.Clamp(inn.Striker, 0, inn.Batters.Count - 1);
+            int n = Mathf.Clamp(inn.NonStriker, 0, inn.Batters.Count - 1);
+            string bowler = inn.CurrentBowler != null ? inn.CurrentBowler.Name : inn.BowlingSideName;
+            batterText.text = inn.Batters[s].Name + "*  ·  " + inn.Batters[n].Name
+                              + "   ·   b. " + bowler;
         }
 
         private void OnBallCompleted(BallRecord record)
@@ -705,6 +707,14 @@ namespace CricketGame.BattingPrototype.Hud
                             "You bowl. Pick your deliveries wisely.", false);
         }
 
+        /// <summary>Phase 6 §23: innings break with the first-innings summary
+        /// (score, top scorer, best bowling) above the chase line.</summary>
+        public void ShowInningsBreak(int target, string firstInningsSummary)
+        {
+            ShowOverlayCard("INNINGS BREAK", firstInningsSummary,
+                            "AI need " + target + " to win. You bowl.", false);
+        }
+
         public void HideOverlays()
         {
             overlayPanel.gameObject.SetActive(false);
@@ -741,11 +751,26 @@ namespace CricketGame.BattingPrototype.Hud
                                      "\nAI    " + Line(result.SecondInnings);
             if (resultPotm != null)
             {
-                resultPotm.text = (playerWon ? "YOU" : "AI") + "\n";
-                resultPotm.color = playerWon ? UITheme.Cyan : UITheme.Amber;
+                string potm = result != null && result.Scorecard != null
+                              && !string.IsNullOrEmpty(result.Scorecard.PlayerOfMatch)
+                    ? result.Scorecard.PlayerOfMatch
+                    : (playerWon ? "YOU" : "AI");
+                resultPotm.text = "PLAYER OF THE MATCH\n" + potm;
+                resultPotm.color = UITheme.Amber;
             }
-            if (resultDetails != null)
+            if (resultDetails != null && matchRef != null)
+            {
+                var ms = matchRef.Settings;
+                string format = ms.Mode == MatchMode.SuperOver ? "SUPER OVER"
+                    : ms.Mode == MatchMode.TwentyOver ? "T20 MATCH" : "QUICK MATCH";
+                resultDetails.text = "Format   " + format
+                    + "\nOvers   " + ms.OversPerInnings + " per innings"
+                    + "\nWickets   " + ms.WicketsPerInnings + " max";
+            }
+            else if (resultDetails != null)
+            {
                 resultDetails.text = "Format   SUPER OVER\nBalls   6 per innings\nWickets   2 max";
+            }
         }
 
         private static string Line(InningsSummary s)

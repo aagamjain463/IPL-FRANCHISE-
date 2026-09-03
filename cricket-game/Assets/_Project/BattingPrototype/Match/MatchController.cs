@@ -1,10 +1,13 @@
 using System.Collections;
+using System.Collections.Generic;
 using CricketGame.Core.AI;
 using CricketGame.Core.Batting;
 using CricketGame.Core.Fielding;
 using CricketGame.Core.Rules;
+using CricketGame.Core.Rules.LimitedOvers;
 using CricketGame.BattingPrototype.Audio;
 using CricketGame.BattingPrototype.Hud;
+using CricketGame.BattingPrototype.World;
 using UnityEngine;
 
 namespace CricketGame.BattingPrototype.Match
@@ -23,15 +26,18 @@ namespace CricketGame.BattingPrototype.Match
     /// <summary>
     /// The single owner of match rules and flow. The delivery loop (runner),
     /// HUD, fielders and AI all ask THIS object what to do next - no match
-    /// rules live anywhere else. Wraps the deterministic Core.Rules engine.
+    /// rules live anywhere else. Wraps the deterministic limited-overs engine
+    /// (Phase 6), which also runs the Super Over via MatchSettings.SuperOver().
     ///
-    /// Super Over shape used by the prototype:
+    /// Match shape used by the prototype:
     ///   Innings 1 - the PLAYER bats, the AI bowls.
     ///   Innings 2 - the AI bats (chases), the PLAYER bowls.
+    /// The player always wins the toss and bats first (pre-match presentation).
     /// </summary>
     public sealed class MatchController : MonoBehaviour
     {
-        private SuperOverMatch match;
+        private LimitedOversMatch match;
+        private MatchSettings settings;
         private BattingHud hud;
         private AiDifficulty difficulty = AiDifficulty.Medium;
         private MatchFlowState flow = MatchFlowState.PreMatch;
@@ -43,18 +49,22 @@ namespace CricketGame.BattingPrototype.Match
 
         public event System.Action<MatchFlowState> FlowChanged;
         public event System.Action TargetReached;
-        public event System.Action<SuperOverMatch> MatchFinished;
+        public event System.Action<LimitedOversMatch> MatchFinished;
+
+        /// <summary>Phase 6: raised whenever the rules engine is (re)built -
+        /// observers re-bind to the new engine instance.</summary>
+        public event System.Action EngineReplaced;
 
         /// <summary>Spec section 1 delivery-level events. The rules engine's
-        /// InningsStarted/BallCompleted/InningsCompleted/MatchCompleted remain
-        /// available on <see cref="Match"/> for deeper subscribers.</summary>
+        /// own events remain available on <see cref="Match"/> too.</summary>
         public event System.Action<int> DeliveryStarted;             // innings index
         public event System.Action<BallRecord> LegalBall;
         public event System.Action<int, int> RunsScored;             // runs, innings index
         public event System.Action<BallRecord> WicketBall;
-        public event System.Action<Innings> OverCompleted;           // 6 legal balls
+        public event System.Action<OverRecord> OverCompleted;        // 6 legal balls
 
-        public SuperOverMatch Match { get { return match; } }
+        public LimitedOversMatch Match { get { return match; } }
+        public MatchSettings Settings { get { return settings; } }
         public MatchFlowState Flow { get { return flow; } }
         public bool PlayerBatsFirst { get { return true; } }
 
@@ -70,22 +80,48 @@ namespace CricketGame.BattingPrototype.Match
         public void Init(BattingHud hudRef)
         {
             hud = hudRef;
+            settings = MatchSettings.SuperOver();
+            ResetMatch();
+        }
+
+        /// <summary>Phase 6: switches format (Super Over / quick / 20 over)
+        /// and restarts. Called from the pre-match screen.</summary>
+        public void Configure(MatchSettings next)
+        {
+            if (next == null) return;
+            settings = next;
             ResetMatch();
         }
 
         /// <summary>(Re)starts a fresh match - also how PLAY AGAIN works.</summary>
         public void ResetMatch()
         {
-            match = new SuperOverMatch(SuperOverConfig.Standard);
-            match.InningsStarted += OnInningsStarted;
-            match.BallCompleted += OnBallCompleted;
-            match.InningsCompleted += OnInningsCompleted;
-            match.MatchCompleted += OnMatchCompleted;
-            match.Start();
+            BuildEngine();
             waitingForPlayAgain = false;
             ClearBatterHistory();          // Phase 4: fresh bowler memory
             SetFlow(MatchFlowState.Innings1);
             AudioManager.Play(GameSound.InningsStart);
+        }
+
+        private void BuildEngine()
+        {
+            // Player squad bats first; AI chases. Squads come from the team
+            // kits (named players first, fictional reserves after).
+            int batterCount = settings.MinimumBatters;
+            int bowlerCount = Mathf.Max(5, settings.MinimumBowlers);
+            var teamYou = new LimitedOversTeam(
+                TeamKit.You.SideName,
+                TeamKit.SquadNames(TeamKit.You, batterCount),
+                TeamKit.BowlerNames(TeamKit.You, bowlerCount));
+            var teamAi = new LimitedOversTeam(
+                TeamKit.Ai.SideName,
+                TeamKit.SquadNames(TeamKit.Ai, batterCount),
+                TeamKit.BowlerNames(TeamKit.Ai, bowlerCount));
+
+            match = new LimitedOversMatch(settings, teamYou, teamAi);
+            match.Start(0);                                // player bats first
+            if (EngineReplaced != null) EngineReplaced();
+            RefreshHud();
         }
 
         // ------------------------------------------------------------------ queries
@@ -115,7 +151,7 @@ namespace CricketGame.BattingPrototype.Match
         /// <summary>Chase context for the AI batter (spec section 14).</summary>
         public AiChaseContext BuildChaseContext()
         {
-            Innings current = match.CurrentInnings;
+            LimitedOversInnings current = match.CurrentInnings;
             return new AiChaseContext
             {
                 Target = match.Phase == MatchPhase.SecondInnings ? match.Target : (int?)null,
@@ -142,8 +178,7 @@ namespace CricketGame.BattingPrototype.Match
         // ------------------------------------------------------------------ Phase 4
         // AI bowling strategy (spec section 10): the bowler remembers the
         // player's recent scoring and adapts. Understandable + tunable.
-        private readonly System.Collections.Generic.List<BatterHistoryEntry> batterHistory
-            = new System.Collections.Generic.List<BatterHistoryEntry>();
+        private readonly List<BatterHistoryEntry> batterHistory = new List<BatterHistoryEntry>();
         private readonly CricketGame.Core.Simulation.IRng bowlRng
             = new CricketGame.Core.Simulation.SystemRng();
 
@@ -172,7 +207,7 @@ namespace CricketGame.BattingPrototype.Match
         public AiBowlingPlan? NextAiBowlingPlan()
         {
             if (!PlayerIsBatting || match == null || match.IsComplete) return null;
-            Innings current = match.CurrentInnings;
+            LimitedOversInnings current = match.CurrentInnings;
             var ctx = new AiBowlingContext
             {
                 Score = current != null ? current.Runs : 0,
@@ -187,8 +222,8 @@ namespace CricketGame.BattingPrototype.Match
         /// <summary>Records one resolved delivery into the rules engine.</summary>
         public BallRecord RecordDelivery(DeliveryOutcome outcome)
         {
+            EnsureBowlerAssigned();
             int inningsIndex = match.CurrentInningsIndex;
-            Innings inningsBefore = match.CurrentInnings;
             BallRecord record = match.RecordDelivery(outcome);
             RefreshHud();
 
@@ -196,13 +231,10 @@ namespace CricketGame.BattingPrototype.Match
             if (outcome.TotalRuns > 0 && RunsScored != null)
                 RunsScored(outcome.TotalRuns, inningsIndex);
             if (outcome.IsWicket && WicketBall != null) WicketBall(record);
-
-            // The phase may have moved on (innings/match ended), so check the
-            // innings the ball was recorded against.
-            if (inningsBefore != null
-                && inningsBefore.LegalBalls == match.Config.BallsPerInnings
-                && OverCompleted != null)
-                OverCompleted(inningsBefore);
+            if (record.OverJustCompleted && OverCompleted != null)
+                OverCompleted(match.CurrentInnings != null
+                    ? match.CurrentInnings.Overs[match.CurrentInnings.Overs.Count - 1]
+                    : LastOverOfCompletedInnings(inningsIndex));
 
             if (match.Phase == MatchPhase.SecondInnings && match.RunsRequired.HasValue
                 && match.RunsRequired.Value == 0)
@@ -210,6 +242,29 @@ namespace CricketGame.BattingPrototype.Match
                 if (TargetReached != null) TargetReached();
             }
             return record;
+        }
+
+        private OverRecord LastOverOfCompletedInnings(int inningsIndex)
+        {
+            var inn = inningsIndex == 0 ? match.FirstInnings : match.SecondInnings;
+            return inn != null && inn.Overs.Count > 0 ? inn.Overs[inn.Overs.Count - 1] : null;
+        }
+
+        /// <summary>
+        /// Bowler assignment happens automatically between overs: the engine's
+        /// rotation policy picks a legal bowler (max-overs cap, no consecutive
+        /// overs). Names are presentation - the AI always physically bowls
+        /// innings 1 and the player always physically bowls innings 2.
+        /// </summary>
+        private void EnsureBowlerAssigned()
+        {
+            LimitedOversInnings inn = match.CurrentInnings;
+            if (inn == null || inn.IsComplete) return;
+            if (inn.AwaitingBowler)
+            {
+                int pick = BowlerRotation.SuggestNextBowler(inn);
+                if (pick >= 0) match.AssignBowler(pick);
+            }
         }
 
         /// <summary>The runner calls this as each delivery is released.</summary>
@@ -222,10 +277,9 @@ namespace CricketGame.BattingPrototype.Match
         /// end so the break / chase / result flow can be jumped to.</summary>
         public void DebugForceInningsEnd()
         {
-            Innings innings = match.CurrentInnings;
+            LimitedOversInnings innings = match.CurrentInnings;
             if (innings == null || match.IsComplete) return;
-            innings.DebugOverride(innings.Runs, innings.Wickets,
-                                  match.Config.BallsPerInnings);
+            innings.DebugOverride(innings.Runs, innings.Wickets, innings.BallsPerInnings);
             match.DebugReevaluateAfterOverride();
             RefreshHud();
         }
@@ -234,8 +288,9 @@ namespace CricketGame.BattingPrototype.Match
         public void RefreshHud()
         {
             if (hud == null || match == null) return;
-            Innings current = match.CurrentInnings;
+            LimitedOversInnings current = match.CurrentInnings;
             if (current == null) current = match.SecondInnings;
+            if (current == null) return;
 
             hud.SetScoreboard(current.Runs, current.Wickets, current.LegalBalls);
             if (match.Phase == MatchPhase.SecondInnings || match.Phase == MatchPhase.Completed)
@@ -270,7 +325,7 @@ namespace CricketGame.BattingPrototype.Match
                 yield return new WaitForSeconds(2.2f);
 
                 SetFlow(MatchFlowState.InningsBreak);
-                hud.ShowInningsBreak(match.Target ?? 0);
+                hud.ShowInningsBreak(match.Target ?? 0, BuildBreakSummary());
                 AudioManager.Play(GameSound.InningsStart);
                 yield return new WaitForSeconds(2.0f);
                 hud.HideOverlays();
@@ -300,6 +355,20 @@ namespace CricketGame.BattingPrototype.Match
             }
         }
 
+        /// <summary>Phase 6 §23: innings-break summary (top scorer, best
+        /// bowler, overs) - presentation text only, stats come from the engine.</summary>
+        private string BuildBreakSummary()
+        {
+            var inn = match.FirstInnings;
+            var top = inn.TopScorer;
+            var best = inn.BestBowler;
+            string s = inn.BattingSideName + "  " + inn.ScoreDisplay
+                       + "  (" + inn.OversDisplay + " ov)";
+            if (top != null) s += "\nTOP SCORER   " + top.Name + "  " + top.Runs;
+            if (best != null) s += "\nBEST BOWLING   " + best.Name + "  " + best.Figures;
+            return s;
+        }
+
         /// <summary>Called by the HUD PLAY AGAIN button (and debug reset).</summary>
         public void PlayAgain()
         {
@@ -318,31 +387,6 @@ namespace CricketGame.BattingPrototype.Match
         {
             flow = next;
             if (FlowChanged != null) FlowChanged(next);
-        }
-
-        private void OnInningsStarted(InningsStartedArgs args)
-        {
-            // Bowler tracking (spec section 1): the AI bowls while the player
-            // bats; the player bowls the chase.
-            Innings innings = args.InningsIndex == 0 ? match.FirstInnings : match.SecondInnings;
-            innings.BowlerLabel = args.InningsIndex == 0 ? "AI" : "YOU";
-            RefreshHud();
-        }
-
-        private void OnBallCompleted(BallCompletedArgs args)
-        {
-            // Nothing extra yet - banners are fired by the runner where the
-            // visual context (caught/bowled/boundary) is known.
-        }
-
-        private void OnInningsCompleted(InningsCompletedArgs args)
-        {
-            AudioManager.Play(GameSound.CrowdCheer);
-        }
-
-        private void OnMatchCompleted(MatchCompletedArgs args)
-        {
-            AudioManager.Play(GameSound.CrowdCheer);
         }
     }
 }

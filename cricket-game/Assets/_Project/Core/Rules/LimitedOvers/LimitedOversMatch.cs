@@ -256,6 +256,28 @@ namespace CricketGame.Core.Rules.LimitedOvers
             state = CurrentInnings.AwaitingBowler ? InningsState.OverComplete : InningsState.Playing;
         }
 
+        /// <summary>
+        /// DEBUG ONLY (parity with SuperOverMatch): re-runs the completion
+        /// checks after an <see cref="LimitedOversInnings.DebugOverride"/>.
+        /// Real match flow never calls this.
+        /// </summary>
+        public void DebugReevaluateAfterOverride()
+        {
+            if (phase == MatchPhase.FirstInnings && innings[0] != null && innings[0].IsComplete)
+            {
+                phase = MatchPhase.InningsBreak;
+                RaiseInningsCompleted(0, innings[0], innings[0].Runs + 1);
+                state = InningsState.InningsBreak;
+            }
+            else if (phase == MatchPhase.SecondInnings && innings[1] != null && innings[1].IsComplete)
+            {
+                int target = innings[0].Runs + 1;
+                if (innings[1].Runs >= target) CompleteMatch(MatchOutcome.SecondInningsWin);
+                else if (innings[1].Runs == innings[0].Runs) CompleteMatch(MatchOutcome.Tie);
+                else CompleteMatch(MatchOutcome.FirstInningsWin);
+            }
+        }
+
         // ------------------------------------------------------------------ internals
 
         private LimitedOversInnings BuildInnings(int inningsIndex)

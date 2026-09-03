@@ -143,7 +143,13 @@ namespace CricketGame.BattingPrototype.Bootstrap
                 camCtrl.PreMatchOrbit();
                 preMatch.Show();
             };
-            preMatch.Started += camCtrl.ShowSetup;
+            // Phase 6: the pre-match screen picks the format, then the match
+            // controller rebuilds the rules engine for it.
+            preMatch.Started += settings =>
+            {
+                matchCtl.Configure(settings);
+                camCtrl.ShowSetup();
+            };
             matchCtl.FlowChanged += state =>
             {
                 if (state == Match.MatchFlowState.MatchResult) camCtrl.ShowResultHold();
@@ -174,6 +180,15 @@ namespace CricketGame.BattingPrototype.Bootstrap
 
             var board = World.StadiumScoreboard.Attach(world.Root);
             board.BindMatch(matchCtl.Match, true);
+
+            // Phase 6: whenever the rules engine is rebuilt (mode switch or
+            // PLAY AGAIN), all engine observers re-bind to the new instance.
+            matchCtl.EngineReplaced += () =>
+            {
+                hud.BindMatch(matchCtl);
+                bowlingPanel.BindMatch(matchCtl);
+                board.BindMatch(matchCtl.Match, true);
+            };
 
             var vfxGo = new GameObject("Vfx");
             vfxGo.transform.SetParent(root.transform, false);

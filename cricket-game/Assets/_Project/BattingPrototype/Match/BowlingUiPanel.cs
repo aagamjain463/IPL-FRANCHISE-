@@ -103,6 +103,12 @@ namespace CricketGame.BattingPrototype.Match
                 dots = 0; boundaries = 0; speedSum = 0f; speedCount = 0;
                 RefreshSpell();
             };
+            // Phase 6: spell stats are per-over in limited-overs cricket.
+            matchCtl.Match.OverCompleted += args =>
+            {
+                dots = 0; boundaries = 0; speedSum = 0f; speedCount = 0;
+                RefreshSpell();
+            };
         }
 
         private void RefreshSpell()

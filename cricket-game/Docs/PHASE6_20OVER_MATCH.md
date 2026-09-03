@@ -72,3 +72,35 @@ All Phases 1–5 harness suites still green. Unity mirror: `Phase6Tests.cs`.
   web-preview mirror — pass 5.
 - Run-out "which runner" semantics default to the striker (documented
   extension point on `DeliveryOutcome`).
+
+---
+
+## Pass 2 — gameplay integration (COMPLETE)
+
+The Unity gameplay layer now runs on the limited-overs engine for ALL modes
+(single code path; Super Over parity was proven in pass 1).
+
+- **MatchController** rebuilt on `LimitedOversMatch`: `Configure(MatchSettings)`
+  swaps formats; squads come from TeamKit (named players + fictional reserves);
+  bowler assignment is automatic via `BowlerRotation.SuggestNextBowler` (names
+  are presentation — AI physically bowls innings 1, the player innings 2);
+  innings-break flow shows first-innings summary (score / top scorer / best
+  figures) before the chase line; `EngineReplaced` event lets observers re-bind.
+- **PreMatchScreen**: format selector — SUPER OVER / QUICK 5 / T20 · 20 OVER,
+  themed buttons + dynamic match chip. START rebuilds the engine for the
+  selection.
+- **HUD**: batter line now reads names from the engine's player cards (full
+  squad); over chips reset every over; result screen shows real POTM + format
+  details from MatchSettings; innings-break overlay extended.
+- **Stadium scoreboard**: cricket-notation overs ("45/2 (7.3)").
+- **Bowling panel**: spell stats reset per over.
+- **Debug parity**: `LimitedOversInnings.DebugOverride` +
+  `LimitedOversMatch.DebugReevaluateAfterOverride` keep the debug panel working.
+
+Verified: brace-lint balanced on every touched file; all Python rule suites
+green (unchanged); web preview smokes green. Unity compile check still pending
+(no toolchain in sandbox) — API-grepped for every consumer of the changed
+types; no stale `SuperOverMatch` references remain.
+
+Known limits: presentation-speed options, scorecard screens, RRR HUD line and
+the web-preview mirror of the 20-over flow arrive in passes 3-5.

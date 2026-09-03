@@ -38,5 +38,49 @@ namespace CricketGame.BattingPrototype.World
             Bowler = "S. Nair",
             SideName = "AI",
         };
+
+        // Phase 6: fictional reserve rosters so limited-overs matches can field
+        // a full batting order and a 5-bowler squad. Deterministic and original.
+        private static readonly string[] ReserveInitials = { "R", "D", "N", "P", "E", "V", "L", "H" };
+        private static readonly string[] ReserveSurnames =
+            { "Ashby", "Coles", "Dray", "Ellison", "Farrow", "Gale", "Holt", "Ivers",
+              "Judd", "Keene", "Lowen", "Marsden", "North", "Orrell", "Pryce", "Quade",
+              "Ravenscroft", "Sedge", "Tarrant", "Ulric", "Vance", "Whitlock" };
+
+        /// <summary>Full batting order: the kit's named players first, then
+        /// generated fictional reserves. Never returns duplicates.</summary>
+        public static System.Collections.Generic.List<string> SquadNames(Kit kit, int count)
+        {
+            var list = new System.Collections.Generic.List<string>();
+            foreach (string n in kit.Batters) list.Add(n);
+            int seed = kit.SideName == "YOU" ? 0 : 7;
+            for (int i = list.Count; i < count; i++)
+            {
+                string name = ReserveInitials[(i + seed) % ReserveInitials.Length] + ". "
+                            + ReserveSurnames[(i * 3 + seed) % ReserveSurnames.Length];
+                while (list.Contains(name))
+                    name = ReserveInitials[(i + seed + 1) % ReserveInitials.Length] + ". "
+                         + ReserveSurnames[(i * 3 + seed + 5) % ReserveSurnames.Length];
+                list.Add(name);
+            }
+            return list;
+        }
+
+        /// <summary>Bowling squad: the kit's lead bowler plus fictional reserves.</summary>
+        public static System.Collections.Generic.List<string> BowlerNames(Kit kit, int count)
+        {
+            var list = new System.Collections.Generic.List<string> { kit.Bowler };
+            int seed = kit.SideName == "YOU" ? 3 : 11;
+            for (int i = 1; i < count; i++)
+            {
+                string name = ReserveInitials[(i + seed) % ReserveInitials.Length] + ". "
+                            + ReserveSurnames[(i * 5 + seed) % ReserveSurnames.Length];
+                while (list.Contains(name))
+                    name = ReserveInitials[(i + seed + 2) % ReserveInitials.Length] + ". "
+                         + ReserveSurnames[(i * 5 + seed + 9) % ReserveSurnames.Length];
+                list.Add(name);
+            }
+            return list;
+        }
     }
 }

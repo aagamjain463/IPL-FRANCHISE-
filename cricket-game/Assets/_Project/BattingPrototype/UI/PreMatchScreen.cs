@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using CricketGame.Core.Rules.LimitedOvers;
 using CricketGame.BattingPrototype.Audio;
 using CricketGame.BattingPrototype.World;
 using UnityEngine;
@@ -12,10 +15,30 @@ namespace CricketGame.BattingPrototype.UI
     /// </summary>
     public sealed class PreMatchScreen : MonoBehaviour
     {
-        public event Action Started;
+        /// <summary>Phase 6: fires with the selected match format.</summary>
+        public event Action<MatchSettings> Started;
 
         private RectTransform root;
         private CanvasGroup group;
+
+        // Phase 6 format selection (spec section 2).
+        private readonly List<Button> modeButtons = new List<Button>();
+        private readonly List<Image> modeButtonBodies = new List<Image>();
+        private Text modeChipText;
+        private int selectedMode;   // 0 = SUPER OVER, 1 = QUICK 5, 2 = T20
+
+        private MatchSettings SelectedSettings
+        {
+            get
+            {
+                switch (selectedMode)
+                {
+                    case 1: return new MatchSettings(5, 10, MatchMode.QuickMatch);
+                    case 2: return MatchSettings.TwentyOver();
+                    default: return MatchSettings.SuperOver();
+                }
+            }
+        }
 
         public void Build(Canvas canvas)
         {
@@ -52,9 +75,9 @@ namespace CricketGame.BattingPrototype.UI
             var chip = UiComponents.Panel(root, "MatchChip", new Vector2(360f, 44f), UITheme.RadiusButton);
             UiKit.Anchor(chip, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                          new Vector2(-180f, -120f), new Vector2(180f, -76f));
-            var chipText = UiComponents.Label(chip, "Text", "SUPER OVER  ·  HARBOUR ARENA",
+            modeChipText = UiComponents.Label(chip, "Text", "SUPER OVER  ·  HARBOUR ARENA",
                                               UITheme.FontSub, TextAnchor.MiddleCenter, UITheme.TextWhite);
-            UiKit.Anchor(UiKit.Rect(chipText.gameObject), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            UiKit.Anchor(UiKit.Rect(modeChipText.gameObject), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var venue = UiKit.AddText(root, "Venue", "Original fictional venue - floodlit evening match",
                                       UITheme.FontSub, TextAnchor.MiddleCenter, UITheme.TextDim);
             UiKit.Anchor(UiKit.Rect(venue.gameObject), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
@@ -68,6 +91,23 @@ namespace CricketGame.BattingPrototype.UI
             var toss = UiComponents.Label(pill, "Text", "YOU WON THE TOSS AND ELECTED TO BAT",
                                           UITheme.FontSub, TextAnchor.MiddleCenter, UITheme.Cyan);
             UiKit.Anchor(UiKit.Rect(toss.gameObject), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            // Phase 6: format selector (spec section 2)
+            string[] modeLabels = { "SUPER OVER", "QUICK 5", "T20 · 20 OVER" };
+            for (int i = 0; i < modeLabels.Length; i++)
+            {
+                var b = UiComponents.ThemedButton(root, "Mode_" + i, modeLabels[i],
+                                                  new Vector2(172f, 44f), ButtonStyle.Outline, UITheme.FontSub);
+                UiKit.Anchor(UiKit.Rect(b.gameObject), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                             new Vector2(-270f + i * 184f, 78f), new Vector2(-98f + i * 184f, 122f));
+                int mode = i;
+                b.onClick.AddListener(() => SelectMode(mode));
+                modeButtons.Add(b);
+                var body = b.transform.Find("Body");
+                modeButtonBodies.Add(body != null ? body.GetComponent<Image>() : null);
+            }
+            selectedMode = 0;
+            UpdateModeSelection();
 
             // start button
             var start = UiComponents.ThemedButton(root, "StartMatch", "START MATCH",
@@ -115,6 +155,32 @@ namespace CricketGame.BattingPrototype.UI
             AudioManager.Play(GameSound.UiTransition);
         }
 
+        private void SelectMode(int mode)
+        {
+            selectedMode = mode;
+            AudioManager.Play(GameSound.UiClick);
+            UpdateModeSelection();
+        }
+
+        private void UpdateModeSelection()
+        {
+            for (int i = 0; i < modeButtons.Count; i++)
+            {
+                bool on = i == selectedMode;
+                if (modeButtonBodies[i] != null)
+                    modeButtonBodies[i].color = on ? UITheme.Cyan : new Color(0f, 0.85f, 1f, 0.08f);
+                var label = modeButtons[i].transform.Find("Label");
+                if (label != null)
+                    label.GetComponent<Text>().color = on ? UITheme.BgDark : UITheme.TextWhite;
+            }
+            if (modeChipText != null)
+            {
+                string format = selectedMode == 1 ? "QUICK 5 OVERS"
+                              : selectedMode == 2 ? "T20 · 20 OVERS" : "SUPER OVER";
+                modeChipText.text = format + "  ·  HARBOUR ARENA";
+            }
+        }
+
         private void StartMatch()
         {
             AudioManager.Play(GameSound.MatchIntro);
@@ -122,7 +188,7 @@ namespace CricketGame.BattingPrototype.UI
             Time.timeScale = 1f;
             UITweenHost.Fade(group, 0f, UITheme.TweenSlow);
             root.gameObject.SetActive(false);
-            if (Started != null) Started();
+            if (Started != null) Started(SelectedSettings);
         }
     }
 }

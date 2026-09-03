@@ -174,6 +174,12 @@ namespace CricketGame.Core.Rules.LimitedOvers
             get { return settings.IsPowerplayOver(CompletedOvers); }
         }
 
+        /// <summary>Total legal balls in this innings (convenience).</summary>
+        public int BallsPerInnings
+        {
+            get { return settings.BallsPerInnings; }
+        }
+
         // ------------------------------------------------------------------ chase math
 
         /// <summary>Runs still needed to beat the target (never negative).</summary>
@@ -380,6 +386,20 @@ namespace CricketGame.Core.Rules.LimitedOvers
         public override string ToString()
         {
             return BattingSideName + " " + ScoreDisplay + " (" + OversDisplay + " ov)";
+        }
+
+        /// <summary>
+        /// DEBUG ONLY: forces the innings counters (parity with the Super Over
+        /// debug panel). Never called by the real match flow; values are
+        /// clamped to the rules. Player cards are NOT rewritten - this only
+        /// exists to jump the flow to break / chase / result.
+        /// </summary>
+        public void DebugOverride(int runs, int wickets, int legalBalls)
+        {
+            Runs = Math.Max(0, runs);
+            Wickets = Math.Min(Math.Max(0, wickets), settings.WicketsPerInnings);
+            LegalBalls = Math.Min(Math.Max(0, legalBalls), settings.BallsPerInnings);
+            TotalDeliveries = Math.Max(TotalDeliveries, LegalBalls);
         }
     }
 }
