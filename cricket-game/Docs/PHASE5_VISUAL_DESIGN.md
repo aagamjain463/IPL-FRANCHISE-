@@ -159,3 +159,14 @@ the flat prototype materials untouched. The browser preview loads downscaled
 copies (2 MB set) from `harness/webpreview/art/` for sky background, ground and
 crowd-stand patterns, with the flat-colour fallback when images are absent
 (headless smoke included).
+
+---
+
+## 12. Perf pass: preview anti-hang (spec 3)
+
+Measured JS cost is ~0.1 ms/frame, so tab freezes on low-end devices come from
+canvas pixel load, not logic. Mitigations in `preview.js`: DPR capped at 1.25
+when `hardwareConcurrency <= 4` or `deviceMemory <= 4`; wall-clock EMA of draw
+cost — sustained >34 ms steps `renderScale` down to 0.7x and sets `lowFx`,
+which drops the per-frame floodlight radial gradients. Unity side keeps the
+LOW/MED/HIGH presets from §7 as its own quality ladder.

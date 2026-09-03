@@ -8,9 +8,16 @@
 const canvas = document.getElementById("view");
 const ctx = canvas.getContext("2d");
 let W = 0, H = 0, DPR = 1, FOCAL = 1;
+// Phase 5 perf pass: adaptive quality. If drawing consistently exceeds the
+// 16 ms budget on a low-power device, renderScale steps down (smaller
+// backing canvas) and decorative floodlight glows are dropped.
+let renderScale = 1, frameCostEma = 16, lowFx = false;
 
 function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const cores = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 8;
+  const mem = (typeof navigator !== "undefined" && navigator.deviceMemory) || 8;
+  const cap = (cores <= 4 || mem <= 4) ? 1.25 : 2;   // low-end phones render fewer pixels
+  DPR = Math.min(window.devicePixelRatio || 1, cap) * renderScale;
   W = window.innerWidth; H = window.innerHeight;
   canvas.width = W * DPR; canvas.height = H * DPR;
   canvas.style.width = W + "px"; canvas.style.height = H + "px";
@@ -751,6 +758,7 @@ function drawWorld(cam) {
     }
   }
   for (let i = 0; i < 4; i++) {
+    if (lowFx) break;   // Phase 5 perf pass: skip per-frame gradient glows on weak devices
     const a = (45 + 90 * i) * Math.PI / 180;
     const p = project(cam, { x: Math.sin(a) * 84, y: 28, z: Math.cos(a) * 84 });
     if (!p) continue;
@@ -1566,6 +1574,7 @@ let lastT = performance.now();
 let ballStarting = false;
 
 function frame(now) {
+  const frameWall0 = performance.now();
   let dt = Math.min(0.033, (now - lastT) / 1000);
   lastT = now;
   if (slowMo) dt *= 0.35;   // debug slow motion
@@ -1693,6 +1702,14 @@ function frame(now) {
   drawTouchVisuals();
   if (camPunch > 0.001) camPunch = Math.max(0, camPunch - dt * 1.4);
   updateDebug(dt);
+
+  // Phase 5 perf pass: if real drawing cost stays over budget, drop resolution.
+  frameCostEma = frameCostEma * 0.9 + (performance.now() - frameWall0) * 0.1;
+  if (frameCostEma > 34 && renderScale > 0.7) {
+    renderScale = Math.max(0.7, renderScale - 0.25);
+    lowFx = true;
+    resize();
+  }
 
   requestAnimationFrame(frame);
 }
