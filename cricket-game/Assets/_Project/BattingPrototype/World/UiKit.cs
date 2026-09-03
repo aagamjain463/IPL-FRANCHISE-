@@ -6,17 +6,31 @@ namespace CricketGame.BattingPrototype.World
     /// <summary>Small helpers for building UI entirely in code (no prefab assets).</summary>
     public static class UiKit
     {
-        private static Sprite whiteSprite;
+       private static Sprite _whiteSprite;
 
-        public static Sprite WhiteSprite
+public static Sprite WhiteSprite
+{
+    get
+    {
+        if (_whiteSprite == null)
         {
-            get
-            {
-                if (whiteSprite == null)
-                    whiteSprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 16, 16), new Vector2(0.5f, 0.5f));
-                return whiteSprite;
-            }
+            Texture2D texture = new Texture2D(1, 1);
+            texture.SetPixel(0, 0, Color.white);
+            texture.Apply();
+
+            _whiteSprite = Sprite.Create(
+                texture,
+                new Rect(0, 0, 1, 1),
+                new Vector2(0.5f, 0.5f),
+                1f
+            );
+
+            _whiteSprite.name = "RuntimeWhiteSprite";
         }
+
+        return _whiteSprite;
+    }
+}
 
         private static Font defaultFont;
 
