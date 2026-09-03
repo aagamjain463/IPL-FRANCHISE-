@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const src = fs.readFileSync(path.join(__dirname, "engine.js"), "utf8");
 const sandbox = {};
-new Function("s", src + "; Object.assign(s, { BattingEngine, makeDelivery, Trajectory, windupTime, buildDelivery, nextDeliveryType, resolveOutcome, DELIVERY_TYPES, DELIVERY_SPECS, DELIVERY_LABELS, predictCarry, simulateFielding, defaultField, FIELD_SETUP, aiBattingPlan, aggressionState, aiSwingFrameTime, AI_DIFFICULTY, SuperOverMatchJS, timingFeedback, TIMING_TIERS, validateShotRequest, ALLOWED_SECTORS, BOWLER_PROFILES, releaseQuality, applyRelease, bowlWithRelease, deliveryLegality, sprayProbability, aiBowlingPlan, catchGrade, diveDecision, throwReturn, RELEASE_MAX_ERROR });")(sandbox);
+new Function("s", src + "; Object.assign(s, { BattingEngine, makeDelivery, Trajectory, windupTime, buildDelivery, nextDeliveryType, resolveOutcome, resolveContact, DELIVERY_TYPES, DELIVERY_SPECS, DELIVERY_LABELS, predictCarry, simulateFielding, defaultField, FIELD_SETUP, aiBattingPlan, aggressionState, aiSwingFrameTime, AI_DIFFICULTY, SuperOverMatchJS, timingFeedback, TIMING_TIERS, validateShotRequest, ALLOWED_SECTORS, BOWLER_PROFILES, releaseQuality, applyRelease, bowlWithRelease, deliveryLegality, sprayProbability, aiBowlingPlan, catchGrade, diveDecision, throwReturn, RELEASE_MAX_ERROR, lateralMovement, edgeSide, movementEdgeBias });")(sandbox);
 const S = sandbox;
 
 const ok = (cond, msg) => { if (!cond) throw new Error("FAIL: " + msg); };
@@ -398,3 +398,50 @@ function mulberry32(a) {
 }
 
 console.log("SMOKE PASS (phase 1+2+3+4)");
+
+// ================= Phase 2 feel: movement-steered edges + catch grading =================
+// 18. Movement steers edges; catch grade shapes sim probability.
+{
+  ok(S.edgeSide(0.8, 0) === 1, "outswing edges fly off");
+  ok(S.edgeSide(-0.8, 0) === -1, "inswing edges fly leg");
+  ok(S.edgeSide(0.05, 0) === 0, "no movement -> no steer");
+  ok(S.movementEdgeBias(0.12, 0.8, 0) > 0, "bat caught by movement edges more");
+  ok(S.movementEdgeBias(-0.12, 0.8, 0) < 0, "bat with movement edges less");
+  ok(S.movementEdgeBias(0, 0.8, 0) === 0, "perfect timing -> no bias");
+
+  function edgeOffFraction(swing, n) {
+    let off = 0, total = 0;
+    for (let s = 0; s < n; s++) {
+      const rng = mulberry32(9000 + s);
+      const delivery = S.makeDelivery(132, 0.2, 0.5, swing);
+      const shot = { kind: "cover_drive", name: "Cover Drive", lofted: false,
+                     awkward: false, base_power: 0.68, base_loft: 6 };
+      const direction = { reach: 0.85, angle: 0 };
+      const c = S.resolveContact(rng, delivery, shot, direction, 0.12, "late", 1.0);
+      if (c.outcome === "edge") {
+        total++;
+        if (c.direction.x > 0) off++;
+      }
+    }
+    return total ? off / total : 0;
+  }
+  ok(edgeOffFraction(0.8, 1500) > 0.9, "outswinger's edges go to the off side");
+  ok(edgeOffFraction(-0.8, 1500) < 0.1, "inswinger's edges go to the leg side");
+
+  function caughtFraction(vel, n) {
+    let caught = 0;
+    for (let s = 0; s < n; s++) {
+      const rng = mulberry32(7000 + s);
+      const r = S.simulateFielding({ x: 0.1, y: 0.9, z: 0.35 }, vel, S.defaultField(1.0), rng);
+      if (r.kind === "caught") caught++;
+    }
+    return caught / n;
+  }
+  const soft = caughtFraction({ x: 8.45, y: 9.9, z: 8.8 }, 400);
+  const hard = caughtFraction({ x: 14, y: 4, z: 15 }, 400);
+  ok(soft > 0.4, `gentle loft should be caught regularly, got=${soft}`);
+  ok(hard < 0.15, `hard flat drive should rarely be caught, got=${hard}`);
+  ok(soft > hard + 0.2, "catch grade shapes the simulated catch probability");
+}
+
+console.log("SMOKE PASS (phase 2 feel: edges + catch grading)");

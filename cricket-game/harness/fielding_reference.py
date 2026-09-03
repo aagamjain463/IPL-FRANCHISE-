@@ -37,6 +37,24 @@ CATCH_RADIUS = 0.95      # metres (2D) to get hands on a high ball
 CATCH_MAX_HEIGHT = 2.4
 STOP_RADIUS = 0.80       # metres to stop a grounded ball
 
+# Catch grading (mirrors phase4_reference.catch_grade): difficulty shapes the
+# fielder-based catch probability so skied balls are punished and sharp
+# chances are harder than easy ones in the simulation itself.
+GRADE_SUCCESS_BIAS = {"easy": 1.15, "medium": 1.00, "difficult": 0.72, "edge": 0.55}
+
+
+def _catch_grade(ball_speed_kph, height, distance_to_fielder):
+    """easy | medium | difficult. Mirrors phase4_reference.catch_grade with
+    is_edge=False (the sim does not know contact type)."""
+    reaction_pressure = ball_speed_kph / 130.0 + max(0.0, 1.6 - height) * 0.25
+    if distance_to_fielder < 3.0 and ball_speed_kph > 95.0:
+        return "difficult"
+    if reaction_pressure > 1.05 or height > 6.0:
+        return "difficult"
+    if reaction_pressure > 0.72 or height > 3.2:
+        return "medium"
+    return "easy"
+
 
 class Fielder:
     __slots__ = ("name", "home", "speed", "reaction", "catching",
@@ -209,7 +227,9 @@ def simulate_fielding(contact_pos, velocity, fielders, rng, max_seconds=12.0):
                 rising = vel[1] > 0.0
                 if rising and not (pos[1] <= 1.6 and ball_speed < 90.0):
                     continue
-                p = catch_probability(f, ball_speed, pos[1])
+                p = catch_probability(f, ball_speed, pos[1]) \
+                    * GRADE_SUCCESS_BIAS[_catch_grade(ball_speed, pos[1], d)]
+                p = max(0.05, min(0.97, p))
                 if rng.random() < p:
                     return {"kind": "caught", "runs": 0, "fielder": i,
                             "name": f.name, "pos": pos, "t": t,

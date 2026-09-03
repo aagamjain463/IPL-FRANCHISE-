@@ -59,17 +59,44 @@ namespace CricketGame.Core.Batting
             }
 
             // ---------------------------------------------------------------- edge
-            float pEdge = TimingSystem.EdgeProbability(absOffset, setup.Direction.ReachQuality, setup.Delivery.SpeedKph);
+            // Movement-aware edges: swing/seam + timing decide both how often the
+            // bat edges and which side it flies, plus how thick the contact is.
+            float pEdge = TimingSystem.EdgeProbability(absOffset, setup.Direction.ReachQuality,
+                                                       setup.Delivery.SpeedKph)
+                        + TimingSystem.MovementEdgeBias(setup.TimingOffset,
+                                                        setup.Delivery.Swing, setup.Delivery.Seam);
             if (setup.Shot.Awkward) pEdge = System.Math.Min(0.7f, pEdge * 1.6f);
+            if (pEdge < 0.01f) pEdge = 0.01f;
+            else if (pEdge > 0.55f) pEdge = 0.55f;
+
             if (rng.NextFloat() < pEdge)
             {
                 r.Outcome = ContactOutcome.Edge;
                 r.Quality = 0.2f;
-                r.ExitSpeedKph = setup.Delivery.SpeedKph * (0.42f + 0.25f * rng.NextFloat());
-                r.ElevationDeg = 6f + 34f * rng.NextFloat();
+
+                // Thin vs thick: poor reach and a bat caught on the wrong side of
+                // the movement produce a THICK edge that skims away fast and
+                // square; fine contact produces a THIN, looping edge that carries
+                // behind square toward keeper/slip.
+                float move = TimingSystem.LateralMovement(setup.Delivery.Swing, setup.Delivery.Seam);
+                float product = setup.TimingOffset * move;
+                float thick = 0.25f + (1f - setup.Direction.ReachQuality) * 0.55f
+                            + (product > 0f ? 0.20f : 0f);
+                if (thick < 0f) thick = 0f;
+                if (thick > 1f) thick = 1f;
+
+                r.ExitSpeedKph = setup.Delivery.SpeedKph * (0.34f + 0.38f * thick + 0.16f * rng.NextFloat());
+                r.ElevationDeg = thick < 0.5f
+                    ? 20f + 22f * rng.NextFloat()   // thin: loops toward keeper/slip
+                    : 4f + 14f * rng.NextFloat();    // thick: skims square
                 r.IsLofted = r.ElevationDeg > 22f;
-                float side = rng.NextFloat() < 0.5f ? -1f : 1f;
-                float angle = side * (1.66f + 0.9f * rng.NextFloat()); // behind square
+
+                float sideRand = rng.NextFloat() < 0.5f ? -1f : 1f;
+                int side = TimingSystem.EdgeSide(setup.Delivery.Swing, setup.Delivery.Seam);
+                float sideSign = side != 0 ? side : sideRand;
+                float angle = thick < 0.5f
+                    ? sideSign * (1.85f + 0.45f * rng.NextFloat())  // fine behind square
+                    : sideSign * (1.20f + 0.70f * rng.NextFloat());  // squarer
                 r.Direction = DirectionFromAngle(angle, r.ElevationDeg);
                 return r;
             }

@@ -283,6 +283,78 @@ namespace CricketGame.Core.Tests
             Assert.AreEqual(1, match.SecondInnings.Wickets);
         }
 
+        // ------------------------------------------------------------------ Phase 1 edge-case battery
+        // Mirrors harness/test_superover.py TestPhase1EdgeCases.
+
+        [Test]
+        public void Chase_SixOnTheFinalBall_Wins()
+        {
+            // Target 7; the chasing side reaches it with a SIX off the 6th ball.
+            var match = StartChaseAfter(Legal(1, 1, 1, 1, 1, 1));
+            match.RecordDelivery(DeliveryOutcome.Legal(1));
+            foreach (var o in Legal(0, 0, 0, 0)) match.RecordDelivery(o);
+            Assert.AreEqual(6, match.RunsRequired.Value);
+            Assert.AreEqual(1, match.CurrentInnings.BallsRemaining);
+            match.RecordDelivery(DeliveryOutcome.Legal(6));
+            AssertCompleted(match, MatchOutcome.SecondInningsWin);
+            Assert.AreEqual(7, match.SecondInnings.Runs);
+            Assert.AreEqual(6, match.SecondInnings.LegalBalls);
+            Assert.AreEqual(0, match.Result.MarginBalls);
+            Assert.AreEqual(2, match.Result.MarginWickets);
+        }
+
+        [Test]
+        public void Chase_FourOnTheFinalBall_Wins()
+        {
+            // Target 10; 6 off 5 then a FOUR off the 6th ball wins exactly.
+            var match = StartChaseAfter(Legal(3, 3, 3, 0, 0, 0));
+            foreach (var o in Legal(2, 2, 2, 0, 0)) match.RecordDelivery(o);
+            Assert.AreEqual(4, match.RunsRequired.Value);
+            match.RecordDelivery(DeliveryOutcome.Legal(4));
+            AssertCompleted(match, MatchOutcome.SecondInningsWin);
+            Assert.AreEqual(10, match.SecondInnings.Runs);
+            Assert.AreEqual(6, match.SecondInnings.LegalBalls);
+            Assert.AreEqual(0, match.Result.MarginBalls);
+        }
+
+        [Test]
+        public void FirstInnings_WicketOnSixthBall_EndsInningsOnBalls()
+        {
+            var match = new SuperOverMatch(SuperOverConfig.Standard);
+            match.Start();
+            foreach (var o in Legal(1, 1, 1, 1, 1)) match.RecordDelivery(o);
+            match.RecordDelivery(DeliveryOutcome.Wicket(DismissalKind.Bowled));
+            Assert.AreEqual(MatchPhase.InningsBreak, match.Phase);
+            Assert.AreEqual(5, match.FirstInnings.Runs);
+            Assert.AreEqual(1, match.FirstInnings.Wickets);
+            Assert.AreEqual(6, match.FirstInnings.LegalBalls);
+            Assert.AreEqual(6, match.Target.Value);
+        }
+
+        [Test]
+        public void FirstInnings_ScoreZero_SetsTargetOne()
+        {
+            var match = new SuperOverMatch(SuperOverConfig.Standard);
+            match.Start();
+            foreach (var o in Legal(0, 0, 0, 0, 0, 0)) match.RecordDelivery(o);
+            Assert.AreEqual(MatchPhase.InningsBreak, match.Phase);
+            Assert.AreEqual(0, match.FirstInnings.Runs);
+            Assert.AreEqual(1, match.Target.Value);
+            Assert.AreEqual(1, match.RunsRequired.Value);
+        }
+
+        [Test]
+        public void Chase_TargetReachedOnBallOne_WinsImmediately()
+        {
+            var match = StartChaseAfter(Legal(4, 0, 0, 0, 0, 0));
+            Assert.AreEqual(5, match.Target.Value);
+            match.RecordDelivery(DeliveryOutcome.Legal(6));
+            AssertCompleted(match, MatchOutcome.SecondInningsWin);
+            Assert.AreEqual(1, match.SecondInnings.LegalBalls);
+            Assert.AreEqual(5, match.Result.MarginBalls);
+            Assert.AreEqual(2, match.Result.MarginWickets);
+        }
+
         // ------------------------------------------------------------------ chase: losses
 
         [Test]

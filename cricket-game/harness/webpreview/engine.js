@@ -148,6 +148,28 @@ function edgeProbability(absOff, reach, speedKph) {
   return clamp(p, 0.01, 0.55);
 }
 
+function lateralMovement(swing, seam) {
+  return clamp(swing + seam, -1.5, 1.5);
+}
+
+function edgeSide(swing, seam) {
+  const move = lateralMovement(swing, seam);
+  if (move >= 0.15) return 1;
+  if (move <= -0.15) return -1;
+  return 0;
+}
+
+function movementEdgeBias(timingOffset, swing, seam) {
+  const move = lateralMovement(swing, seam);
+  const frac = Math.abs(move) / 1.5;
+  if (frac <= 0) return 0;
+  const mistime = Math.max(0, Math.abs(timingOffset) - 0.045);
+  const s = Math.min(1, mistime / 0.12);
+  const product = timingOffset * move;
+  if (product > 0) return 0.10 * frac * s;
+  return -0.04 * frac * s;
+}
+
 /* ---------------- direction resolver ---------------- */
 const MIN_DIR_STRENGTH = 0.25, REACH_FALLOFF = 0.85;
 
@@ -273,16 +295,25 @@ function resolveContact(rand, delivery, shot, direction, timingOffset, windowKin
     return r;
   }
 
-  let pEdge = edgeProbability(absOff, direction.reach, delivery.speed_kph);
+  let pEdge = edgeProbability(absOff, direction.reach, delivery.speed_kph)
+            + movementEdgeBias(timingOffset, delivery.swing, delivery.seam);
   if (shot.awkward) pEdge = Math.min(0.7, pEdge * 1.6);
+  pEdge = clamp(pEdge, 0.01, 0.55);
   if (rand() < pEdge) {
     r.outcome = "edge";
     r.quality = 0.2;
-    r.exit_kph = delivery.speed_kph * (0.42 + 0.25 * rand());
-    r.elevation = 6 + 34 * rand();
+    const move = lateralMovement(delivery.swing, delivery.seam);
+    const product = timingOffset * move;
+    const thick = clamp(0.25 + (1 - direction.reach) * 0.55 + (product > 0 ? 0.20 : 0), 0, 1);
+    r.exit_kph = delivery.speed_kph * (0.34 + 0.38 * thick + 0.16 * rand());
+    r.elevation = thick < 0.5 ? 20 + 22 * rand() : 4 + 14 * rand();
     r.lofted = r.elevation > 22;
-    const side = rand() < 0.5 ? -1 : 1;
-    r.direction = directionFromAngle(side * (1.66 + 0.9 * rand()), r.elevation);
+    const sideRand = rand() < 0.5 ? -1 : 1;
+    const side = edgeSide(delivery.swing, delivery.seam);
+    const sideSign = side !== 0 ? side : sideRand;
+    const angle = thick < 0.5 ? sideSign * (1.85 + 0.45 * rand())
+                              : sideSign * (1.20 + 0.70 * rand());
+    r.direction = directionFromAngle(angle, r.elevation);
     return r;
   }
 
@@ -697,7 +728,9 @@ function simulateFielding(contactPos, velocity, fielders, rand, maxSeconds = 12)
         const ballSpeed = Math.hypot(vel.x, vel.y, vel.z) * 3.6;
         const rising = vel.y > 0;
         if (rising && !(pos.y <= 1.6 && ballSpeed < 90)) continue;
-        const p = catchProbability(f, ballSpeed, pos.y);
+        let p = catchProbability(f, ballSpeed, pos.y)
+              * GRADE_SUCCESS_BIAS[catchGrade(ballSpeed, pos.y, d, false)];
+        p = clamp(p, 0.05, 0.97);
         if (rand() < p) {
           return { kind: "caught", runs: 0, fielder: i, name: f.name, pos: { ...pos },
                    t, collect_time: null, throw_time: null, chased, catch_prob: p };

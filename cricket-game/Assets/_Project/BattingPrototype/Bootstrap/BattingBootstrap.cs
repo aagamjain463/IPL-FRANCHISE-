@@ -145,6 +145,8 @@ namespace CricketGame.BattingPrototype.Bootstrap
             pause.Build(hud.Canvas);
 
             hud.PausePressed += pause.Open;
+            // Intent buttons (DEF/NOR/POW/LOFT) update the live input source.
+            hud.IntentChanged += intent => input.SelectedIntent = intent;
             pause.QuitPressed += () =>
             {
                 matchCtl.ResetMatch();

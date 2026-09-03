@@ -81,6 +81,55 @@ namespace CricketGame.Core.Batting
             return offset * 1.6f;
         }
 
+        /// <summary>
+        /// Combined lateral movement of the ball from swing + seam (+ moving away
+        /// toward off, - moving in toward leg), clamped to the swing/seam bound.
+        /// </summary>
+        public static float LateralMovement(float swing, float seam)
+        {
+            float m = swing + seam;
+            if (m < -1.5f) m = -1.5f;
+            if (m > 1.5f) m = 1.5f;
+            return m;
+        }
+
+        /// <summary>
+        /// Which side a mistimed edge naturally flies: WITH the ball's movement.
+        /// An outswinger (away, +) edges off to keeper/slip (outside edge); an
+        /// inswinger (in, -) edges leg (leading/inside edge). 0 when the lateral
+        /// movement is negligible (the contact code then flips a coin).
+        /// </summary>
+        public static int EdgeSide(float swing, float seam)
+        {
+            float move = LateralMovement(swing, seam);
+            if (move >= 0.15f) return 1;
+            if (move <= -0.15f) return -1;
+            return 0;
+        }
+
+        /// <summary>
+        /// Edge-probability adjustment from swing/seam movement vs timing: when
+        /// the bat is caught on the wrong side of the moving ball (late against
+        /// away movement, early against in movement) edge odds rise; when the bat
+        /// meets the movement they fall. Small, clamped and believable.
+        /// </summary>
+        public static float MovementEdgeBias(float timingOffset, float swing, float seam)
+        {
+            float move = LateralMovement(swing, seam);
+            float mag = move < 0f ? -move : move;
+            float frac = mag / 1.5f;             // 0..1
+            if (frac <= 0f) return 0f;
+
+            float mistime = (timingOffset < 0f ? -timingOffset : timingOffset) - 0.045f;
+            if (mistime < 0f) mistime = 0f;
+            float s = mistime / 0.12f;
+            if (s > 1f) s = 1f;
+
+            float product = timingOffset * move;
+            if (product > 0f) return 0.10f * frac * s;   // bat caught by the movement
+            return -0.04f * frac * s;                     // bat with the movement
+        }
+
         private static float Clamp01(float v) { return v < 0f ? 0f : v > 1f ? 1f : v; }
     }
 }

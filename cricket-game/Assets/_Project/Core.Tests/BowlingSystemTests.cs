@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using CricketGame.Core.Batting;
 using CricketGame.Core.Bowling;
+using CricketGame.Core.Fielding;
 using CricketGame.Core.Simulation;
 // ShotSelector/TimingSystem take the Batting ShotIntent enum; the Simulation
 // namespace's ShotIntent struct is unrelated here.
@@ -324,6 +325,131 @@ namespace CricketGame.Core.Tests
         {
             Assert.Greater(ShotOutcomeResolver.PredictCarry(100f, 38f, 0.9f), 60f);
             Assert.Less(ShotOutcomeResolver.PredictCarry(40f, 8f, 0.9f), 13f);
+        }
+
+        // ------------------------------------------------------------- Phase 2 feel
+        // Movement-steered edges (thin/thick) + catch grading in the fielding
+        // sim. Mirrored by harness/test_phase2.py (EdgeSide / MovementEdgeBias
+        // / ThinThickEdgeTests / CatchGradingTests) and the JS smoke test.
+
+        /// <summary>Builds a contact directly (mirrors the Python
+        /// resolve_contact edge-probing in test_phase2).</summary>
+        private static ContactResult EdgeContactFor(int seed, float speed, float line,
+                                                    float length, float swing,
+                                                    float offset, float reach)
+        {
+            var setup = new ContactSetup
+            {
+                Delivery = new DeliveryData
+                {
+                    SpeedKph = speed, Line = line, Length = length, Swing = swing
+                },
+                Shot = new ShotSelection
+                {
+                    Kind = ShotKind.CoverDrive, Name = "Cover Drive", Lofted = false,
+                    Awkward = false, BasePower = 0.68f, BaseLoftDeg = 6f
+                },
+                Direction = new DirectionResolveResult
+                {
+                    Direction = new Vec2(0f, 1f), AngleFromStraight = 0f,
+                    ReachQuality = reach, HasDirection = true
+                },
+                TimingOffset = offset,
+                Window = offset >= 0f ? TimingWindow.Late : TimingWindow.Early,
+                SwipeStrength = 1f
+            };
+            return BatBallContact.Resolve(new SeededRng(seed), setup);
+        }
+
+        [Test]
+        public void EdgeSide_FollowsLateralMovement()
+        {
+            Assert.AreEqual(1, TimingSystem.EdgeSide(0.8f, 0f));   // away -> off
+            Assert.AreEqual(-1, TimingSystem.EdgeSide(-0.8f, 0f)); // in -> leg
+            Assert.AreEqual(0, TimingSystem.EdgeSide(0.05f, 0f));  // none -> coin flip
+        }
+
+        [Test]
+        public void MovementEdgeBias_IsDirectional()
+        {
+            // Bat caught by the movement edges more; bat with the movement edges less.
+            Assert.Greater(TimingSystem.MovementEdgeBias(0.12f, 0.8f, 0f), 0f);
+            Assert.Greater(TimingSystem.MovementEdgeBias(-0.12f, -0.8f, 0f), 0f);
+            Assert.Less(TimingSystem.MovementEdgeBias(-0.12f, 0.8f, 0f), 0f);
+            Assert.Less(TimingSystem.MovementEdgeBias(0.12f, -0.8f, 0f), 0f);
+            Assert.AreEqual(0f, TimingSystem.MovementEdgeBias(0f, 0.8f, 0f));
+            Assert.AreEqual(0f, TimingSystem.MovementEdgeBias(0.12f, 0f, 0f));
+        }
+
+        [Test]
+        public void Outswinger_EdgesFlyOff_Inswinger_EdgesFlyLeg()
+        {
+            int offTotal = 0, offSide = 0, legTotal = 0, legSide = 0;
+            for (int seed = 0; seed < 2000; seed++)
+            {
+                ContactResult cOff = EdgeContactFor(seed, 132f, 0.2f, 0.5f, 0.8f, 0.12f, 0.85f);
+                if (cOff.Outcome == ContactOutcome.Edge)
+                {
+                    offTotal++;
+                    if (cOff.Direction.X > 0f) offSide++;
+                }
+                ContactResult cLeg = EdgeContactFor(seed + 200000, 132f, 0.2f, 0.5f, -0.8f, 0.12f, 0.85f);
+                if (cLeg.Outcome == ContactOutcome.Edge)
+                {
+                    legTotal++;
+                    if (cLeg.Direction.X < 0f) legSide++;
+                }
+            }
+            Assert.Greater(offTotal, 100);
+            Assert.Greater(legTotal, 100);
+            Assert.Greater(offSide, offTotal * 9 / 10);
+            Assert.Greater(legSide, legTotal * 9 / 10);
+        }
+
+        [Test]
+        public void ThickEdges_FlyFasterAndFlatter_ThanThinEdges()
+        {
+            float thinExit = 0f, thinElev = 0f, thickExit = 0f, thickElev = 0f;
+            int thinN = 0, thickN = 0;
+            for (int seed = 0; seed < 4000; seed++)
+            {
+                ContactResult thin = EdgeContactFor(seed, 132f, 0.2f, 0.5f, 0f, 0.06f, 1.0f);
+                if (thin.Outcome == ContactOutcome.Edge)
+                {
+                    thinN++; thinExit += thin.ExitSpeedKph; thinElev += thin.ElevationDeg;
+                }
+                ContactResult thick = EdgeContactFor(seed + 300000, 132f, 0.2f, 0.5f, 0.8f, 0.12f, 0.3f);
+                if (thick.Outcome == ContactOutcome.Edge)
+                {
+                    thickN++; thickExit += thick.ExitSpeedKph; thickElev += thick.ElevationDeg;
+                }
+            }
+            Assert.Greater(thinN, 50);
+            Assert.Greater(thickN, 50);
+            Assert.Greater(thickExit / thickN, thinExit / thinN + 10f);
+            Assert.Greater(thinElev / thinN, thickElev / thickN + 5f);
+        }
+
+        [Test]
+        public void CatchGrading_ShapesSimulatedCatchProbability()
+        {
+            Fielder[] field = Fielder.DefaultField(1f);
+            var contact = new Vec3(0.1f, 0.9f, 0.35f);
+            var soft = new Vec3(8.45f, 9.9f, 8.8f);   // gentle chip to cover
+            var hard = new Vec3(14f, 4f, 15f);        // flat hard drive
+            int softCaught = 0, hardCaught = 0;
+            const int n = 400;
+            for (int seed = 0; seed < n; seed++)
+            {
+                if (FieldingSimulator.Simulate(contact, soft, field,
+                                               new SeededRng(seed)).Kind == FieldingKind.Caught)
+                    softCaught++;
+                if (FieldingSimulator.Simulate(contact, hard, field,
+                                               new SeededRng(seed + 1000)).Kind == FieldingKind.Caught)
+                    hardCaught++;
+            }
+            Assert.Greater(softCaught, n * 2 / 5);
+            Assert.Less(hardCaught, n * 3 / 20);
         }
     }
 }

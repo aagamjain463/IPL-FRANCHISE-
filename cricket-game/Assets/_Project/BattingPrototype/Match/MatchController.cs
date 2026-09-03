@@ -340,9 +340,11 @@ namespace CricketGame.BattingPrototype.Match
             {
                 SetFlow(MatchFlowState.MatchResult);
                 waitingForPlayAgain = true;
-                hud.ShowMatchResult(match.Result, PlayerWon(match.Result));
-                AudioManager.Play(PlayerWon(match.Result)
-                    ? GameSound.MatchResultWin : GameSound.MatchResultLose);
+                hud.ShowMatchResult(match.Result);
+                // Phase 1: a tie is its own result - neither a win nor a loss.
+                AudioManager.Play(match.Result.Outcome == MatchOutcome.Tie
+                    ? GameSound.CrowdCheer
+                    : PlayerWon(match.Result) ? GameSound.MatchResultWin : GameSound.MatchResultLose);
                 if (MatchFinished != null) MatchFinished(match);
 
                 while (waitingForPlayAgain)

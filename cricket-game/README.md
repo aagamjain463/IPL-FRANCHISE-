@@ -59,9 +59,9 @@ broadcast cameras. See
 
 ## Quickstart
 
-1. Open `cricket-game/` in **Unity Hub** — built for **Unity 2022.3 LTS**
-   (see `ProjectSettings/ProjectVersion.txt`). First open resolves the
-   Input System package automatically.
+1. Open `cricket-game/` in **Unity Hub** — built for **Unity 6.3 LTS
+   (6000.x)** (see `ProjectSettings/ProjectVersion.txt`). First open resolves
+   the Input System package automatically.
 2. Open scene `Assets/_Project/Scenes/BattingPrototype.unity` and press Play.
 3. **Editor/desktop testing:** drag with the left mouse button = joystick,
    drag on the right side = swipe. On device: left thumb / right thumb.
@@ -100,8 +100,10 @@ bowling panel:
   and the Phase 2 bowling/outcome systems.
 - **Without Unity:** from `cricket-game/`:
   `python3 -m unittest discover -s harness -p 'test_*.py'`
-  runs 1:1 Python references of every deterministic engine — **95 tests**,
-  including a 2,500-ball soak asserting cricket-like outcome distributions.
+  runs 1:1 Python references of every deterministic engine — **214 tests**,
+  including delivery variety, timing tiers, movement-steered edges,
+  footwork punishability, outcome/boundary reliability and a 2,500-ball soak
+  asserting cricket-like outcome distributions.
 - **Browser play-preview:** `harness/webpreview/` — serve the folder
   (`python3 -m http.server 4000 --bind 0.0.0.0`) and open it on a phone or
   desktop. Same engine math, touch controls, full debug toggles. Parity is
@@ -124,7 +126,7 @@ cricket-game/
 │   └── Scenes/                BattingPrototype.unity
 ├── Docs/                      architecture & phase design docs
 ├── Packages/                  manifest (ugui, Input System, test framework)
-├── ProjectSettings/           2022.3 LTS, landscape, new input handler
+├── ProjectSettings/           Unity 6.3 LTS, landscape, new input handler
 └── harness/                   headless reference implementations + tests
     └── webpreview/            browser play-preview (JS port of the engine)
 ```
@@ -154,19 +156,17 @@ cricket-game/
 
 ## Not built (deliberately, per the phase plan)
 
-AI batting, multiplayer/networking, fielding (edges currently fly through
-where slips would be), career/franchise modes, IPL/web integration, player
+Multiplayer/networking, career/franchise modes, IPL/web integration, player
 databases, commentary, tournaments, advanced graphics, monetization,
 backend/cloud.
 
-## Known limitations (Phase 2)
+## Known limitations
 
 - Placeholder primitive characters/stadium and procedural animation (by design).
-- Runs come from the deterministic resolver at contact time; the visual ball
-  flight is presentation (fielders will reconcile this in a later phase).
 - LBW is simplified and configurable — not the full Laws of Cricket.
-- No fielding/catching yet; edged balls land freely behind square.
-- No sound yet. One bowler archetype (right-arm pace), one pitch surface.
+- One bowler archetype family (right-arm pace; cutters + slower ball covered),
+  one pitch surface. Fielding is deterministic simulation with visual replay
+  (no manual fielding/running controls yet).
 
 ## Recommended Phase 3 (proposal, not started)
 
