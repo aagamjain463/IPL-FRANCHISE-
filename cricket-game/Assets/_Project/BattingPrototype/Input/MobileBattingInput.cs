@@ -74,7 +74,7 @@ namespace CricketGame.BattingPrototype.Input
 
         private void ReadTouches()
         {
-            foreach (var touch in EnhancedTouch.Touch.activeTouches)
+          foreach (var touch in UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches)
             {
                 int slot = Mathf.Clamp(touch.finger.index, 0, MaxTouches - 1);
                 Vector2 pos = touch.screenPosition;
