@@ -900,3 +900,5 @@ namespace CricketGame.BattingPrototype.Hud
             joyBase.rectTransform.anchoredPosition;
     }
 }
+}
+}
