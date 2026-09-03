@@ -112,6 +112,24 @@ const KIT_NAMES = {
   ai: ["S. Nair", "T. Okafor", "M. Ito"],
 };
 
+/* ---- Phase 5 art pass: original generated textures ---- */
+const ART = {};
+if (typeof Image !== "undefined") {
+  for (const [k, src] of [["sky", "art/sky_dusk.png"], ["grass", "art/outfield_grass.png"],
+                          ["crowd", "art/crowd_dusk.png"], ["ads", "art/adboards.png"]]) {
+    const im = new Image();
+    im.src = src;
+    ART[k] = im;
+  }
+}
+let grassPattern = null, crowdPattern = null;
+function artPatterns() {
+  if (!grassPattern && ART.grass && ART.grass.complete && ART.grass.width) {
+    grassPattern = ctx.createPattern(ART.grass, "repeat");
+    crowdPattern = ctx.createPattern(ART.crowd, "repeat");
+  }
+}
+
 /* ---- Phase 3 match state ---- */
 let match = new SuperOverMatchJS(); match.start();
 let matchFlow = "innings1";        // innings1 | innings2 | result
@@ -701,22 +719,36 @@ function updateCamera(dt) {
 /* ================= drawing ================= */
 function drawWorld(cam) {
   // sky
-  const sky = ctx.createLinearGradient(0, H * 0.25, 0, H);
-  sky.addColorStop(0, "#0d1526"); sky.addColorStop(1, "#233d5c");
-  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  artPatterns();
+  if (ART.sky && ART.sky.complete && ART.sky.width) {
+    const iw = ART.sky.width, ih = ART.sky.height;
+    const sc = Math.max(W / iw, H / ih);
+    ctx.drawImage(ART.sky, (W - iw * sc) / 2, H - ih * sc, iw * sc, ih * sc);
+  } else {
+    const sky = ctx.createLinearGradient(0, H * 0.25, 0, H);
+    sky.addColorStop(0, "#0d1526"); sky.addColorStop(1, "#233d5c");
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  }
 
   // Phase 5: stand ring + floodlights behind the field; the crowd flares on surge
   for (let i = 0; i < 24; i++) {
     if (i === 12) continue;
     const a0 = i * 15 * Math.PI / 180, a1 = (i + 1) * 15 * Math.PI / 180;
-    const base = (i & 1) === 0 ? 26 : 38;
-    const b = Math.min(90, base * (1 + crowdSurge * 0.9));
-    fillPoly(cam, [
+    const pts = [
       { x: Math.sin(a0) * 74, y: 0, z: Math.cos(a0) * 74 },
       { x: Math.sin(a1) * 74, y: 0, z: Math.cos(a1) * 74 },
       { x: Math.sin(a1) * 74, y: 9, z: Math.cos(a1) * 74 },
       { x: Math.sin(a0) * 74, y: 9, z: Math.cos(a0) * 74 },
-    ], `rgb(${Math.round(b * 0.7)},${Math.round(b * 0.85)},${Math.round(b * 1.4)})`);
+    ];
+    if (crowdPattern) {
+      fillPoly(cam, pts, crowdPattern);
+      if (crowdSurge > 0.02)   // crowd flares on big moments
+        fillPoly(cam, pts, `rgba(255,235,190,${(crowdSurge * 0.22).toFixed(3)})`);
+    } else {
+      const base = (i & 1) === 0 ? 26 : 38;
+      const b = Math.min(90, base * (1 + crowdSurge * 0.9));
+      fillPoly(cam, pts, `rgb(${Math.round(b * 0.7)},${Math.round(b * 0.85)},${Math.round(b * 1.4)})`);
+    }
   }
   for (let i = 0; i < 4; i++) {
     const a = (45 + 90 * i) * Math.PI / 180;
@@ -736,7 +768,7 @@ function drawWorld(cam) {
   fillPoly(cam, [
     { x: -140, y: 0, z: -40 }, { x: 140, y: 0, z: -40 },
     { x: 140, y: 0, z: 150 }, { x: -140, y: 0, z: 150 },
-  ], "#1d5c26");
+  ], grassPattern || "#1d5c26");
 
   // boundary rope
   ctx.strokeStyle = "rgba(255,255,255,0.8)";

@@ -49,6 +49,7 @@ namespace CricketGame.BattingPrototype.Bootstrap
 
             // Phase 5: dusk lighting, floodlight glow, crowd bands, quality presets.
             var atmo = World.StadiumAtmosphere.Attach(world.Root, world.Camera);
+            World.ArtApplier.Apply(world.Root);   // original generated textures
             Game.Haptics.Enabled = UI.HudStats.HapticsEnabled;
 
             // Camera controller drives the built camera.

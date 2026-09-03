@@ -144,3 +144,18 @@ Verification: brace-lint balanced on all touched C#; `node --check`, `smoke.cjs`
   ARENA" boot screen that fades on real-time once the world is built
   (`WaitForSecondsRealtime`, since pre-match holds scaled time at zero).
 - **Crowd ambience loop cue (§18)** fired from first bind.
+
+---
+
+## 11. Art pass: original generated textures (spec 2)
+
+Five ORIGINAL AI-generated textures in `Assets/_Project/Art/Resources/Textures`
+(mowed-stripe outfield grass, dry pitch clay, dusk crowd, abstract team-neutral
+ad boards, 2:1 dusk sky). `World/ArtApplier.cs` loads them at runtime via
+`Resources.Load` and applies: grass to the ground (12x tiling), pitch texture to
+the strip, crowd texture to both stand tiers, ad texture to the perimeter
+boards, and an inside-out sky dome. **Fallback-safe**: missing textures leave
+the flat prototype materials untouched. The browser preview loads downscaled
+copies (2 MB set) from `harness/webpreview/art/` for sky background, ground and
+crowd-stand patterns, with the flat-colour fallback when images are absent
+(headless smoke included).
