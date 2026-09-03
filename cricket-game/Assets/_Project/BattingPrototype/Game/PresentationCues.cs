@@ -15,6 +15,7 @@ namespace CricketGame.BattingPrototype.Game
     {
         public void Bind(GameplayEvents events)
         {
+            AudioManager.Play(GameSound.CrowdAmbience);   // loop cue from first ball
             events.BallReleased += d => AudioManager.Play(GameSound.DeliveryRelease);
             events.BallBounced += p => AudioManager.Play(GameSound.BallBounce);
             events.BallContact += c =>

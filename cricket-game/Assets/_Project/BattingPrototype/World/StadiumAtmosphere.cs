@@ -20,6 +20,7 @@ namespace CricketGame.BattingPrototype.World
         private readonly List<Transform> flags = new List<Transform>();
         private Color[] bandBase;
         private float waveClock;
+        private float crowdSurge;   // 0..1 crowd reaction to big moments
 
         /// <summary>Attach to a built world; tunes lighting + adds dressing.</summary>
         public static StadiumAtmosphere Attach(Transform worldRoot, Camera cam)
@@ -35,6 +36,14 @@ namespace CricketGame.BattingPrototype.World
         {
             HudStats.Quality = preset;
             if (instance != null) instance.Apply();
+        }
+
+        /// <summary>Phase 5 (spec 17): the crowd reacts - bands flare and flags
+        /// wave faster after boundaries and wickets.</summary>
+        public void Bind(Game.GameplayEvents events)
+        {
+            events.Boundary += (runs, six) => crowdSurge = 1f;
+            events.Wicket += r => crowdSurge = 1f;
         }
 
         private void Build(Transform worldRoot, Camera cam)
@@ -135,6 +144,30 @@ namespace CricketGame.BattingPrototype.World
                 glows.Add(r);
             }
 
+            // ---- player entrance tunnel under the stand behind the bowler
+            var tunnel = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            tunnel.name = "Tunnel";
+            tunnel.transform.SetParent(stadium, false);
+            tunnel.transform.localPosition = new Vector3(0, 1.6f, 71f);
+            tunnel.transform.localScale = new Vector3(5f, 3.2f, 4f);
+            var tr = tunnel.GetComponent<Renderer>();
+            var tm = new Material(Shader.Find("Standard"));
+            tm.color = new Color(0.05f, 0.06f, 0.10f);
+            tr.sharedMaterial = tm;
+            tr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            Object.Destroy(tunnel.GetComponent<Collider>());
+            var arch = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            arch.name = "TunnelArch";
+            arch.transform.SetParent(stadium, false);
+            arch.transform.localPosition = new Vector3(0, 3.5f, 71f);
+            arch.transform.localScale = new Vector3(6f, 0.6f, 4.2f);
+            var ar = arch.GetComponent<Renderer>();
+            var am = new Material(Shader.Find("Standard"));
+            am.color = new Color(0.25f, 0.30f, 0.42f);
+            ar.sharedMaterial = am;
+            ar.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            Object.Destroy(arch.GetComponent<Collider>());
+
             // ---- team-neutral flags on the stand roofs
             Color[] flagPalette =
             {
@@ -219,17 +252,20 @@ namespace CricketGame.BattingPrototype.World
 
         private void Update()
         {
+            crowdSurge = Mathf.Max(0f, crowdSurge - Time.deltaTime * 0.8f);
             if (HudStats.Quality == QualityPreset.Low || crowdBands.Count == 0) return;
-            waveClock += Time.deltaTime;
-            // cheap crowd shimmer: brightness ripple around the ring
+            waveClock += Time.deltaTime * (1f + crowdSurge * 1.6f);
+            // cheap crowd shimmer: brightness ripple around the ring, flaring
+            // while the crowd reacts to a big moment
             for (int i = 0; i < crowdBands.Count; i++)
             {
                 float w = 0.88f + 0.12f * Mathf.Sin(waveClock * 1.7f + i * 0.35f);
+                w *= 1f + crowdSurge * 0.45f;
                 crowdBands[i].sharedMaterial.color = bandBase[i] * w;
             }
             for (int i = 0; i < flags.Count; i++)
             {
-                flags[i].localEulerAngles = new Vector3(0, Mathf.Sin(waveClock * 2.3f + i) * 22f, 0);
+                flags[i].localEulerAngles = new Vector3(0, Mathf.Sin(waveClock * 2.3f + i) * (22f + 20f * crowdSurge), 0);
             }
         }
     }

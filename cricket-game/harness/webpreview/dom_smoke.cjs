@@ -8,6 +8,7 @@ const path = require("path");
 const ctxStub = new Proxy({}, {
   get(t, prop) {
     if (prop === "createLinearGradient") return () => ({ addColorStop() {} });
+    if (prop === "createRadialGradient") return () => ({ addColorStop() {} });
     return () => {};
   },
   set() { return true; },

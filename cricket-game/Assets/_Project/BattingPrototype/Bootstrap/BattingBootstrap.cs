@@ -1,3 +1,4 @@
+using System.Collections;
 using CricketGame.BattingPrototype.Bowler;
 using CricketGame.BattingPrototype.Bowling;
 using CricketGame.BattingPrototype.Camera;
@@ -24,6 +25,15 @@ namespace CricketGame.BattingPrototype.Bootstrap
         [Tooltip("Optional designer-tuned bowler profile asset. Empty = code default.")]
         [SerializeField] private BowlerProfile bowlerProfile;
 
+        private IEnumerator FadeLoading(UnityEngine.CanvasGroup group, GameObject go)
+        {
+            // Real-time waits: the pre-match screen holds scaled time at zero.
+            yield return new UnityEngine.WaitForSecondsRealtime(0.5f);
+            UI.UITweenHost.Fade(group, 0f, 0.4f);
+            yield return new UnityEngine.WaitForSecondsRealtime(0.55f);
+            UnityEngine.Object.Destroy(go);
+        }
+
         private void Awake()
         {
             // Mobile-first runtime settings.
@@ -38,7 +48,7 @@ namespace CricketGame.BattingPrototype.Bootstrap
             BattingWorld world = BattingWorldBuilder.Build(root.transform);
 
             // Phase 5: dusk lighting, floodlight glow, crowd bands, quality presets.
-            World.StadiumAtmosphere.Attach(world.Root, world.Camera);
+            var atmo = World.StadiumAtmosphere.Attach(world.Root, world.Camera);
             Game.Haptics.Enabled = UI.HudStats.HapticsEnabled;
 
             // Camera controller drives the built camera.
@@ -70,6 +80,26 @@ namespace CricketGame.BattingPrototype.Bootstrap
             var hud = hudGo.AddComponent<BattingHud>();
             hud.Build(input);
             input.IntentButtonsRectScreen = hud.IntentButtonsScreenRect();
+
+            // Phase 5 (spec 2 architecture): premium boot loading screen that
+            // fades away once everything is built.
+            var loadGo = UI.UiKit.NewUi("LoadingScreen", hud.Canvas.transform);
+            var loadRect = UI.UiKit.Rect(loadGo);
+            UI.UiKit.Anchor(loadRect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var loadBg = UI.UiKit.AddImage(loadRect, "Bg", UI.UITheme.BgDark);
+            UI.UiKit.Anchor(UI.UiKit.Rect(loadBg.gameObject), Vector2.zero, Vector2.one,
+                            Vector2.zero, Vector2.zero);
+            var loadTitle = UI.UiComponents.Label(loadRect, "Title", "SUPER OVER CRICKET",
+                UI.UITheme.FontCardTitle + 8, TextAnchor.MiddleCenter, UI.UITheme.Cyan);
+            UI.UiKit.Anchor(UI.UiKit.Rect(loadTitle.gameObject),
+                            new Vector2(0.5f, 0.55f), new Vector2(0.5f, 0.55f),
+                            new Vector2(-320f, -44f), new Vector2(320f, 44f));
+            var loadSub = UI.UiKit.AddText(loadRect, "Sub", "HARBOUR ARENA  ·  LOADING",
+                UI.UITheme.FontSub, TextAnchor.MiddleCenter, UI.UITheme.TextDim);
+            UI.UiKit.Anchor(UI.UiKit.Rect(loadSub.gameObject),
+                            new Vector2(0.5f, 0.44f), new Vector2(0.5f, 0.44f),
+                            new Vector2(-320f, -20f), new Vector2(320f, 20f));
+            hud.StartCoroutine(FadeLoading(UI.UiComponents.FadeGroup(loadGo), loadGo));
 
             // Fielders (9 + bowler + keeper, spec section 6).
             var fieldersGo = new GameObject("Fielders");
@@ -153,6 +183,9 @@ namespace CricketGame.BattingPrototype.Bootstrap
             cuesGo.transform.SetParent(root.transform, false);
             var cues = cuesGo.AddComponent<Game.PresentationCues>();
             cues.Bind(runner.Events);
+
+            presentation.Bind(runner.Events);   // bowler celebration
+            atmo.Bind(runner.Events);           // crowd reaction surge
         }
     }
 }

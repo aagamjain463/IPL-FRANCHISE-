@@ -105,6 +105,8 @@ let struckApplied = false;
 let stumpKnock = 0; // 0..1 animation
 const dusts = [];   // pitch-dust puffs {x, z, t}
 const vfxRings = []; // Phase 5: expanding contact/boundary rings {x,y,z,t,life,r0,grow,color}
+let crowdSurge = 0;      // Phase 5: crowd reaction 0..1
+let bowlerCelebrate = 0; // Phase 5: bowler wicket celebration 0..1
 const KIT_NAMES = {
   you: ["A. Vale", "J. Mercer", "K. Brand"],
   ai: ["S. Nair", "T. Okafor", "M. Ito"],
@@ -699,9 +701,36 @@ function updateCamera(dt) {
 /* ================= drawing ================= */
 function drawWorld(cam) {
   // sky
-  const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, "#10233f"); sky.addColorStop(1, "#2a4a6b");
+  const sky = ctx.createLinearGradient(0, H * 0.25, 0, H);
+  sky.addColorStop(0, "#0d1526"); sky.addColorStop(1, "#233d5c");
   ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+  // Phase 5: stand ring + floodlights behind the field; the crowd flares on surge
+  for (let i = 0; i < 24; i++) {
+    if (i === 12) continue;
+    const a0 = i * 15 * Math.PI / 180, a1 = (i + 1) * 15 * Math.PI / 180;
+    const base = (i & 1) === 0 ? 26 : 38;
+    const b = Math.min(90, base * (1 + crowdSurge * 0.9));
+    fillPoly(cam, [
+      { x: Math.sin(a0) * 74, y: 0, z: Math.cos(a0) * 74 },
+      { x: Math.sin(a1) * 74, y: 0, z: Math.cos(a1) * 74 },
+      { x: Math.sin(a1) * 74, y: 9, z: Math.cos(a1) * 74 },
+      { x: Math.sin(a0) * 74, y: 9, z: Math.cos(a0) * 74 },
+    ], `rgb(${Math.round(b * 0.7)},${Math.round(b * 0.85)},${Math.round(b * 1.4)})`);
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = (45 + 90 * i) * Math.PI / 180;
+    const p = project(cam, { x: Math.sin(a) * 84, y: 28, z: Math.cos(a) * 84 });
+    if (!p) continue;
+    const rad = Math.max(6, 26 * (p.s / 40));
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
+    g.addColorStop(0, "rgba(255,250,220,0.9)");
+    g.addColorStop(1, "rgba(255,250,220,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   // ground
   fillPoly(cam, [
@@ -846,10 +875,17 @@ function drawBowler(cam) {
   line3(cam, { x: 0.2, y: 0.15, z: bz }, { x: 0.2, y: 1.5, z: bz }, shirt, 0.5);
   circle3(cam, { x: 0.2, y: 1.72, z: bz }, 0.17, "#d9b08c");
   circle3(cam, { x: 0.2, y: 1.84, z: bz }, 0.11, cap);
-  const armA = bowlerArmT * Math.PI * 2;
   const ax = 0.2 + 0.1, ay = 1.45;
-  line3(cam, { x: ax, y: ay, z: bz },
-    { x: ax + Math.sin(armA) * 0.15, y: ay + Math.cos(armA) * 0.55, z: bz }, shirt, 0.16);
+  if (bowlerCelebrate > 0) {
+    // Phase 5 (spec 12): raised-arm wicket celebration
+    const lift = Math.sin(Math.min(1, bowlerCelebrate) * Math.PI);
+    line3(cam, { x: ax, y: ay, z: bz },
+      { x: ax + 0.1, y: ay + 0.25 + lift * 0.45, z: bz }, shirt, 0.16);
+  } else {
+    const armA = bowlerArmT * Math.PI * 2;
+    line3(cam, { x: ax, y: ay, z: bz },
+      { x: ax + Math.sin(armA) * 0.15, y: ay + Math.cos(armA) * 0.55, z: bz }, shirt, 0.16);
+  }
 }
 
 function batScreenAngle() {
@@ -1241,6 +1277,8 @@ function showBanner(text, color) {
   bannerEl.style.borderColor = color;              // Phase 5 themed moment card
   bannerEl.style.borderLeftColor = color;
   bannerEl.style.opacity = 1;
+  crowdSurge = 1;                                   // Phase 5 crowd reaction
+  if (/WICKET|BOWLED|LBW|CAUGHT/.test(text)) bowlerCelebrate = 1;
   if (bannerTimer) clearTimeout(bannerTimer);
   bannerTimer = setTimeout(() => { bannerEl.style.opacity = 0; }, 1600);
 }
@@ -1608,6 +1646,8 @@ function frame(now) {
     vfxRings[i].t += dt;
     if (vfxRings[i].t > vfxRings[i].life) vfxRings.splice(i, 1);
   }
+  crowdSurge = Math.max(0, crowdSurge - dt * 0.8);
+  bowlerCelebrate = Math.max(0, bowlerCelebrate - dt / 0.9);
 
   // wicket reaction camera hands back to gameplay once the moment has landed
   if (camMode === "wicket" && phase === "between" && phaseT > 1.0) camMode = "game";

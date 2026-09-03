@@ -126,3 +126,21 @@ Verification: brace-lint balanced on all touched C#; `node --check`, `smoke.cjs`
   `BatEdge`, `BallBounce`, `BallOnStumps`.
 - **Atmospheric depth + resolution scaling (§4/§23)** — linear dusk fog fades
   the far stands; LOW preset renders at 85% resolution via `Screen.SetResolution`.
+
+---
+
+## 10. Fourth pass: living stadium & reactions
+
+- **Crowd reactions (§17)** — `StadiumAtmosphere.Bind(GameplayEvents)`: boundaries
+  and wickets set a decaying `crowdSurge`; crowd bands flare +45% brightness and
+  flags wave ~2x faster while it lasts. Preview mirrors it: a stand ring +
+  floodlight glows now render behind the field and flare on the same triggers.
+- **Bowler celebration (§12)** — `PlayerPresentation.Bind`: eased raised-arm
+  pump for 0.9 s after any wicket; preview bowler mirrors it.
+- **Player entrance tunnel (§4)** — dark tunnel + arch under the stand behind
+  the bowler.
+- **Shoes (§6)** — white shoes on batsman and bowler rigs.
+- **Loading screen (spec 2 Screens/)** — themed "SUPER OVER CRICKET / HARBOUR
+  ARENA" boot screen that fades on real-time once the world is built
+  (`WaitForSecondsRealtime`, since pre-match holds scaled time at zero).
+- **Crowd ambience loop cue (§18)** fired from first bind.

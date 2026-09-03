@@ -21,6 +21,15 @@ namespace CricketGame.BattingPrototype.World
             = new System.Collections.Generic.List<Renderer>();
         private Renderer keeperGloveL, keeperGloveR;
         private Renderer bowlerBody, bowlerArm;
+        private Transform bowlerArmT;
+        private float celebrateT = -1f;   // bowler wicket celebration clock
+
+        /// <summary>Phase 5 (spec 12): reaction hooks - the bowler celebrates
+        /// a wicket with a raised-arm pump.</summary>
+        public void Bind(Game.GameplayEvents events)
+        {
+            events.Wicket += r => celebrateT = 0f;
+        }
 
         public static PlayerPresentation Attach(Transform root, BattingWorld world)
         {
@@ -86,6 +95,11 @@ namespace CricketGame.BattingPrototype.World
                 AddPart(pivot, "GloveR", PrimitiveType.Sphere, new Color(0.95f, 0.95f, 0.97f),
                         new Vector3(0.24f, -0.50f, 0.14f), new Vector3(0.09f, 0.09f, 0.09f));
             }
+            // shoes (spec 6)
+            AddPart(rig, "ShoeL", PrimitiveType.Cube, new Color(0.9f, 0.9f, 0.92f),
+                    new Vector3(-0.12f, 0.06f, -0.06f), new Vector3(0.14f, 0.07f, 0.30f));
+            AddPart(rig, "ShoeR", PrimitiveType.Cube, new Color(0.9f, 0.9f, 0.92f),
+                    new Vector3(0.12f, 0.06f, -0.06f), new Vector3(0.14f, 0.07f, 0.30f));
         }
 
         // ------------------------------------------------------------------ bowler
@@ -94,8 +108,13 @@ namespace CricketGame.BattingPrototype.World
         {
             bowlerBody = Mat(world.BowlerRoot.Find("BowlerBody"));
             bowlerArm = Mat(world.BowlerRoot.Find("BowlerArm"));
+            bowlerArmT = world.BowlerArm;
             AddPart(world.BowlerRoot, "Cap", PrimitiveType.Sphere, new Color(0.2f, 0.2f, 0.25f),
                     new Vector3(0, 2.12f, 0), new Vector3(0.30f, 0.14f, 0.30f));
+            AddPart(world.BowlerRoot, "ShoeL", PrimitiveType.Cube, new Color(0.9f, 0.9f, 0.92f),
+                    new Vector3(-0.14f, 0.06f, 0), new Vector3(0.14f, 0.07f, 0.30f));
+            AddPart(world.BowlerRoot, "ShoeR", PrimitiveType.Cube, new Color(0.9f, 0.9f, 0.92f),
+                    new Vector3(0.14f, 0.06f, 0), new Vector3(0.14f, 0.07f, 0.30f));
         }
 
         // ------------------------------------------------------------------ fielders
@@ -155,6 +174,22 @@ namespace CricketGame.BattingPrototype.World
                     new Vector3(0, 1.78f, 0), new Vector3(0.26f, 0.26f, 0.26f));
             AddPart(go.transform, "Hat", PrimitiveType.Sphere, new Color(0.12f, 0.12f, 0.15f),
                     new Vector3(0, 1.92f, 0), new Vector3(0.30f, 0.12f, 0.30f));
+        }
+
+        private void Update()
+        {
+            if (celebrateT < 0f || bowlerArmT == null) return;
+            celebrateT += Time.deltaTime;
+            float k = celebrateT / 0.9f;
+            if (k >= 1f)
+            {
+                celebrateT = -1f;
+                bowlerArmT.localEulerAngles = Vector3.zero;
+                return;
+            }
+            // raised-arm wicket celebration, eased up and back down
+            float raise = Mathf.Sin(Mathf.Min(1f, k) * Mathf.PI) * 160f;
+            bowlerArmT.localEulerAngles = new Vector3(0, 0, raise);
         }
 
         // ------------------------------------------------------------------ helpers
