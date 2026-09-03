@@ -137,7 +137,8 @@ namespace CricketGame.BattingPrototype.UI
                                               TextAnchor.MiddleCenter, UITheme.TextWhite);
             UiKit.Anchor(UiKit.Rect(codeText.gameObject), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
-            var name = UiComponents.Label(root, "Name_" + code, code, UITheme.FontCardTitle,
+            string teamTitle = code == "YOU" ? "PLAYER XI" : "AI SQUAD";
+            var name = UiComponents.Label(root, "Name_" + code, teamTitle, UITheme.FontCardTitle - 4,
                                           TextAnchor.MiddleCenter, UITheme.TextWhite);
             UiKit.Anchor(UiKit.Rect(name.gameObject), new Vector2(0.5f + xNorm, 0.42f),
                          new Vector2(0.5f + xNorm, 0.42f), new Vector2(-150f, -40f), new Vector2(150f, 0f));

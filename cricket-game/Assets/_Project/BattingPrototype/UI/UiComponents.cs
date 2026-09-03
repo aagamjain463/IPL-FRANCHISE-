@@ -41,11 +41,11 @@ namespace CricketGame.BattingPrototype.UI
                 case ButtonStyle.Filled:
                     bg = UITheme.Cyan; border = UITheme.Cyan; text = UITheme.BgDark; break;
                 case ButtonStyle.Danger:
-                    bg = new Color(0, 0, 0, 0); border = UITheme.Danger; text = UITheme.Danger; break;
+                    bg = UITheme.Danger; border = UITheme.Danger; text = UITheme.TextWhite; break;
                 case ButtonStyle.Ghost:
                     bg = UITheme.DimFill; border = new Color(1, 1, 1, 0f); text = UITheme.TextWhite; break;
                 default:
-                    bg = new Color(0, 0, 0, 0); border = UITheme.Border; text = UITheme.TextWhite; break;
+                    bg = UITheme.Panel; border = UITheme.Border; text = UITheme.TextWhite; break;
             }
 
             var outer = UiKit.AddImage(parent, name, border);

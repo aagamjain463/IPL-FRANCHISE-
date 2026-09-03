@@ -354,6 +354,14 @@ namespace CricketGame.BattingPrototype.Hud
 
         // ------------------------------------------------------------- readout
 
+        private void Update()
+        {
+            if (UnityEngine.Input.GetKeyDown(KeyCode.F1) || UnityEngine.Input.GetKeyDown(KeyCode.BackQuote))
+            {
+                Toggle();
+            }
+        }
+
         private void LateUpdate()
         {
             if (!panel.activeSelf) return;

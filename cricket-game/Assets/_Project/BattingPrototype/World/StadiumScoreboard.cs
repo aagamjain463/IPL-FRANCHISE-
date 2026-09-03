@@ -23,8 +23,8 @@ namespace CricketGame.BattingPrototype.World
             var panel = GameObject.CreatePrimitive(PrimitiveType.Cube);
             panel.name = "BoardPanel";
             panel.transform.SetParent(go.transform, false);
-            panel.transform.localPosition = new Vector3(0, 10.2f, 34.2f);
-            panel.transform.localScale = new Vector3(11f, 3.2f, 0.3f);
+            panel.transform.localPosition = new Vector3(0, 9.6f, 34.2f);
+            panel.transform.localScale = new Vector3(13f, 2.6f, 0.3f);
             var r = panel.GetComponent<Renderer>();
             r.sharedMaterial = new Material(Shader.Find("Unlit/Color"));
             r.sharedMaterial.color = new Color(0.03f, 0.05f, 0.10f);
@@ -33,8 +33,8 @@ namespace CricketGame.BattingPrototype.World
 
             var textGo = new GameObject("BoardText");
             textGo.transform.SetParent(go.transform, false);
-            textGo.transform.localPosition = new Vector3(0, 10.2f, 33.9f);
-            textGo.transform.localEulerAngles = new Vector3(0, 180f, 0);
+            textGo.transform.localPosition = new Vector3(0, 9.6f, 34.0f);
+            textGo.transform.localEulerAngles = Vector3.zero;
             board.text = textGo.AddComponent<TextMesh>();
             var font = UiKit.DefaultFont;
             if (font != null)
@@ -43,7 +43,7 @@ namespace CricketGame.BattingPrototype.World
                 var mr = textGo.GetComponent<MeshRenderer>();
                 if (mr != null && font.material != null) mr.sharedMaterial = font.material;
             }
-            board.text.characterSize = 0.62f;
+            board.text.characterSize = 0.32f;
             board.text.fontSize = 48;
             board.text.alignment = TextAlignment.Center;
             board.text.anchor = TextAnchor.MiddleCenter;

@@ -14,6 +14,7 @@ namespace CricketGame.BattingPrototype.UI
     public sealed class PauseMenuScreen : MonoBehaviour
     {
         public event Action QuitPressed;
+        public event Action DebugToggled;
 
         private RectTransform root;
         private CanvasGroup group;
@@ -22,6 +23,8 @@ namespace CricketGame.BattingPrototype.UI
         private Text qualityLabel;
         private Text hapticsLabel;
         private Text audioLabel;
+        private Text debugLabel;
+        private bool debugOn;
         private bool open;
 
         public bool IsOpen { get { return open; } }
@@ -70,28 +73,28 @@ namespace CricketGame.BattingPrototype.UI
 
         private void BuildSettings(RectTransform card)
         {
-            settingsPanel = UiComponents.Panel(card, "Settings", new Vector2(360f, 190f),
+            settingsPanel = UiComponents.Panel(card, "Settings", new Vector2(360f, 230f),
                                                UITheme.RadiusButton, UITheme.PanelSolid, UITheme.Border);
             UiKit.Anchor(settingsPanel, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-                         new Vector2(20f, -95f), new Vector2(380f, 95f));
+                         new Vector2(20f, -115f), new Vector2(380f, 115f));
 
             var header = UiComponents.Label(settingsPanel, "H", "SETTINGS", UITheme.FontSub,
                                             TextAnchor.MiddleLeft, UITheme.Cyan);
-            UiKit.Anchor(UiKit.Rect(header.gameObject), new Vector2(0, 0.78f), new Vector2(1, 1),
+            UiKit.Anchor(UiKit.Rect(header.gameObject), new Vector2(0, 0.82f), new Vector2(1, 1),
                          new Vector2(14f, 0f), new Vector2(-10f, -4f));
 
             var q = UiComponents.ThemedButton(settingsPanel, "Quality", "GRAPHICS: MEDIUM",
-                                              new Vector2(320f, 40f), ButtonStyle.Ghost, 16);
+                                              new Vector2(320f, 36f), ButtonStyle.Ghost, 15);
             qualityLabel = q.transform.Find("Label").GetComponent<Text>();
-            UiKit.Anchor(UiKit.Rect(q.gameObject), new Vector2(0.5f, 0.55f), new Vector2(0.5f, 0.55f),
-                         new Vector2(-160f, -20f), new Vector2(160f, 20f));
+            UiKit.Anchor(UiKit.Rect(q.gameObject), new Vector2(0.5f, 0.64f), new Vector2(0.5f, 0.64f),
+                         new Vector2(-160f, -18f), new Vector2(160f, 18f));
             q.onClick.AddListener(CycleQuality);
 
             var h = UiComponents.ThemedButton(settingsPanel, "Haptics", "HAPTICS: ON",
-                                              new Vector2(320f, 40f), ButtonStyle.Ghost, 16);
+                                              new Vector2(320f, 36f), ButtonStyle.Ghost, 15);
             hapticsLabel = h.transform.Find("Label").GetComponent<Text>();
-            UiKit.Anchor(UiKit.Rect(h.gameObject), new Vector2(0.5f, 0.30f), new Vector2(0.5f, 0.30f),
-                         new Vector2(-160f, -20f), new Vector2(160f, 20f));
+            UiKit.Anchor(UiKit.Rect(h.gameObject), new Vector2(0.5f, 0.44f), new Vector2(0.5f, 0.44f),
+                         new Vector2(-160f, -18f), new Vector2(160f, 18f));
             h.onClick.AddListener(() =>
             {
                 HudStats.HapticsEnabled = !HudStats.HapticsEnabled;
@@ -100,14 +103,26 @@ namespace CricketGame.BattingPrototype.UI
             });
 
             var a = UiComponents.ThemedButton(settingsPanel, "Audio", "AUDIO: ON",
-                                              new Vector2(320f, 40f), ButtonStyle.Ghost, 16);
+                                              new Vector2(320f, 36f), ButtonStyle.Ghost, 15);
             audioLabel = a.transform.Find("Label").GetComponent<Text>();
-            UiKit.Anchor(UiKit.Rect(a.gameObject), new Vector2(0.5f, 0.05f), new Vector2(0.5f, 0.05f),
-                         new Vector2(-160f, -20f), new Vector2(160f, 20f));
+            UiKit.Anchor(UiKit.Rect(a.gameObject), new Vector2(0.5f, 0.24f), new Vector2(0.5f, 0.24f),
+                         new Vector2(-160f, -18f), new Vector2(160f, 18f));
             a.onClick.AddListener(() =>
             {
                 HudStats.AudioEnabled = !HudStats.AudioEnabled;
                 audioLabel.text = "AUDIO: " + (HudStats.AudioEnabled ? "ON" : "OFF");
+            });
+
+            var d = UiComponents.ThemedButton(settingsPanel, "DebugToggle", "TUNING OVERLAY: OFF",
+                                              new Vector2(320f, 36f), ButtonStyle.Ghost, 15);
+            debugLabel = d.transform.Find("Label").GetComponent<Text>();
+            UiKit.Anchor(UiKit.Rect(d.gameObject), new Vector2(0.5f, 0.04f), new Vector2(0.5f, 0.04f),
+                         new Vector2(-160f, -18f), new Vector2(160f, 18f));
+            d.onClick.AddListener(() =>
+            {
+                debugOn = !debugOn;
+                debugLabel.text = "TUNING OVERLAY: " + (debugOn ? "ON" : "OFF");
+                if (DebugToggled != null) DebugToggled();
             });
             settingsPanel.gameObject.SetActive(false);
         }

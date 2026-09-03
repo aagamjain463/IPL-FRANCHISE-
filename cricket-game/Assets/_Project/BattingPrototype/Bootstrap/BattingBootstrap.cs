@@ -145,6 +145,12 @@ namespace CricketGame.BattingPrototype.Bootstrap
             pause.Build(hud.Canvas);
 
             hud.PausePressed += pause.Open;
+            hud.ContinueToFranchise += () =>
+            {
+                matchCtl.ResetMatch();
+                camCtrl.PreMatchOrbit();
+                preMatch.Show();
+            };
             // Intent buttons (DEF/NOR/POW/LOFT) update the live input source.
             hud.IntentChanged += intent => input.SelectedIntent = intent;
             pause.QuitPressed += () =>
@@ -171,6 +177,7 @@ namespace CricketGame.BattingPrototype.Bootstrap
             var debugGo = new GameObject("DebugUI");
             debugGo.transform.SetParent(root.transform, false);
             var debug = debugGo.AddComponent<BattingDebugUI>();
+            pause.DebugToggled += debug.Toggle;
 
             // Runner (owns the game loop).
             var runnerGo = new GameObject("Runner");

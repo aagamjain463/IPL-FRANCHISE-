@@ -116,4 +116,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bb20c2f4e6b84d0a9f3c5b7e8d2a4c71, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  debugPanelVisible: 1
+  debugPanelVisible: 0

@@ -209,15 +209,15 @@ namespace CricketGame.BattingPrototype.Hud
                 intentButtons[i].raycastTarget = true;
                 var r = UiKit.Rect(intentButtons[i].gameObject);
                 UiKit.Anchor(r, new Vector2(0f, 0f), new Vector2(1f, 0f),
-                             new Vector2(0f, y0 + 58f), new Vector2(0f, y0 + 72f));
+                             new Vector2(0f, y0), new Vector2(0f, y0 + 64f));
 
-                intentLabels[i] = UiComponents.Label(r, "Label", labels[i], 22,
+                intentLabels[i] = UiComponents.Label(r, "Label", labels[i], 20,
                                                      TextAnchor.MiddleCenter, UITheme.TextWhite);
                 UiKit.Anchor(UiKit.Rect(intentLabels[i].gameObject), Vector2.zero, Vector2.one,
                              Vector2.zero, new Vector2(0f, 8f));
-                var sub = UiKit.AddText(r, "Sub", subs[i], 13, TextAnchor.MiddleCenter, UITheme.TextDim);
+                var sub = UiKit.AddText(r, "Sub", subs[i], 12, TextAnchor.MiddleCenter, UITheme.TextDim);
                 UiKit.Anchor(UiKit.Rect(sub.gameObject), Vector2.zero, Vector2.one,
-                             new Vector2(0f, -22f), Vector2.zero);
+                             new Vector2(0f, -14f), Vector2.zero);
 
                 int index = i;
                 var button = intentButtons[i].gameObject.AddComponent<Button>();
@@ -262,7 +262,7 @@ namespace CricketGame.BattingPrototype.Hud
             deliveryChipBorder = UiKit.AddImage(CanvasRect, "DeliveryChip", UITheme.Border);
             deliveryChipBorder.sprite = UITheme.RoundedSprite(32);
             UiKit.Anchor(UiKit.Rect(deliveryChipBorder.gameObject), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                         new Vector2(-260f, 18f), new Vector2(-20f, 58f));
+                         new Vector2(-210f, 18f), new Vector2(-10f, 58f));
             var dBody = UiKit.AddImage(UiKit.Rect(deliveryChipBorder.gameObject), "Body", UITheme.Panel);
             dBody.sprite = UITheme.RoundedSprite(30);
             UiKit.Anchor(UiKit.Rect(dBody.gameObject), Vector2.zero, Vector2.one,
@@ -275,7 +275,7 @@ namespace CricketGame.BattingPrototype.Hud
             timingChipBorder = UiKit.AddImage(CanvasRect, "TimingChip", UITheme.Cyan);
             timingChipBorder.sprite = UITheme.RoundedSprite(32);
             UiKit.Anchor(UiKit.Rect(timingChipBorder.gameObject), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                         new Vector2(20f, 18f), new Vector2(260f, 58f));
+                         new Vector2(10f, 18f), new Vector2(210f, 58f));
             var tBody = UiKit.AddImage(UiKit.Rect(timingChipBorder.gameObject), "Body", UITheme.Panel);
             tBody.sprite = UITheme.RoundedSprite(30);
             UiKit.Anchor(UiKit.Rect(tBody.gameObject), Vector2.zero, Vector2.one,
@@ -322,21 +322,21 @@ namespace CricketGame.BattingPrototype.Hud
         private void BuildOverCard()
         {
             overCardRect = PanelAt("OverCard", new Vector2(1f, 0f),
-                                   new Vector2(-420f, 14f), new Vector2(-16f, 118f));
+                                   new Vector2(-330f, 14f), new Vector2(-16f, 118f));
             overHeader = UiComponents.Label(overCardRect, "Header", "THIS OVER", UITheme.FontSub,
                                             TextAnchor.MiddleLeft, UITheme.TextDim);
             UiKit.Anchor(UiKit.Rect(overHeader.gameObject), new Vector2(0f, 0.62f), new Vector2(0.55f, 1f),
-                         new Vector2(16f, 0f), new Vector2(0f, -4f));
+                         new Vector2(14f, 0f), new Vector2(0f, -4f));
             partnershipText = UiComponents.Label(overCardRect, "Runs", "0 RUNS", UITheme.FontSub,
                                                  TextAnchor.MiddleRight, UITheme.Green);
             UiKit.Anchor(UiKit.Rect(partnershipText.gameObject), new Vector2(0.55f, 0.62f), new Vector2(1f, 1f),
-                         new Vector2(0f, 0f), new Vector2(-16f, -4f));
+                         new Vector2(0f, 0f), new Vector2(-14f, -4f));
 
             for (int i = 0; i < 6; i++)
             {
-                var chip = UiComponents.Chip(overCardRect, "Chip" + i, 44f, "·", UITheme.Border);
+                var chip = UiComponents.Chip(overCardRect, "Chip" + i, 38f, "·", UITheme.Border);
                 UiKit.Anchor(UiKit.Rect(chip.gameObject), new Vector2(0f, 0f), new Vector2(0f, 0f),
-                             new Vector2(16f + i * 58f, 12f), new Vector2(60f + i * 58f, 56f));
+                             new Vector2(14f + i * 48f, 12f), new Vector2(52f + i * 48f, 50f));
                 overChips.Add(chip);
             }
         }
@@ -357,19 +357,19 @@ namespace CricketGame.BattingPrototype.Hud
             overlayGroup.alpha = 0f;
             overlayPanel.gameObject.SetActive(false);
 
-            var card = UiComponents.Panel(overlayPanel, "Card", new Vector2(620f, 240f), UITheme.RadiusCard);
+            var card = UiComponents.Panel(overlayPanel, "Card", new Vector2(640f, 300f), UITheme.RadiusCard);
             overlayTitle = UiComponents.Label(UiKit.Rect(card.gameObject), "Title", "",
                                               UITheme.FontCardTitle + 6, TextAnchor.MiddleCenter, UITheme.Amber);
-            UiKit.Anchor(UiKit.Rect(overlayTitle.gameObject), new Vector2(0f, 0.52f), new Vector2(1f, 1f),
-                         new Vector2(20f, 0f), new Vector2(-20f, -8f));
+            UiKit.Anchor(UiKit.Rect(overlayTitle.gameObject), new Vector2(0f, 0.72f), new Vector2(1f, 0.98f),
+                         new Vector2(20f, 0f), new Vector2(-20f, -4f));
             overlayDetail = UiComponents.Label(UiKit.Rect(card.gameObject), "Detail", "",
-                                               UITheme.FontScore, TextAnchor.MiddleCenter, UITheme.TextWhite);
-            UiKit.Anchor(UiKit.Rect(overlayDetail.gameObject), new Vector2(0f, 0.24f), new Vector2(1f, 0.56f),
+                                               20, TextAnchor.MiddleCenter, UITheme.TextWhite);
+            UiKit.Anchor(UiKit.Rect(overlayDetail.gameObject), new Vector2(0f, 0.28f), new Vector2(1f, 0.70f),
                          new Vector2(20f, 0f), new Vector2(-20f, 0f));
             overlaySub = UiKit.AddText(UiKit.Rect(card.gameObject), "Sub", "", UITheme.FontSub,
                                        TextAnchor.MiddleCenter, UITheme.TextDim);
-            UiKit.Anchor(UiKit.Rect(overlaySub.gameObject), new Vector2(0f, 0f), new Vector2(1f, 0.28f),
-                         new Vector2(20f, 6f), new Vector2(-20f, 0f));
+            UiKit.Anchor(UiKit.Rect(overlaySub.gameObject), new Vector2(0f, 0.04f), new Vector2(1f, 0.26f),
+                         new Vector2(20f, 4f), new Vector2(-20f, 0f));
         }
 
         private void BuildResultScreen()
