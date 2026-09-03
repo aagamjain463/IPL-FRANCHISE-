@@ -1,5 +1,9 @@
 using CricketGame.Core.Batting;
 using CricketGame.Core.Simulation;
+// ShotIntent exists in two namespaces: the Batting ENUM (Defensive/Normal/
+// Aggressive/Lofted, used by the engine and all AI plans) and the Simulation
+// STRUCT (aggression/execution planning pair). This file means the enum.
+using ShotIntent = CricketGame.Core.Batting.ShotIntent;
 
 namespace CricketGame.Core.AI
 {

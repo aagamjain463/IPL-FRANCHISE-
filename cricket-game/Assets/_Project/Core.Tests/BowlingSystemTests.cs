@@ -2,6 +2,9 @@ using NUnit.Framework;
 using CricketGame.Core.Batting;
 using CricketGame.Core.Bowling;
 using CricketGame.Core.Simulation;
+// ShotSelector/TimingSystem take the Batting ShotIntent enum; the Simulation
+// namespace's ShotIntent struct is unrelated here.
+using ShotIntent = CricketGame.Core.Batting.ShotIntent;
 
 namespace CricketGame.Core.Tests
 {

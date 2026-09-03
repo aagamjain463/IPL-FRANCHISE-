@@ -423,7 +423,7 @@ namespace CricketGame.Core.Tests
                 "12 runs beats every bowling contribution in this match");
             Assert.AreEqual(1, m.Result.Scorecard.FirstInningsFours);
             Assert.AreEqual(1, m.Result.Scorecard.FirstInningsSixes);
-            Assert.AreEqual(20, m.Result.Scorecard.FirstInningsOvers.Count);
+            Assert.AreEqual(20, m.Result.Scorecard.FirstInningsOverRecords.Count);
         }
 
         // extras / misc -----------------------------------------------------------

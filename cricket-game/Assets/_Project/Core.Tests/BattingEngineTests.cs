@@ -1,6 +1,9 @@
 using NUnit.Framework;
 using CricketGame.Core.Batting;
 using CricketGame.Core.Simulation;
+// These tests exercise the batting engine's ShotIntent enum (the
+// Core.Simulation namespace also declares an unrelated ShotIntent struct).
+using ShotIntent = CricketGame.Core.Batting.ShotIntent;
 
 namespace CricketGame.Core.Tests
 {
