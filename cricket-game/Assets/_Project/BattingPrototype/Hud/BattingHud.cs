@@ -849,22 +849,23 @@ namespace CricketGame.BattingPrototype.Hud
                             (corners[2].y - corners[0].y) * scale);
         }
 
-      private void LateUpdate()
+    private void LateUpdate()
 {
     if (input == null)
         return;
 
-    // Make sure all required UI references exist
-    if (CanvasRect == null)
-    {
-        Debug.LogError("BattingHud: CanvasRect is NULL!");
-        return;
-    }
+    bool joystickReady =
+        joyBase != null &&
+        joyKnob != null &&
+        joyBase.rectTransform != null &&
+        joyKnob.rectTransform != null;
 
-    bool joystickReady = joyBase != null && joyKnob != null;
-
+    // Joystick active
     if (joystickReady && input.JoystickActive)
     {
+        if (CanvasRect == null)
+            return;
+
         SetJoystickVisible(true);
 
         Vector2 local;
@@ -882,8 +883,12 @@ namespace CricketGame.BattingPrototype.Hud
                     input.JoystickVector * Screen.height * 0.11f
                 );
         }
+
+        return;
     }
-    else if (joystickReady && joystickShown && battingControlsVisible)
+
+    // Joystick resting position
+    if (joystickReady && joystickShown && battingControlsVisible)
     {
         joyBase.rectTransform.anchoredPosition =
             new Vector2(
