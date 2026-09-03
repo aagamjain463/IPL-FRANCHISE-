@@ -870,37 +870,23 @@ namespace CricketGame.BattingPrototype.Hud
                         local + ScreenToCanvas(input.JoystickVector * Screen.height * 0.11f);
                 }
             }
-            else if (joystickReady && joystickShown && battingControlsVisible)
-            {
-                // rest at the home position, bottom-left thumb zone
-                joyBase.rectTransform.anchoredPosition = new Vector2(-Screen.width * 0.32f, -Screen.height * 0.28f);
-                joyKnob.rectTransform.anchoredPosition = joyBase.rectTransform.anchoredPosition;
-            }
-
-            if (input.SwipeActive)
-            {
-                Vector2 delta = input.SwipeCurrentScreen - input.SwipeAnchorScreen;
-                if (delta.magnitude > 12f)
-                {
-                    swipeIndicator.gameObject.SetActive(true);
-                    Vector2 local;
-                    RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                        CanvasRect, input.SwipeAnchorScreen, null, out local);
-                    swipeIndicator.rectTransform.anchoredPosition = local;
-                    float len = Mathf.Clamp(delta.magnitude * CanvasRect.rect.width / Screen.width, 30f, 260f);
-                    swipeIndicator.rectTransform.sizeDelta = new Vector2(10, len);
-                    float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg - 90f;
-                    swipeIndicator.rectTransform.localRotation = Quaternion.Euler(0, 0, angle);
-                }
-                else swipeIndicator.gameObject.SetActive(false);
-            }
-            else swipeIndicator.gameObject.SetActive(false);
-        }
-
-        private Vector2 ScreenToCanvas(Vector2 screenDelta)
-        {
-            float sf = Canvas.scaleFactor;
-            return sf > 0.0001f ? screenDelta / sf : screenDelta;
-        }
+           else if (joystickReady && joystickShown && battingControlsVisible)
+{
+    if (joyBase == null)
+    {
+        Debug.LogError("BattingHud: joyBase is NULL!");
+        return;
     }
+
+    if (joyKnob == null)
+    {
+        Debug.LogError("BattingHud: joyKnob is NULL!");
+        return;
+    }
+
+    joyBase.rectTransform.anchoredPosition =
+        new Vector2(-Screen.width * 0.32f, -Screen.height * 0.28f);
+
+    joyKnob.rectTransform.anchoredPosition =
+        joyBase.rectTransform.anchoredPosition;
 }
