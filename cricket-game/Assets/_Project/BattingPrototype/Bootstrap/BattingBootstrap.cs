@@ -1,7 +1,7 @@
 using System.Collections;
 using CricketGame.BattingPrototype.Bowler;
 using CricketGame.BattingPrototype.Bowling;
-using CricketGame.BattingPrototype.Camera;
+using CricketGame.BattingPrototype.Cameras;
 using CricketGame.BattingPrototype.Game;
 using CricketGame.BattingPrototype.Hud;
 using CricketGame.BattingPrototype.Input;

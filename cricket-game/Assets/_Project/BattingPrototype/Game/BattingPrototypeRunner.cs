@@ -10,7 +10,7 @@ using CricketGame.BattingPrototype.Ball;
 using CricketGame.BattingPrototype.Batsman;
 using CricketGame.BattingPrototype.Bowler;
 using CricketGame.BattingPrototype.Bowling;
-using CricketGame.BattingPrototype.Camera;
+using CricketGame.BattingPrototype.Cameras;
 using CricketGame.BattingPrototype.Hud;
 using CricketGame.BattingPrototype.Input;
 using CricketGame.BattingPrototype.Match;

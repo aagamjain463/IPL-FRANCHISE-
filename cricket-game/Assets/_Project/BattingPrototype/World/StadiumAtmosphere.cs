@@ -1,9 +1,6 @@
 using System.Collections.Generic;
 using CricketGame.BattingPrototype.UI;
 using UnityEngine;
-// Sibling namespace CricketGame.BattingPrototype.Camera would otherwise
-// shadow UnityEngine.Camera inside this namespace.
-using Camera = UnityEngine.Camera;
 
 namespace CricketGame.BattingPrototype.World
 {

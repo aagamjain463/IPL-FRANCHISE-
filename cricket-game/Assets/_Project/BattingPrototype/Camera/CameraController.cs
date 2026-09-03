@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace CricketGame.BattingPrototype.Camera
+namespace CricketGame.BattingPrototype.Cameras
 {
     /// <summary>
     /// Broadcast-style camera state machine:
