@@ -181,8 +181,8 @@ namespace CricketGame.BattingPrototype.Game
             // Phase 4: contextual animation. Edges deflect, awkward requests
             // snap to the nearest believable gesture (never a broken anim).
             FootPose pose = FootworkController.Pose(engine.Foot);
-            FootPoseKind poseKind = pose == FootPose.Front ? FootPoseKind.Front
-                : pose == FootPose.Back ? FootPoseKind.Back : FootPoseKind.Neutral;
+            FootPoseKind poseKind = pose == FootPose.FrontFoot ? FootPoseKind.Front
+                : pose == FootPose.BackFoot ? FootPoseKind.Back : FootPoseKind.Neutral;
             ShotAnimationSpec spec = report.Contact != null && report.Contact.Outcome == ContactOutcome.Edge
                 ? ShotAnimationResolver.ResolveEdge(report)
                 : ShotAnimationResolver.Resolve(report, poseKind);
