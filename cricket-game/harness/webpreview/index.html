@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-app-capable" content="yes">
+<title>Super Over Cricket — Match Preview</title>
+<style>
+  :root {
+    --bg: #0A0F1A;
+    --panel: rgba(10,15,26,0.80);
+    --panel-solid: #0E1421;
+    --border: rgba(255,255,255,0.14);
+    --cyan: #00D9FF;
+    --cyan-soft: #4DD8FF;
+    --amber: #FFB300;
+    --gold: #F5A623;
+    --danger: #FF2D55;
+    --green: #22C55E;
+    --text: #F5F7FA;
+    --dim: #8A93A6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; touch-action: none; overscroll-behavior: none; color: var(--text); }
+  #view { position: fixed; inset: 0; display: block; touch-action: none; }
+  .ui { position: fixed; z-index: 10; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; }
+  button { font-family: inherit; touch-action: none; cursor: pointer; letter-spacing: 0.06em; }
+
+  /* ---------- top score bar (fused score + chase panels) ---------- */
+  #topBar {
+    top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    display: flex; align-items: stretch; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    pointer-events: none; max-width: min(94vw, 760px);
+  }
+  #scoreboard {
+    padding: 8px 16px; color: var(--text); font-weight: 800; white-space: nowrap;
+    font-size: clamp(13px, 2.4vmin, 21px); letter-spacing: 0.05em;
+  }
+  #chase {
+    padding: 8px 16px; color: var(--dim); white-space: nowrap; border-left: 1px solid var(--border);
+    font-size: clamp(10px, 1.9vmin, 15px); letter-spacing: 0.05em; display: flex;
+    flex-direction: column; justify-content: center; gap: 2px;
+  }
+  #chase b { color: var(--cyan); font-size: clamp(12px, 2.2vmin, 18px); letter-spacing: 0.06em; }
+
+  #pauseBtn {
+    top: max(10px, env(safe-area-inset-top)); right: 10px; width: 46px; height: 46px;
+    background: transparent; border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-size: 16px; font-weight: 800;
+  }
+
+  /* ---------- popup / moment card ---------- */
+  #popup {
+    top: 38%; left: 50%; transform: translate(-50%, -50%);
+    color: #fff; font-size: clamp(26px, 6vmin, 56px); font-weight: 900; letter-spacing: 0.05em;
+    text-shadow: 0 3px 16px rgba(0,0,0,0.7); opacity: 0; transition: opacity 0.28s; pointer-events: none;
+    white-space: nowrap;
+  }
+  #banner {
+    top: max(64px, calc(env(safe-area-inset-top) + 56px)); left: 14px; width: auto; max-width: 46vw;
+    background: var(--panel); border: 1px solid var(--amber); border-left: 5px solid var(--amber);
+    border-radius: 12px; padding: 10px 18px 10px 14px; color: var(--amber);
+    font-size: clamp(20px, 4.4vmin, 38px); font-weight: 900; letter-spacing: 0.08em;
+    opacity: 0; transition: opacity 0.22s; pointer-events: none; white-space: nowrap;
+  }
+
+  /* ---------- intent column ---------- */
+  #intentBar { top: 50%; right: 12px; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; }
+  .intent {
+    width: clamp(64px, 10vmin, 92px); padding: 8px 0 6px; border: 0; border-radius: 10px;
+    background: rgba(255,255,255,0.10); color: var(--text);
+    font-size: clamp(13px, 2.2vmin, 18px); font-weight: 800; line-height: 1.1;
+  }
+  .intent small { display: block; font-size: 0.62em; font-weight: 600; color: var(--dim); letter-spacing: 0.04em; }
+  .intent.on { background: var(--cyan); color: var(--bg); }
+  .intent.on small { color: rgba(10,15,26,0.7); }
+
+  /* ---------- bottom chips ---------- */
+  #toast {
+    bottom: max(14px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(calc(-50% - 130px));
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    font-size: clamp(11px, 2vmin, 16px); font-weight: 700; letter-spacing: 0.08em;
+    padding: 8px 16px; border-radius: 999px; opacity: 0; transition: opacity 0.25s;
+    pointer-events: none; white-space: nowrap;
+  }
+  #timingChip {
+    bottom: max(14px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(calc(-50% + 130px));
+    background: var(--panel); border: 1px solid var(--cyan); color: var(--cyan);
+    font-size: clamp(11px, 2vmin, 16px); font-weight: 800; letter-spacing: 0.08em;
+    padding: 8px 16px; border-radius: 999px; pointer-events: none; white-space: nowrap;
+  }
+
+  /* ---------- over summary + partnership ---------- */
+  #overCard {
+    bottom: max(12px, env(safe-area-inset-bottom)); right: 12px; padding: 8px 12px 10px;
+    display: flex; flex-direction: column; gap: 6px; pointer-events: none; min-width: 240px;
+  }
+  #overCard .head { display: flex; justify-content: space-between; gap: 14px; font-size: clamp(9px,1.7vmin,13px); letter-spacing: 0.08em; font-weight: 800; }
+  #overCard .head span:first-child { color: var(--dim); }
+  #overPartnership { color: var(--green); }
+  #overChips { display: flex; gap: 8px; }
+  .ochip {
+    width: clamp(24px,4.4vmin,34px); height: clamp(24px,4.4vmin,34px); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.07); border: 1px solid var(--border);
+    color: var(--dim); font-weight: 800; font-size: clamp(10px,1.9vmin,15px);
+  }
+  .ochip.four { border-color: var(--cyan); color: var(--cyan); }
+  .ochip.six { border-color: var(--amber); color: var(--amber); }
+  .ochip.w { border-color: var(--danger); color: var(--danger); }
+  .ochip.runs { border-color: rgba(255,255,255,0.4); color: var(--text); }
+  .ochip.wd { border-color: var(--amber); color: var(--amber); }
+
+  /* ---------- spell analysis ---------- */
+  #spellCard {
+    top: 50%; right: 12px; transform: translateY(-50%); padding: 10px 14px; display: none;
+    flex-direction: column; gap: 6px; min-width: 190px; pointer-events: none;
+  }
+  #spellCard .head { color: var(--amber); font-weight: 800; letter-spacing: 0.08em; font-size: clamp(11px,2vmin,16px); }
+  #spellCard .row { display: flex; justify-content: space-between; gap: 18px; font-size: clamp(10px,1.8vmin,14px); color: var(--dim); }
+  #spellCard .row b { color: var(--text); }
+
+  /* ---------- bowling panel (left column) ---------- */
+  #bowlPanel {
+    left: 12px; top: 50%; transform: translateY(-50%);
+    display: none; flex-direction: column; gap: 6px; background: transparent; border: 0;
+  }
+  #bowlPanel button {
+    min-width: clamp(84px, 13vmin, 116px); padding: 8px 6px; border: 0; border-radius: 10px;
+    background: rgba(255,255,255,0.10); color: var(--text); font-size: clamp(11px, 1.9vmin, 15px);
+    font-weight: 800; letter-spacing: 0.05em;
+  }
+  #bowlPanel button.sel { background: var(--cyan); color: var(--bg); }
+  #bowlPad { display: flex; gap: 6px; margin-top: 6px; }
+  #bowlPad button { min-width: 0; width: 40px; padding: 8px 0; }
+  #bowlReadout { color: var(--cyan-soft); font-size: clamp(9px, 1.6vmin, 12px); text-align: left; line-height: 1.5; font-weight: 700; letter-spacing: 0.06em; }
+
+  /* ---------- debug ---------- */
+  #debug {
+    top: max(10px, env(safe-area-inset-top)); left: 10px; padding: 8px 12px; border: 0; border-radius: 8px;
+    background: rgba(16,20,36,0.78); color: var(--dim); font-size: 12px; font-weight: 700;
+  }
+  #debugPanel {
+    top: max(48px, calc(env(safe-area-inset-top) + 40px)); left: 10px; width: min(430px, 46vw);
+    background: rgba(4,8,16,0.82); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: #9fe8b4;
+  }
+  #debugBody { font: 11px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; white-space: pre-wrap; min-height: 118px; }
+  .drow { display: flex; align-items: center; gap: 8px; margin-top: 7px; color: #cfe0ff; font-size: 12px; }
+  .drow label { width: 52px; text-align: right; flex: none; }
+  .drow input[type="range"] { flex: 1; accent-color: var(--cyan); touch-action: none; }
+  .dbtns { display: flex; gap: 6px; margin-top: 9px; }
+  .dbtns button {
+    flex: 1; padding: 7px 0; border: 0; border-radius: 7px; background: #22304d; color: #fff;
+    font-size: 12px; font-weight: 700;
+  }
+
+  #hint {
+    bottom: max(6px, env(safe-area-inset-bottom)); left: 12px;
+    color: rgba(255,255,255,0.35); font-size: clamp(9px, 1.7vmin, 13px); pointer-events: none; white-space: nowrap;
+  }
+  #badge { display: none; }
+  #flash { inset: 0; background: #ffd23f; opacity: 0; transition: opacity 0.22s; pointer-events: none; }
+
+  /* ---------- full-screen overlays ---------- */
+  .screen { inset: 0; display: none; align-items: center; justify-content: center; background: rgba(3,6,14,0.78); z-index: 30; }
+  #overlay .card, .screen .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 26px 34px; text-align: center; max-width: min(860px, 92vw);
+    box-shadow: 0 12px 48px rgba(0,0,0,0.55);
+  }
+  #overlayTitle { color: var(--text); font-size: clamp(28px, 6vmin, 52px); font-weight: 900; letter-spacing: 0.08em; }
+  #overlayDetail { color: var(--amber); font-size: clamp(14px, 2.8vmin, 21px); margin-top: 10px; font-weight: 800; letter-spacing: 0.06em; }
+  #overlaySub { color: var(--dim); font-size: clamp(11px, 2.1vmin, 15px); margin-top: 10px; letter-spacing: 0.04em; }
+  #resultCols { display: none; gap: 12px; margin-top: 20px; text-align: left; }
+  #resultCols .rcol { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+  #resultCols .rcol h4 { color: var(--dim); font-size: clamp(9px,1.7vmin,12px); letter-spacing: 0.1em; margin-bottom: 8px; }
+  #resultCols .rcol div { color: var(--text); font-size: clamp(10px,1.9vmin,14px); line-height: 1.65; white-space: pre-line; }
+  #resultCols .rcol .hl { color: var(--cyan); font-weight: 800; }
+  #resultCols .rcol .am { color: var(--amber); font-weight: 800; }
+  .btnRow { display: flex; gap: 12px; justify-content: center; margin-top: 22px; flex-wrap: wrap; }
+  .btn {
+    padding: 12px 30px; border-radius: 10px; font-size: clamp(13px, 2.4vmin, 18px); font-weight: 800;
+    letter-spacing: 0.08em; border: 1px solid var(--border); background: transparent; color: var(--text);
+  }
+  .btn.filled { background: var(--cyan); border-color: var(--cyan); color: var(--bg); }
+  .btn.gold { background: var(--gold); border-color: var(--gold); color: var(--bg); }
+  .btn.danger { border-color: var(--danger); color: var(--danger); }
+  #playAgain { display: none; }
+
+  /* ---------- pre-match ---------- */
+  #preMatch { background: rgba(4,7,15,0.35); }
+  #pmTopL { position: absolute; top: 14px; left: 18px; color: var(--amber); font-weight: 800; letter-spacing: 0.1em; font-size: clamp(10px,2vmin,15px); }
+  #pmTopR { position: absolute; top: 14px; right: 18px; color: var(--dim); font-weight: 700; letter-spacing: 0.1em; font-size: clamp(10px,2vmin,15px); }
+  #pmCrests { display: flex; align-items: center; gap: clamp(30px,8vw,110px); }
+  .crest { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .crest .disc {
+    width: clamp(72px,15vmin,120px); height: clamp(72px,15vmin,120px); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: clamp(24px,5vmin,42px); font-weight: 900; color: #fff;
+    box-shadow: 0 8px 34px rgba(0,0,0,0.5);
+  }
+  .crest .nm { font-size: clamp(16px,3.4vmin,28px); font-weight: 900; letter-spacing: 0.08em; }
+  .crest .sub { font-size: clamp(9px,1.8vmin,13px); font-weight: 800; letter-spacing: 0.14em; }
+  #pmRing {
+    width: clamp(54px,10vmin,84px); height: clamp(54px,10vmin,84px); border-radius: 50%;
+    border: 4px solid var(--gold); background: rgba(5,8,16,0.9);
+  }
+  #pmChip { margin-top: 22px; }
+  #pmChip .card { display: inline-block; padding: 8px 22px; font-size: clamp(10px,2vmin,15px); font-weight: 800; letter-spacing: 0.1em; }
+  #pmVenue { color: var(--dim); margin-top: 8px; font-size: clamp(10px,1.9vmin,14px); }
+  #pmToss {
+    margin-top: 16px; display: inline-block; padding: 9px 22px; border-radius: 999px;
+    border: 1px solid var(--cyan); background: rgba(0,217,255,0.10); color: var(--cyan);
+    font-size: clamp(10px,2vmin,14px); font-weight: 800; letter-spacing: 0.08em;
+  }
+  #pmStartWrap { position: absolute; left: 20px; bottom: 20px; text-align: left; }
+  #pmStartWrap small { display: block; margin-top: 6px; color: var(--dim); letter-spacing: 0.1em; font-size: clamp(8px,1.6vmin,11px); }
+
+  /* ---------- pause ---------- */
+  #pauseMenu .card { width: min(430px, 90vw); }
+  #pauseMenu h2 { font-size: clamp(24px,5vmin,40px); letter-spacing: 0.1em; font-weight: 900; margin-bottom: 18px; }
+  #pauseMenu .btn { width: 78%; margin: 6px auto; display: block; }
+  #pmScore { margin-top: 14px; color: var(--amber); font-weight: 800; letter-spacing: 0.06em; font-size: clamp(11px,2.1vmin,16px); }
+  #pmSub { color: var(--dim); font-size: clamp(10px,1.9vmin,14px); margin-top: 4px; }
+  #pauseSettings, #pauseControls { display: none; margin-top: 14px; text-align: left; }
+  #pauseSettings .row, #pauseControls .row { display: flex; justify-content: space-between; gap: 10px; padding: 7px 4px; border-top: 1px solid var(--border); font-size: clamp(10px,2vmin,14px); color: var(--dim); }
+  #pauseSettings button { border: 1px solid var(--border); background: rgba(255,255,255,0.06); color: var(--text); border-radius: 8px; padding: 5px 12px; font-size: clamp(9px,1.8vmin,12px); font-weight: 800; }
+  #pauseControls .row { color: var(--text); }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="flash" class="ui"></div>
+
+<div id="topBar" class="ui">
+  <div id="scoreboard"></div>
+  <div id="chase"></div>
+</div>
+<button id="pauseBtn" class="ui">II</button>
+
+<div id="popup" class="ui"></div>
+<div id="banner" class="ui"></div>
+<div id="toast" class="ui"></div>
+<div id="timingChip" class="ui">TIMING</div>
+
+<div id="overCard" class="ui card">
+  <div class="head"><span>THIS OVER</span><span id="overPartnership">0 RUNS (0b)</span></div>
+  <div id="overChips">
+    <div class="ochip">·</div><div class="ochip">·</div><div class="ochip">·</div>
+    <div class="ochip">·</div><div class="ochip">·</div><div class="ochip">·</div>
+  </div>
+</div>
+
+<div id="spellCard" class="ui card">
+  <div class="head">SPELL ANALYSIS</div>
+  <div class="row"><span>Dot balls</span><b id="spDots">0</b></div>
+  <div class="row"><span>Boundaries</span><b id="spBounds">0</b></div>
+  <div class="row"><span>Avg speed</span><b id="spSpeed">-</b></div>
+</div>
+
+<div id="bowlPanel" class="ui">
+  <button class="btype sel" data-bt="fast_straight">PACE</button>
+  <button class="btype" data-bt="fast_inswinger">IN&#8209;SWING</button>
+  <button class="btype" data-bt="fast_outswinger">OUT&#8209;SWING</button>
+  <button class="btype" data-bt="yorker">YORKER</button>
+  <button class="btype" data-bt="full_ball">FULL</button>
+  <button class="btype" data-bt="good_length">GOOD</button>
+  <button class="btype" data-bt="short_ball">SHORT</button>
+  <button class="btype" data-bt="bouncer">BOUNCER</button>
+  <button class="btype" data-bt="off_cutter">OFF&#8209;CUT</button>
+  <button class="btype" data-bt="leg_cutter">LEG&#8209;CUT</button>
+  <button class="btype" data-bt="slower_ball">SLOWER</button>
+  <div id="bowlPad">
+    <button id="bpLeft">&#9664;</button>
+    <button id="bpUp">&#9650;</button>
+    <button id="bpDown">&#9660;</button>
+    <button id="bpRight">&#9654;</button>
+  </div>
+  <div id="bowlReadout">LINE: STUMPS<br>LENGTH: GOOD</div>
+</div>
+
+<div id="intentBar" class="ui">
+  <button class="intent" data-intent="defensive">DEF<small>Defensive</small></button>
+  <button class="intent on" data-intent="normal">NOR<small>Normal</small></button>
+  <button class="intent" data-intent="aggressive">POW<small>Power</small></button>
+  <button class="intent" data-intent="lofted">LOFT<small>Loft</small></button>
+</div>
+
+<button id="debug" class="ui">DEBUG ▾</button>
+<div id="debugPanel" class="ui" style="display:none">
+  <div id="debugBody"></div>
+  <div class="drow"><label>Speed</label><input id="sSpeed" type="range" min="80" max="150" step="1" value="126"></div>
+  <div class="drow"><label>Line</label><input id="sLine" type="range" min="-1" max="1" step="0.05" value="0.15"></div>
+  <div class="drow"><label>Length</label><input id="sLength" type="range" min="0" max="1" step="0.01" value="0.52"></div>
+  <div class="drow"><label>Swing</label><input id="sSwing" type="range" min="-1" max="1" step="0.05" value="0"></div>
+  <div class="dbtns">
+    <button id="bFull">FULL</button>
+    <button id="bGood">GOOD</button>
+    <button id="bShort">SHORT</button>
+    <button id="bReset">RESET POS</button>
+  </div>
+  <div class="dbtns">
+    <button id="bPerfect">PERFECT: OFF</button>
+    <button id="bSlow">SLOW-MO: OFF</button>
+    <button id="bRebowl">RE-BOWL</button>
+  </div>
+  <div class="dbtns">
+    <button id="bType">TYPE: AUTO</button>
+    <button id="bOutcome">OUTCOME: NONE</button>
+  </div>
+  <div class="dbtns">
+    <button id="bDiff">DIFF: MEDIUM</button>
+    <button id="bField">FIELD: NONE</button>
+    <button id="bSimBall">SIM BALL</button>
+    <button id="bResetMatch">RESET MATCH</button>
+  </div>
+  <div class="dbtns">
+    <button id="bRuns2">RUNS +2</button>
+    <button id="bWkts1">WKTS +1</button>
+    <button id="bEndInn">END INNINGS</button>
+    <button id="bArchetype">AI BAT: BALANCED</button>
+  </div>
+</div>
+
+<div id="hint" class="ui">LEFT THUMB = FOOTWORK&nbsp;&nbsp;·&nbsp;&nbsp;RIGHT SIDE = SWIPE (release = shot)</div>
+<div id="badge" class="ui">ENGINE PREVIEW</div>
+
+<!-- ============ result / innings overlays ============ -->
+<div id="overlay" class="screen">
+  <div class="card">
+    <div id="overlayTitle"></div>
+    <div id="overlayDetail"></div>
+    <div id="overlaySub"></div>
+    <div id="resultCols">
+      <div class="rcol"><h4>MATCH INNINGS</h4><div id="rcInnings"></div></div>
+      <div class="rcol"><h4>PLAYER OF THE MATCH</h4><div id="rcPotm"></div></div>
+      <div class="rcol"><h4>MATCH DETAILS</h4><div id="rcDetails"></div></div>
+    </div>
+    <div class="btnRow">
+      <button id="playAgain" class="btn">PLAY AGAIN</button>
+      <button id="continueBtn" class="btn filled" style="display:none">CONTINUE TO FRANCHISE</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ pre-match ============ -->
+<div id="preMatch" class="screen" style="display:flex">
+  <div id="pmTopL">SUPER OVER CHAMPIONSHIP</div>
+  <div id="pmTopR">LIVE BROADCAST</div>
+  <div style="text-align:center">
+    <div id="pmCrests">
+      <div class="crest">
+        <div class="disc" style="background:#1a73e8">YOU</div>
+        <div class="nm">YOU</div>
+        <div class="sub" style="color:var(--cyan-soft)">BAT FIRST</div>
+      </div>
+      <div id="pmRing"></div>
+      <div class="crest">
+        <div class="disc" style="background:var(--amber); color:#141005">AI</div>
+        <div class="nm">AI</div>
+        <div class="sub" style="color:var(--amber)">BOWL FIRST</div>
+      </div>
+    </div>
+    <div id="pmChip"><span class="card">SUPER OVER&nbsp;&nbsp;·&nbsp;&nbsp;HARBOUR ARENA</span></div>
+    <div id="pmVenue">Original fictional venue — floodlit evening match</div>
+    <div><span id="pmToss">YOU WON THE TOSS AND ELECTED TO BAT</span></div>
+  </div>
+  <div id="pmStartWrap">
+    <button id="pmStart" class="btn gold">START MATCH</button>
+    <small>TAP TO BEGIN PLAY</small>
+  </div>
+</div>
+
+<!-- ============ pause ============ -->
+<div id="pauseMenu" class="screen">
+  <div class="card">
+    <h2>PAUSED</h2>
+    <button id="pmResume" class="btn filled">RESUME MATCH</button>
+    <button id="pmControlsBtn" class="btn">CONTROLS GUIDE</button>
+    <button id="pmSettingsBtn" class="btn">SETTINGS</button>
+    <button id="pmQuit" class="btn danger">QUIT MATCH</button>
+    <div id="pauseSettings">
+      <div class="row"><span>GRAPHICS</span><button id="setQuality">MEDIUM</button></div>
+      <div class="row"><span>HAPTICS</span><button id="setHaptics">ON</button></div>
+      <div class="row"><span>AUDIO</span><button id="setAudio">ON</button></div>
+    </div>
+    <div id="pauseControls">
+      <div class="row"><span>LEFT</span><span>joystick = footwork</span></div>
+      <div class="row"><span>RIGHT</span><span>swipe = shot direction</span></div>
+      <div class="row"><span>INTENT</span><span>DEF / NOR / POW / LOFT</span></div>
+      <div class="row"><span>TIMING</span><span>tap as the ball arrives</span></div>
+      <div class="row"><span>BOWLING</span><span>type + line/length + RELEASE</span></div>
+    </div>
+    <div id="pmScore"></div>
+    <div id="pmSub"></div>
+  </div>
+</div>
+
+<script src="engine.js?v=5"></script>
+<script src="preview.js?v=5"></script>
+</body>
+</html>
