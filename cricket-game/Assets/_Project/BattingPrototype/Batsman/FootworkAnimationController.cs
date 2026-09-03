@@ -22,8 +22,8 @@ namespace CricketGame.BattingPrototype.Batsman
         public void Apply(FootworkState foot, float dt)
         {
             FootPose pose = FootworkController.Pose(foot);
-            FootPoseKind kind = pose == FootPose.Front ? FootPoseKind.Front
-                : pose == FootPose.Back ? FootPoseKind.Back : FootPoseKind.Neutral;
+            FootPoseKind kind = pose == FootPose.FrontFoot ? FootPoseKind.Front
+                : pose == FootPose.BackFoot ? FootPoseKind.Back : FootPoseKind.Neutral;
 
             Vector3 target = new Vector3(foot.X, 0f, foot.Z);
             // SmoothDamp: fast enough to feel responsive, soft enough to blend.

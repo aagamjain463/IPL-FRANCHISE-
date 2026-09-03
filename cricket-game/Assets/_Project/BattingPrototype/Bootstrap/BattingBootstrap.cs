@@ -84,20 +84,20 @@ namespace CricketGame.BattingPrototype.Bootstrap
 
             // Phase 5 (spec 2 architecture): premium boot loading screen that
             // fades away once everything is built.
-            var loadGo = UI.UiKit.NewUi("LoadingScreen", hud.Canvas.transform);
-            var loadRect = UI.UiKit.Rect(loadGo);
-            UI.UiKit.Anchor(loadRect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            var loadBg = UI.UiKit.AddImage(loadRect, "Bg", UI.UITheme.BgDark);
-            UI.UiKit.Anchor(UI.UiKit.Rect(loadBg.gameObject), Vector2.zero, Vector2.one,
+            var loadGo = UiKit.NewUi("LoadingScreen", hud.Canvas.transform);
+            var loadRect = UiKit.Rect(loadGo);
+            UiKit.Anchor(loadRect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var loadBg = UiKit.AddImage(loadRect, "Bg", UI.UITheme.BgDark);
+            UiKit.Anchor(UiKit.Rect(loadBg.gameObject), Vector2.zero, Vector2.one,
                             Vector2.zero, Vector2.zero);
             var loadTitle = UI.UiComponents.Label(loadRect, "Title", "SUPER OVER CRICKET",
                 UI.UITheme.FontCardTitle + 8, TextAnchor.MiddleCenter, UI.UITheme.Cyan);
-            UI.UiKit.Anchor(UI.UiKit.Rect(loadTitle.gameObject),
+            UiKit.Anchor(UiKit.Rect(loadTitle.gameObject),
                             new Vector2(0.5f, 0.55f), new Vector2(0.5f, 0.55f),
                             new Vector2(-320f, -44f), new Vector2(320f, 44f));
-            var loadSub = UI.UiKit.AddText(loadRect, "Sub", "HARBOUR ARENA  ·  LOADING",
+            var loadSub = UiKit.AddText(loadRect, "Sub", "HARBOUR ARENA  ·  LOADING",
                 UI.UITheme.FontSub, TextAnchor.MiddleCenter, UI.UITheme.TextDim);
-            UI.UiKit.Anchor(UI.UiKit.Rect(loadSub.gameObject),
+            UiKit.Anchor(UiKit.Rect(loadSub.gameObject),
                             new Vector2(0.5f, 0.44f), new Vector2(0.5f, 0.44f),
                             new Vector2(-320f, -20f), new Vector2(320f, 20f));
             hud.StartCoroutine(FadeLoading(UI.UiComponents.FadeGroup(loadGo), loadGo));
