@@ -1,5 +1,8 @@
 using CricketGame.Core.Batting;
 using CricketGame.Core.Simulation;
+// BatterHistoryEntry.Intent records the batter's shot intent - the Core.Batting
+// enum, NOT the Core.Simulation planning struct of the same name.
+using ShotIntent = CricketGame.Core.Batting.ShotIntent;
 
 namespace CricketGame.Core.AI
 {

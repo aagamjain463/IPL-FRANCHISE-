@@ -5,6 +5,9 @@ using CricketGame.Core.Bowling;
 using CricketGame.Core.Fielding;
 using CricketGame.Core.Rules;
 using CricketGame.Core.Simulation;
+// AI plans and batter-history entries carry the Batting ShotIntent enum, not
+// the Core.Simulation planning struct of the same name.
+using ShotIntent = CricketGame.Core.Batting.ShotIntent;
 
 namespace CricketGame.Core.Tests
 {

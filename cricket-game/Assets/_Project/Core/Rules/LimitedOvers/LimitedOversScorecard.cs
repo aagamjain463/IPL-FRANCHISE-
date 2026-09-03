@@ -37,9 +37,11 @@ namespace CricketGame.Core.Rules.LimitedOvers
         public readonly List<BowlerCard> FirstInningsBowlers = new List<BowlerCard>();
         public readonly List<BowlerCard> SecondInningsBowlers = new List<BowlerCard>();
 
-        /// <summary>Per-over summaries for the first innings (bowler, runs, wickets, marks).</summary>
-        public readonly List<OverRecord> FirstInningsOvers = new List<OverRecord>();
-        public readonly List<OverRecord> SecondInningsOvers = new List<OverRecord>();
+        /// <summary>Per-over summaries for each innings (bowler, runs, wickets,
+        /// marks). Named ...OverRecords to stay distinct from the cricket
+        /// overs-notation strings FirstInningsOvers / SecondInningsOvers above.</summary>
+        public readonly List<OverRecord> FirstInningsOverRecords = new List<OverRecord>();
+        public readonly List<OverRecord> SecondInningsOverRecords = new List<OverRecord>();
 
         /// <summary>Deterministic player-of-the-match heuristic (§24).</summary>
         public string PlayerOfMatch;
@@ -81,14 +83,14 @@ namespace CricketGame.Core.Rules.LimitedOvers
 
             foreach (BatterCard bc in a.Batters) card.FirstInningsBatters.Add(bc);
             foreach (BowlerCard bw in a.Bowlers) card.FirstInningsBowlers.Add(bw);
-            foreach (OverRecord or in a.Overs) card.FirstInningsOvers.Add(or);
+            foreach (OverRecord or in a.Overs) card.FirstInningsOverRecords.Add(or);
             CountBoundaries(a, out card.FirstInningsFours, out card.FirstInningsSixes);
 
             if (b != null)
             {
                 foreach (BatterCard bc in b.Batters) card.SecondInningsBatters.Add(bc);
                 foreach (BowlerCard bw in b.Bowlers) card.SecondInningsBowlers.Add(bw);
-                foreach (OverRecord or in b.Overs) card.SecondInningsOvers.Add(or);
+                foreach (OverRecord or in b.Overs) card.SecondInningsOverRecords.Add(or);
                 CountBoundaries(b, out card.SecondInningsFours, out card.SecondInningsSixes);
             }
 

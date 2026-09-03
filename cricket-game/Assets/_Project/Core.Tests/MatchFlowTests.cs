@@ -6,6 +6,9 @@ using CricketGame.Core.Bowling;
 using CricketGame.Core.Fielding;
 using CricketGame.Core.Rules;
 using CricketGame.Core.Simulation;
+// IntentMix counts the Batting ShotIntent enum returned by the AI planner,
+// not the Core.Simulation planning struct of the same name.
+using ShotIntent = CricketGame.Core.Batting.ShotIntent;
 
 namespace CricketGame.Core.Tests
 {
