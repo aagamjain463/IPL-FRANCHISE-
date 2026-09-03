@@ -70,7 +70,7 @@ namespace CricketGame.BattingPrototype.World
                 {
                     dynamicFriction = 0.55f,
                     staticFriction = 0.65f,
-                    restitution = 0.35f,
+                    bounciness = 0.35f,
                     bounceCombine = PhysicMaterialCombine.Average
                 };
                 gc.material = phys;
