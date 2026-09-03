@@ -1,4 +1,9 @@
+using CricketGame.BattingPrototype.Ball;
+using CricketGame.BattingPrototype.Batsman;
 using UnityEngine;
+// Sibling namespace CricketGame.BattingPrototype.Camera would otherwise
+// shadow UnityEngine.Camera inside this namespace.
+using Camera = UnityEngine.Camera;
 
 namespace CricketGame.BattingPrototype.World
 {

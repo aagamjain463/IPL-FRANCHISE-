@@ -507,9 +507,9 @@ namespace CricketGame.Core.Tests
                     var inn = m.CurrentInnings;
                     if (inn.AwaitingBowler)
                     {
-                        int b = BowlerRotation.SuggestNextBowler(inn);
-                        Assert.IsTrue(b >= 0, "squad must always cover the overs");
-                        m.AssignBowler(b);
+                        int bowler = BowlerRotation.SuggestNextBowler(inn);
+                        Assert.IsTrue(bowler >= 0, "squad must always cover the overs");
+                        m.AssignBowler(bowler);
                         continue;
                     }
                     double r = rng.NextDouble();
