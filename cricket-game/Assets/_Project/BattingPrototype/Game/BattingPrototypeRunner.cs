@@ -54,7 +54,6 @@ namespace CricketGame.BattingPrototype.Game
 
         private bool struckApplied;
         private bool ballResolved;
-        private bool keeperCollected;
         private bool deliveryRecorded;
         private bool redeliverNext;
         private DeliveryData? lastDelivery;
@@ -114,7 +113,6 @@ namespace CricketGame.BattingPrototype.Game
             if (lastDelivery == null || deliveryRecorded) return;
             redeliverNext = true;
             ballResolved = true;   // release the loop's wait
-            keeperCollected = true;
         }
 
         /// <summary>Debug: skip the pre-delivery ceremony for the next ball.</summary>
@@ -586,7 +584,6 @@ namespace CricketGame.BattingPrototype.Game
 
             struckApplied = false;
             ballResolved = false;
-            keeperCollected = false;
             hasPendingOutcome = false;
             deliveryRecorded = false;
             pendingFielding = null;
@@ -650,7 +647,6 @@ namespace CricketGame.BattingPrototype.Game
                 {
                     // Ball passed the batter unstruck: hand it to the keeper.
                     world.Ball.CollectAtKeeper(world.KeeperMark.position + new Vector3(0.25f, 0.35f, 0f));
-                    keeperCollected = true;
                 }
             }
         }
