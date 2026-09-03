@@ -9,16 +9,17 @@ modern cricket games, never on proprietary assets or implementations.
 
 ---
 
-## Current focus: PHASE 3 — Full Playable Super Over
+## Current focus: PHASE 5 — Visual Design & UI/UX
 
-The prototype is now a complete, replayable **Super Over** built on top of
-Phases 1–2 (nothing rebuilt): you bat a 6-ball innings against the AI
-bowler, then the AI chases your total while **you bowl** (line/length +
-FAST/SWING/YORKER/SHORT). An 11-person field chases, catches and throws
-from a deterministic simulation; runs, boundaries, catches, bowled/LBW and
-the chase all resolve from physics + rules, with proper margins, a result
-screen and instant PLAY AGAIN. See
-[Docs/PHASE3_SUPER_OVER_DESIGN.md](Docs/PHASE3_SUPER_OVER_DESIGN.md).
+The playable Super Over now wears the approved Figma-derived broadcast
+presentation (original fictional branding throughout): themed score bar with
+fused chase panel, intent column, delivery/timing chips, over-summary chips
+with partnership strip, corner moment cards, SPELL ANALYSIS while bowling,
+pre-match presentation, pause menu with live settings (graphics LOW/MED/HIGH,
+haptics, audio), a three-panel match result screen, dusk stadium atmosphere
+(floodlight glow, crowd colour bands, tiered stands) and pre-match/result
+camera states. Gameplay systems from Phases 1-4 are untouched underneath.
+See [Docs/PHASE5_VISUAL_DESIGN.md](Docs/PHASE5_VISUAL_DESIGN.md).
 
 Rules: 6 legal balls per innings · max 2 wickets · target = 1st innings + 1 ·
 chase wins the instant the target is reached · exact level = Tie (tie-break

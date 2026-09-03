@@ -594,6 +594,7 @@ namespace CricketGame.BattingPrototype.Game
 
             hud.ShowDeliveryToast(DeliveryLabels.Name(data.Type) + "  -  " +
                                   Mathf.RoundToInt(data.SpeedKph) + " KPH");
+            UI.HudStats.LastDeliverySpeedKph = data.SpeedKph;   // Phase 5 spell analysis
             Events.FireBallReleased(data);
             matchCtl.NotifyDeliveryStarted();
             AudioManager.Play(GameSound.DeliveryRelease);

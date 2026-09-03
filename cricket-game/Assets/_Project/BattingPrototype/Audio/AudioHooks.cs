@@ -17,6 +17,12 @@ namespace CricketGame.BattingPrototype.Audio
         InningsStart,
         MatchResultWin,
         MatchResultLose,
+        // Phase 5 presentation hooks
+        UiClick,
+        UiTransition,
+        Appeal,
+        UmpireSignal,
+        MatchIntro,
     }
 
     /// <summary>

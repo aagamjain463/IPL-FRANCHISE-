@@ -13,7 +13,8 @@ namespace CricketGame.BattingPrototype.Camera
     /// </summary>
     public class CameraController : MonoBehaviour
     {
-        private enum State { Setup, BlendToGameplay, Gameplay, Follow, FollowLong, Wicket, CatchEmphasis, FieldingFollow, Return }
+        private enum State { Setup, BlendToGameplay, Gameplay, Follow, FollowLong, Wicket, CatchEmphasis, FieldingFollow, Return, PreMatchOrbit, ResultHold }
+        private float orbitAngle;
 
         private static readonly Vector3 SetupPos = new Vector3(11.5f, 4.6f, 10f);
         private static readonly Vector3 SetupLook = new Vector3(0f, 1.0f, 10f);
@@ -44,6 +45,21 @@ namespace CricketGame.BattingPrototype.Camera
         public void ShowSetup()
         {
             state = State.Setup;
+            stateTime = 0f;
+        }
+
+        /// <summary>Phase 5: slow stadium sweep behind the pre-match screen.
+        /// Runs on unscaled time so it moves while timeScale = 0.</summary>
+        public void PreMatchOrbit()
+        {
+            state = State.PreMatchOrbit;
+            stateTime = 0f;
+        }
+
+        /// <summary>Phase 5: wide celebratory frame for the result screen.</summary>
+        public void ShowResultHold()
+        {
+            state = State.ResultHold;
             stateTime = 0f;
         }
 
@@ -211,6 +227,22 @@ namespace CricketGame.BattingPrototype.Camera
                     pos = Vector3.Lerp(transform.position, GameplayPos, t);
                     look = Vector3.Lerp(lastLook, GameplayLook, t);
                     if (t >= 1f) state = State.Gameplay;
+                    break;
+                }
+
+                case State.PreMatchOrbit:
+                {
+                    orbitAngle += Time.unscaledDeltaTime * 0.05f;
+                    pos = new Vector3(Mathf.Sin(orbitAngle) * 30f, 11f, 10f + Mathf.Cos(orbitAngle) * 30f);
+                    look = new Vector3(0f, 1.5f, 10f);
+                    break;
+                }
+
+                case State.ResultHold:
+                {
+                    pos = Vector3.Lerp(transform.position, new Vector3(16f, 7.5f, 2f),
+                                       Mathf.Clamp01(stateTime / 1.2f));
+                    look = new Vector3(0f, 1f, 10f);
                     break;
                 }
             }

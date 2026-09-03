@@ -391,6 +391,7 @@ function resetMatchAll() {
   releaseWindow.captured = false;
   Object.assign(replay, { active: false, kind: null, t: 0 });
   replaySeed = null;
+  if (typeof resetPresentationStats === "function") resetPresentationStats();
 }
 
 function releaseBall() {
@@ -409,6 +410,7 @@ function releaseBall() {
   flight.restTimer = 0;
   camMode = "game";
   phase = "delivery";
+  lastBowlSpeedKph = d.speed_kph;   // Phase 5 spell analysis
   let toastTxt = DELIVERY_LABELS[d.dtype] + "  —  " + Math.round(d.speed_kph) + " KPH";
   if (playerIsBatting() && lastBowlReason && lastBowlReason !== "stock_good_length") {
     toastTxt += "   (" + lastBowlReason.replace(/_/g, " ") + ")";
@@ -496,6 +498,7 @@ function applyContact() {
   const col = swing.window === "perfect" ? "#ffd23f" : swing.window === "good" ? "#5eff8a"
     : (swing.window === "early" || swing.window === "late") ? "#ffb14a" : "#ff6a5e";
   showPopup(swing.selection.name.toUpperCase() + "  -  " + feel.label, col, 1.0);
+  setTimingChip(feel.label, col);                  // Phase 5 bottom timing chip
   if (swing.window === "perfect") showTimingFlash("#ffd23f");
   camPunch = feel.camera;                       // subtle zoom breath
   if (navigator.vibrate && feel.haptic > 0.05) navigator.vibrate(Math.round(30 + feel.haptic * 60));
@@ -567,6 +570,7 @@ function updateFieldingPresentation(dt) {
 
 function recordBall(outcome) {
   match.recordDelivery(outcome);
+  trackBallForPresentation(outcome);
   updateScoreboard();
 }
 
@@ -906,6 +910,10 @@ async function showOverlay(title, detail, sub, withPlayAgain) {
   overlayDetail.textContent = detail;
   overlaySub.textContent = sub;
   playAgainBtn.style.display = withPlayAgain ? "inline-block" : "none";
+  if (!withPlayAgain) {
+    document.getElementById("resultCols").style.display = "none";
+    document.getElementById("continueBtn").style.display = "none";
+  }
   overlayEl.style.display = "flex";
 }
 function hideOverlay() { overlayEl.style.display = "none"; }
@@ -928,13 +936,106 @@ function showResultOverlay() {
   const sub = `YOU  ${r.first.runs}/${r.first.wickets} (${r.first.legal_balls} balls)`
     + `    ·    AI  ${r.second.runs}/${r.second.wickets} (${r.second.legal_balls} balls)`;
   matchFlow = "result";
+
+  // Phase 5: Figma three-column result layout.
+  const cols = document.getElementById("resultCols");
+  cols.style.display = "flex";
+  document.getElementById("rcInnings").innerHTML =
+    `<span class="hl">YOU</span>  ${r.first.runs}/${r.first.wickets} (${r.first.legal_balls}b)\n`
+    + `<span class="am">AI</span>  ${r.second.runs}/${r.second.wickets} (${r.second.legal_balls}b)`;
+  const winner = r.outcome === "first_win" ? "YOU" : r.outcome === "second_win" ? "AI" : "SHARED";
+  document.getElementById("rcPotm").innerHTML =
+    `<span class="${winner === "YOU" ? "hl" : "am"}">${winner}</span>\nSuper Over performer`;
+  document.getElementById("rcDetails").innerHTML =
+    `Format  SUPER OVER\nTarget  ${r.first.runs + 1}\nMargin  ${detail}`;
+  document.getElementById("continueBtn").style.display = "inline-block";
   return showOverlay(title, detail, sub, true);
 }
 
 playAgainBtn.addEventListener("pointerdown", (e) => {
   e.stopPropagation();
   hideOverlay();
+  resetPresentationStats();
   if (playAgainResolver) { playAgainResolver(); playAgainResolver = null; }
+});
+document.getElementById("continueBtn").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  showPopup("FRANCHISE BRIDGE  —  COMING IN A LATER PHASE", "#8A93A6", 1.6);
+  hideOverlay();
+  resetPresentationStats();
+  if (playAgainResolver) { playAgainResolver(); playAgainResolver = null; }
+});
+
+/* ---- Phase 5: pre-match presentation + pause menu ---- */
+const preMatchEl = document.getElementById("preMatch");
+const pauseMenuEl = document.getElementById("pauseMenu");
+
+document.getElementById("pmStart").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  preMatchEl.style.display = "none";
+  preMatchActive = false;
+  startBall();
+});
+
+function openPause() {
+  if (preMatchActive || matchFlow === "result") return;
+  paused = true;
+  const inn = match.currentInnings() || match.innings[1];
+  const t = match.target();
+  document.getElementById("pmScore").textContent =
+    `YOU ${match.innings[0].runs}/${match.innings[0].wickets}  VS  AI ${match.innings[1].runs}/${match.innings[1].wickets}`;
+  document.getElementById("pmSub").textContent = t != null
+    ? `Need ${match.runsRequired()} runs from ${match.ballsRemaining()} balls`
+    : `${match.ballsRemaining()} balls left in the innings`;
+  pauseMenuEl.style.display = "flex";
+}
+function closePause() {
+  paused = false;
+  pauseMenuEl.style.display = "none";
+}
+document.getElementById("pauseBtn").addEventListener("pointerdown", (e) => { e.stopPropagation(); openPause(); });
+document.getElementById("pmResume").addEventListener("pointerdown", (e) => { e.stopPropagation(); closePause(); });
+document.getElementById("pmControlsBtn").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  const c = document.getElementById("pauseControls");
+  c.style.display = c.style.display === "block" ? "none" : "block";
+  document.getElementById("pauseSettings").style.display = "none";
+});
+document.getElementById("pmSettingsBtn").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  const s = document.getElementById("pauseSettings");
+  s.style.display = s.style.display === "block" ? "none" : "block";
+  document.getElementById("pauseControls").style.display = "none";
+});
+document.getElementById("pmQuit").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  closePause();
+  hideOverlay();
+  resetMatchAll();
+  resetPresentationStats();
+  updateScoreboard();
+  preMatchEl.style.display = "flex";
+  preMatchActive = true;
+});
+const QUALITY_ORDER = ["LOW", "MEDIUM", "HIGH"];
+let qualityIdx = 1;
+document.getElementById("setQuality").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  qualityIdx = (qualityIdx + 1) % 3;
+  e.target.textContent = QUALITY_ORDER[qualityIdx];
+});
+document.getElementById("setHaptics").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  e.target.textContent = e.target.textContent === "ON" ? "OFF" : "ON";
+});
+document.getElementById("setAudio").addEventListener("pointerdown", (e) => {
+  e.stopPropagation();
+  e.target.textContent = e.target.textContent === "ON" ? "OFF" : "ON";
+});
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" || e.key === "p" || e.key === "P") {
+    if (pauseMenuEl.style.display === "flex") closePause(); else openPause();
+  }
 });
 // showResultOverlay resolves only after PLAY AGAIN: wrap it.
 const _showResultOverlay = showResultOverlay;
@@ -957,6 +1058,7 @@ function updateBowlReadout() {
 function updateBowlPanelVisibility() {
   bowlPanelEl.style.display = playerIsBatting() ? "none" : "flex";
   document.getElementById("intentBar").style.display = playerIsBatting() ? "flex" : "none";
+  document.getElementById("spellCard").style.display = playerIsBatting() ? "none" : "flex";
 }
 function bindBowlButton(id, fn) {
   document.getElementById(id).addEventListener("pointerdown", (e) => { e.stopPropagation(); fn(); updateBowlReadout(); });
@@ -991,14 +1093,70 @@ let toastTimer = null, bannerTimer = null, flashTimer = null;
 function updateScoreboard() {
   const inn = match.currentInnings() || match.innings[1];
   const side = playerIsBatting() ? "YOU" : "AI";
-  scoreEl.textContent = `${side}  ${inn.runs}/${inn.wickets}   (${inn.legal_balls} of 6 balls)`;
+  scoreEl.textContent = `${side}  ${inn.runs}/${inn.wickets}  (${inn.legal_balls}/6)`;
   const rr = inn.legal_balls > 0 ? (inn.runs / (inn.legal_balls / 6)).toFixed(1) : "0.0";
   const t = match.target();
   if (t != null) {
-    chaseEl.textContent = `TARGET ${t}   ·   NEED ${match.runsRequired()}`
-      + `   ·   ${match.ballsRemaining()} BALLS   ·   ${match.wicketsRemaining()} WKTS LEFT   ·   RR ${rr}`;
+    chaseEl.innerHTML = `<b>NEED ${match.runsRequired()} &nbsp;·&nbsp; TARGET ${t}</b>`
+      + `<span>${match.ballsRemaining()} BALLS · ${match.wicketsRemaining()} WKTS · RR ${rr}</span>`;
   } else {
-    chaseEl.textContent = `SET A TARGET   ·   ${match.ballsRemaining()} BALLS LEFT   ·   RR ${rr}`;
+    chaseEl.innerHTML = `<b>SET A TARGET</b><span>${match.ballsRemaining()} BALLS LEFT · RR ${rr}</span>`;
+  }
+}
+
+/* ---- Phase 5 presentation state ---- */
+let paused = false;
+let preMatchActive = true;
+const overChipEls = [...document.querySelectorAll(".ochip")];
+const overChipQueue = [];
+let partnershipRuns = 0, partnershipBalls = 0;
+let spellDots = 0, spellBounds = 0, spellSpeedSum = 0, spellSpeedN = 0;
+let lastBowlSpeedKph = 0;
+
+function resetPresentationStats() {
+  overChipQueue.length = 0;
+  partnershipRuns = 0; partnershipBalls = 0;
+  spellDots = 0; spellBounds = 0; spellSpeedSum = 0; spellSpeedN = 0;
+  for (const el of overChipEls) { el.textContent = "·"; el.className = "ochip"; }
+  document.getElementById("overPartnership").textContent = "0 RUNS (0b)";
+  document.getElementById("spDots").textContent = "0";
+  document.getElementById("spBounds").textContent = "0";
+  document.getElementById("spSpeed").textContent = "-";
+}
+
+function trackBallForPresentation(outcome) {
+  // over chips
+  let token, cls;
+  if (outcome.kind === "wicket") { token = "W"; cls = "ochip w"; }
+  else if (outcome.kind === "wide") { token = "wd"; cls = "ochip wd"; }
+  else if (outcome.runs >= 6) { token = "6"; cls = "ochip six"; }
+  else if (outcome.runs >= 4) { token = "4"; cls = "ochip four"; }
+  else if (outcome.runs === 0) { token = "·"; cls = "ochip"; }
+  else { token = String(outcome.runs); cls = "ochip runs"; }
+  overChipQueue.push([token, cls]);
+  while (overChipQueue.length > overChipEls.length) overChipQueue.shift();
+  overChipEls.forEach((el, i) => {
+    const e = overChipQueue[i];
+    el.textContent = e ? e[0] : "·";
+    el.className = e ? e[1] : "ochip";
+  });
+  // partnership strip
+  if (outcome.kind === "wicket") { partnershipRuns = 0; partnershipBalls = 0; }
+  else {
+    partnershipRuns += outcome.runs;
+    if (outcome.kind === "legal") partnershipBalls++;
+  }
+  document.getElementById("overPartnership").textContent =
+    `${partnershipRuns} RUNS (${partnershipBalls}b)`;
+  // spell analysis (player's bowling innings)
+  if (!playerIsBatting() && outcome.kind === "legal") {
+    if (outcome.runs === 0) spellDots++;
+    if (outcome.runs >= 4) spellBounds++;
+    if (lastBowlSpeedKph > 1) { spellSpeedSum += lastBowlSpeedKph; spellSpeedN++; }
+    document.getElementById("spDots").textContent = String(spellDots);
+    document.getElementById("spBounds").textContent = String(spellBounds);
+    document.getElementById("spSpeed").textContent =
+      spellSpeedN ? Math.round(spellSpeedSum / spellSpeedN) + " KPH" : "-";
   }
 }
 function showPopup(text, color, secs) {
@@ -1017,9 +1175,17 @@ function showToast(text) {
 function showBanner(text, color) {
   bannerEl.textContent = text;
   bannerEl.style.color = color;
+  bannerEl.style.borderColor = color;              // Phase 5 themed moment card
+  bannerEl.style.borderLeftColor = color;
   bannerEl.style.opacity = 1;
   if (bannerTimer) clearTimeout(bannerTimer);
-  bannerTimer = setTimeout(() => { bannerEl.style.opacity = 0; }, 1400);
+  bannerTimer = setTimeout(() => { bannerEl.style.opacity = 0; }, 1600);
+}
+function setTimingChip(label, color) {
+  const el = document.getElementById("timingChip");
+  el.textContent = label + " TIMING";
+  el.style.color = color;
+  el.style.borderColor = color;
 }
 function showTimingFlash(color) {
   flashEl.style.background = color;
@@ -1270,6 +1436,7 @@ function frame(now) {
   let dt = Math.min(0.033, (now - lastT) / 1000);
   lastT = now;
   if (slowMo) dt *= 0.35;   // debug slow motion
+  if (paused || preMatchActive) dt = 0;   // Phase 5: presentation holds the sim
   phaseT += dt;
 
   // Advance footwork + delivery clock in all live phases; block swings once
@@ -1392,6 +1559,12 @@ function frame(now) {
 }
 
 updateScoreboard();
-startBall();
-requestAnimationFrame(frame);
+resetPresentationStats();
+requestAnimationFrame(frame);   // Phase 5: the pre-match screen gates play
 window.__matchDebug = () => ({ match, matchFlow, difficulty, forcedField, phase, fieldingResult });
+// Headless/test hook: skip the pre-match presentation and begin play.
+window.__startPreview = () => {
+  preMatchActive = false;
+  preMatchEl.style.display = "none";
+  startBall();
+};

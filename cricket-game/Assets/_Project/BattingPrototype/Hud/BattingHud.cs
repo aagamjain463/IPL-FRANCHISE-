@@ -1,58 +1,95 @@
-using System;
 using System.Collections;
+using System.Collections.Generic;
+using CricketGame.BattingPrototype.UI;
+using CricketGame.BattingPrototype.World;
 using CricketGame.Core.Batting;
+using CricketGame.Core.Rules;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace CricketGame.BattingPrototype.Hud
 {
     /// <summary>
-    /// Mobile gameplay HUD, built entirely in code (no prefab assets).
-    /// Left: dynamic virtual joystick. Right: swipe zone + four compact
-    /// intent buttons (Defensive / Normal / Power / Lofted).
+    /// Phase 5 restyle: the Figma broadcast HUD - top-centre score bar with
+    /// fused chase panel, right intent column, bottom delivery/timing chips,
+    /// over-summary chips with partnership strip, corner moment cards and a
+    /// themed result screen. Public API is unchanged from Phases 3-4 so the
+    /// match controller and runner keep working untouched.
     /// </summary>
     public class BattingHud : MonoBehaviour
     {
         public Canvas Canvas { get; private set; }
         public RectTransform CanvasRect { get; private set; }
 
+        private Input.MobileBattingInput input;
+
+        // top bar
         private Text scoreText;
-        private Text popupText;
-        private Text hintSwipe;
-        private Text toastText;
-        private Image toastBg;
-        private Text bannerText;
-        private Image bannerBg;
-        private Image timingFlash;
+        private Text ballsText;
+        private Text batterText;
+        private Text chaseTitle;
+        private Text chaseSub;
+        private RectTransform topBarRect;
+
+        // controls
         private Image joyBase;
         private Image joyKnob;
         private Image swipeIndicator;
-        private Image[] intentButtons = new Image[4];
-        private Text[] intentLabels = new Text[4];
         private RectTransform intentPanelRect;
-
-        private Input.MobileBattingInput input;
-        private Coroutine popupRoutine;
-        private Coroutine toastRoutine;
-        private Coroutine bannerRoutine;
-        private Coroutine flashRoutine;
+        private readonly Image[] intentButtons = new Image[4];
+        private readonly Text[] intentLabels = new Text[4];
         private ShotIntent currentIntent = ShotIntent.Normal;
         private string battingSideLabel = "YOU";
+        private RectTransform battingControls;
+        private bool battingControlsVisible = true;
+        private bool joystickShown;
 
-        // Phase 3: chase line + full-screen overlays.
-        private Text chaseText;
+        // bottom chips
+        private Text deliveryChipText;
+        private Image deliveryChipBorder;
+        private Text timingChipText;
+        private Image timingChipBorder;
+        private Text popupText;
+
+        // moment cards (top corners) + over summary (bottom right)
+        private RectTransform momentRect;
+        private CanvasGroup momentGroup;
+        private Text momentTitle;
+        private Text momentDetail;
+        private Text momentSub;
+        private Color momentColor = UITheme.Amber;
+        private readonly List<Text> overChips = new List<Text>();
+        private RectTransform overCardRect;
+        private Text overHeader;
+        private Text partnershipText;
+        private int partnershipRuns;
+        private int partnershipBalls;
+
+        // full-screen overlays
         private RectTransform overlayPanel;
+        private CanvasGroup overlayGroup;
         private Text overlayTitle;
         private Text overlayDetail;
         private Text overlaySub;
-        private UnityEngine.UI.Button playAgainButton;
-        private RectTransform battingControls;   // joystick + intent column root
+        private RectTransform resultPanel;
+        private Text resultTitle;
+        private Text resultMargin;
+        private Text resultInnings;
+        private Text resultPotm;
+        private Text resultPotmSub;
+        private Text resultDetails;
+        private Button playAgainButton;
+        private Button continueButton;
 
-        private static readonly Color Dim = new Color(1f, 1f, 1f, 0.14f);
-        private static readonly Color PanelDark = new Color(0.05f, 0.07f, 0.12f, 0.62f);
+        private Image timingFlash;
+
+        private Coroutine popupRoutine;
+        private Coroutine chipRoutine;
+        private Coroutine momentRoutine;
 
         public event Action<ShotIntent> IntentChanged;
+        public event Action PlayAgainPressed;
+        public event Action ContinueToFranchise;
 
         // ------------------------------------------------------------------ build
 
@@ -60,374 +97,428 @@ namespace CricketGame.BattingPrototype.Hud
         {
             input = inputSource;
 
-            var canvasGo = new GameObject("HUD");
+            var canvasGo = new GameObject("HudCanvas", typeof(RectTransform));
             canvasGo.transform.SetParent(transform, false);
             Canvas = canvasGo.AddComponent<Canvas>();
             Canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            Canvas.sortingOrder = 10;
+            CanvasRect = (RectTransform)canvasGo.transform;
             var scaler = canvasGo.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920, 1080);
+            scaler.referenceResolution = new Vector2(1280, 720);
             scaler.matchWidthOrHeight = 0.5f;
-            canvasGo.AddComponent<GraphicRaycaster>();
 
-            var esGo = new GameObject("EventSystem");
-            esGo.transform.SetParent(transform, false);
-            esGo.AddComponent<EventSystem>();
-            esGo.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
-
-            CanvasRect = (RectTransform)canvasGo.transform;
-
-            BuildScoreboard();
-            BuildChaseLine();
+            BuildTopBar();
+            BuildPauseButton();
             BuildIntentButtons();
             BuildJoystickVisuals();
             BuildSwipeZone();
+            BuildBottomChips();
             BuildPopup();
-            BuildToast();
-            BuildBanner();
+            BuildMomentCard();
+            BuildOverCard();
             BuildTimingFlash();
             BuildOverlay();
+            BuildResultScreen();
 
-            input.JoystickStarted += () => SetJoystickVisible(true);
-            input.JoystickEnded += () => SetJoystickVisible(false);
+            SetBattingControlsVisible(true);
         }
 
-        private T AnchoredPanel<T>(string name, Vector2 anchorMin, Vector2 anchorMax,
-                                   Vector2 offsetMin, Vector2 offsetMax) where T : Component
+        private RectTransform PanelAt(string name, Vector2 anchor, Vector2 from, Vector2 to,
+                                      float radius = UITheme.RadiusCard)
         {
-            var go = World.UiKit.NewUi(name, CanvasRect);
-            var rect = World.UiKit.Rect(go);
-            rect.anchorMin = anchorMin;
-            rect.anchorMax = anchorMax;
-            rect.offsetMin = offsetMin;
-            rect.offsetMax = offsetMax;
-            if (typeof(T) == typeof(RectTransform)) return go.transform as T;
-            return go.AddComponent<T>();
+            var p = UiComponents.Panel(CanvasRect, name, Vector2.zero, radius);
+            UiKit.Anchor(p, anchor, anchor, from, to);
+            return p;
         }
 
-        private void BuildScoreboard()
+        private void BuildTopBar()
         {
-            var bg = AnchoredPanel<Image>("Scoreboard", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(-330, -86), new Vector2(330, -6));
-            bg.sprite = World.UiKit.WhiteSprite;
-            bg.color = PanelDark;
-            bg.raycastTarget = false;
+            var bar = UiComponents.Panel(CanvasRect, "TopBar", Vector2.zero, UITheme.RadiusCard);
+            topBarRect = bar;
+            UiKit.Anchor(bar, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                         new Vector2(-330f, -64f), new Vector2(330f, -12f));
 
-            scoreText = World.UiKit.AddText(bg.transform, "Score",
-                "YOU  0/0   (0 of 6 balls)", 30, TextAnchor.MiddleCenter, Color.white);
-            World.UiKit.Anchor(scoreText.rectTransform, Vector2.zero, Vector2.one,
-                new Vector2(8, 0), new Vector2(-8, 0));
+            scoreText = UiComponents.Label(bar, "Score", "YOU  0/0", UITheme.FontScore,
+                                           TextAnchor.MiddleLeft, UITheme.TextWhite);
+            UiKit.Anchor(UiKit.Rect(scoreText.gameObject), new Vector2(0f, 0.42f), new Vector2(0.42f, 1f),
+                         new Vector2(18f, 0f), new Vector2(0f, -2f));
+
+            ballsText = UiComponents.Label(bar, "Balls", "(0 of 6 balls)", UITheme.FontSub,
+                                           TextAnchor.MiddleLeft, UITheme.CyanSoft);
+            UiKit.Anchor(UiKit.Rect(ballsText.gameObject), new Vector2(0.42f, 0.42f), new Vector2(0.72f, 1f),
+                         new Vector2(0f, 0f), new Vector2(0f, -2f));
+
+            batterText = UiKit.AddText(bar, "Batters", "", UITheme.FontSub,
+                                       TextAnchor.MiddleLeft, UITheme.TextDim);
+            UiKit.Anchor(UiKit.Rect(batterText.gameObject), new Vector2(0f, 0f), new Vector2(0.72f, 0.42f),
+                         new Vector2(18f, 2f), new Vector2(0f, 0f));
+
+            // chase / target half (right)
+            chaseTitle = UiComponents.Label(bar, "ChaseTitle", "SET A TARGET", UITheme.FontLabel,
+                                            TextAnchor.MiddleRight, UITheme.Cyan);
+            UiKit.Anchor(UiKit.Rect(chaseTitle.gameObject), new Vector2(0.72f, 0.42f), new Vector2(1f, 1f),
+                         new Vector2(-16f, 0f), new Vector2(-16f, -2f));
+            chaseSub = UiKit.AddText(bar, "ChaseSub", "", UITheme.FontSub,
+                                     TextAnchor.MiddleRight, UITheme.TextDim);
+            UiKit.Anchor(UiKit.Rect(chaseSub.gameObject), new Vector2(0.72f, 0f), new Vector2(1f, 0.42f),
+                         new Vector2(-16f, 2f), new Vector2(-16f, 0f));
         }
 
-        private void BuildChaseLine()
+        private void BuildPauseButton()
         {
-            var bg = AnchoredPanel<Image>("ChaseLine", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(-420, -128), new Vector2(420, -90));
-            bg.sprite = World.UiKit.WhiteSprite;
-            bg.color = new Color(0.05f, 0.07f, 0.12f, 0.42f);
-            bg.raycastTarget = false;
-
-            chaseText = World.UiKit.AddText(bg.transform, "Chase",
-                "SET A TARGET   ·   6 BALLS LEFT", 22, TextAnchor.MiddleCenter,
-                new Color(0.9f, 0.96f, 1f));
-            World.UiKit.Anchor(chaseText.rectTransform, Vector2.zero, Vector2.one,
-                new Vector2(8, 0), new Vector2(-8, 0));
-        }
-
-        private void BuildOverlay()
-        {
-            overlayPanel = AnchoredPanel<RectTransform>("MatchOverlay",
-                Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-
-            var dim = World.UiKit.AddImage(overlayPanel, "Dim", new Color(0.02f, 0.03f, 0.08f, 0.72f));
-            World.UiKit.Anchor(dim.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-
-            var card = World.UiKit.AddImage(overlayPanel, "Card", PanelDark);
-            World.UiKit.Anchor(card.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(-430, -240), new Vector2(430, 240));
-
-            overlayTitle = World.UiKit.AddText(card.rectTransform, "Title", "", 64,
-                TextAnchor.MiddleCenter, Color.white);
-            World.UiKit.Anchor(overlayTitle.rectTransform, new Vector2(0, 1), new Vector2(1, 1),
-                new Vector2(20, -150), new Vector2(-20, -30));
-
-            overlayDetail = World.UiKit.AddText(card.rectTransform, "Detail", "", 30,
-                TextAnchor.MiddleCenter, new Color(0.85f, 0.9f, 1f));
-            World.UiKit.Anchor(overlayDetail.rectTransform, new Vector2(0, 0.5f), new Vector2(1, 0.5f),
-                new Vector2(24, -60), new Vector2(-24, 60));
-
-            overlaySub = World.UiKit.AddText(card.rectTransform, "Sub", "", 24,
-                TextAnchor.MiddleCenter, new Color(0.7f, 0.75f, 0.9f));
-            World.UiKit.Anchor(overlaySub.rectTransform, new Vector2(0, 0), new Vector2(1, 0),
-                new Vector2(24, 110), new Vector2(-24, 160));
-
-            var btnImg = World.UiKit.AddImage(card.rectTransform, "PlayAgainBtn",
-                new Color(0.15f, 0.65f, 0.35f, 0.95f));
-            btnImg.raycastTarget = true;
-            World.UiKit.Anchor(btnImg.rectTransform, new Vector2(0.5f, 0), new Vector2(0.5f, 0),
-                new Vector2(-190, 26), new Vector2(190, 96));
-            var btnLabel = World.UiKit.AddText(btnImg.rectTransform, "Label", "PLAY AGAIN", 32,
-                TextAnchor.MiddleCenter, Color.white);
-            World.UiKit.Anchor(btnLabel.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            playAgainButton = btnImg.gameObject.AddComponent<Button>();
-            playAgainButton.targetGraphic = btnImg;
-
-            overlayPanel.gameObject.SetActive(false);
-        }
-
-        // ------------------------------------------------------------------ phase 3 overlays
-
-        /// <summary>Raised when the player presses PLAY AGAIN on the result screen.</summary>
-        public event Action PlayAgainPressed;
-
-        /// <summary>End of innings 1: what was scored and the target to defend.</summary>
-        public void ShowInningsComplete(int runs, int wickets, int balls, int target)
-        {
-            ShowOverlayCard("INNINGS COMPLETE",
-                "YOU  " + runs + "/" + wickets + "   (" + balls + " balls)",
-                "TARGET SET:  " + target, false);
-        }
-
-        /// <summary>The break screen: the chase target (spec section 20).</summary>
-        public void ShowInningsBreak(int target)
-        {
-            ShowOverlayCard("THE CHASE BEGINS",
-                "AI NEEDS  " + target + "  RUNS FROM 6 BALLS",
-                "YOU BOWL  ·  PICK LINE, LENGTH AND TYPE", false);
-        }
-
-        /// <summary>Final result screen (spec section 22) with margins.</summary>
-        public void ShowMatchResult(CricketGame.Core.Rules.MatchResult result, bool playerWon)
-        {
-            string title;
-            string detail;
-            switch (result.Outcome)
+            var btn = UiComponents.ThemedButton(CanvasRect, "PauseBtn", "II", new Vector2(52f, 52f),
+                                                ButtonStyle.Outline, 22);
+            UiKit.Anchor(UiKit.Rect(btn.gameObject), new Vector2(1f, 1f), new Vector2(1f, 1f),
+                         new Vector2(-70f, -64f), new Vector2(-18f, -12f));
+            btn.onClick.AddListener(() =>
             {
-                case CricketGame.Core.Rules.MatchOutcome.SecondInningsWin:
-                    title = "YOU LOSE";
-                    detail = "Target chased with " + result.MarginBalls
-                             + (result.MarginBalls == 1 ? " ball" : " balls") + " remaining";
-                    break;
-                case CricketGame.Core.Rules.MatchOutcome.FirstInningsWin:
-                    title = "YOU WIN";
-                    bool allOut = result.SecondInnings.Wickets >= 2;
-                    detail = allOut
-                        ? "All out  -  fell short by " + result.MarginRuns
-                          + (result.MarginRuns == 1 ? " run" : " runs")
-                        : "Won by " + result.MarginRuns + (result.MarginRuns == 1 ? " run" : " runs");
-                    break;
-                default:
-                    title = "TIE";
-                    detail = "Scores level after the Super Over";
-                    break;
-            }
-
-            string sub = "YOU  " + result.FirstInnings.Runs + "/" + result.FirstInnings.Wickets
-                         + "  (" + result.FirstInnings.LegalBalls + " balls)     ·     AI  "
-                         + result.SecondInnings.Runs + "/" + result.SecondInnings.Wickets
-                         + "  (" + result.SecondInnings.LegalBalls + " balls)";
-            ShowOverlayCard(title, detail, sub, true);
+                if (PausePressed != null) PausePressed();
+            });
         }
 
-        public void HideOverlays()
-        {
-            if (overlayPanel != null) overlayPanel.gameObject.SetActive(false);
-        }
-
-        private void ShowOverlayCard(string title, string detail, string sub, bool showPlayAgain)
-        {
-            if (overlayPanel == null) return;
-            overlayPanel.gameObject.SetActive(true);
-            overlayTitle.text = title;
-            overlayDetail.text = detail;
-            overlaySub.text = sub;
-            playAgainButton.gameObject.SetActive(showPlayAgain);
-            if (showPlayAgain)
-            {
-                playAgainButton.onClick.RemoveAllListeners();
-                playAgainButton.onClick.AddListener(() =>
-                {
-                    if (PlayAgainPressed != null) PlayAgainPressed();
-                });
-            }
-        }
-
-        /// <summary>Hides batting-only controls while the player bowls.</summary>
-        public void SetBattingControlsVisible(bool visible)
-        {
-            battingControlsVisible = visible;
-            if (intentPanelRect != null) intentPanelRect.gameObject.SetActive(visible);
-            SetJoystickVisible(joystickShown);
-        }
-        private bool battingControlsVisible = true;
-        private bool joystickShown;
+        public event Action PausePressed;
 
         private void BuildIntentButtons()
         {
-            // Compact intent column at the top-right corner (landscape).
-            intentPanelRect = AnchoredPanel<RectTransform>("IntentPanel",
-                new Vector2(1f, 1f), new Vector2(1f, 1f),
-                new Vector2(-150, -322), new Vector2(-14, -100));
+            var panel = UiKit.NewUi("IntentColumn", CanvasRect);
+            intentPanelRect = UiKit.Rect(panel);
+            UiKit.Anchor(intentPanelRect, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                         new Vector2(-118f, -150f), new Vector2(-16f, 150f));
 
             string[] labels = { "DEF", "NOR", "POW", "LOFT" };
-            ShotIntent[] intents = { ShotIntent.Defensive, ShotIntent.Normal, ShotIntent.Aggressive, ShotIntent.Lofted };
-            float h = 46f, gap = 8f;
-
+            string[] subs = { "Defensive", "Normal", "Power", "Loft" };
             for (int i = 0; i < 4; i++)
             {
-                var go = World.UiKit.NewUi("Intent_" + labels[i], intentPanelRect);
-                var rect = World.UiKit.Rect(go);
-                rect.anchorMin = new Vector2(0, 1);
-                rect.anchorMax = new Vector2(1, 1);
-                rect.pivot = new Vector2(0.5f, 1);
-                rect.sizeDelta = new Vector2(0, h);
-                rect.anchoredPosition = new Vector2(0, -i * (h + gap));
+                float y0 = 300f - (i + 1) * 74f;
+                intentButtons[i] = UiKit.AddImage(intentPanelRect, "Intent_" + labels[i], UITheme.DimFill);
+                intentButtons[i].sprite = UITheme.RoundedSprite((int)UITheme.RadiusButton);
+                intentButtons[i].raycastTarget = true;
+                var r = UiKit.Rect(intentButtons[i].gameObject);
+                UiKit.Anchor(r, new Vector2(0f, 0f), new Vector2(1f, 0f),
+                             new Vector2(0f, y0 + 58f), new Vector2(0f, y0 + 72f));
 
-                var img = go.AddComponent<Image>();
-                img.sprite = World.UiKit.WhiteSprite;
-                img.color = new Color(0.1f, 0.12f, 0.2f, 0.75f);
-                intentButtons[i] = img;
+                intentLabels[i] = UiComponents.Label(r, "Label", labels[i], 22,
+                                                     TextAnchor.MiddleCenter, UITheme.TextWhite);
+                UiKit.Anchor(UiKit.Rect(intentLabels[i].gameObject), Vector2.zero, Vector2.one,
+                             Vector2.zero, new Vector2(0f, 8f));
+                var sub = UiKit.AddText(r, "Sub", subs[i], 13, TextAnchor.MiddleCenter, UITheme.TextDim);
+                UiKit.Anchor(UiKit.Rect(sub.gameObject), Vector2.zero, Vector2.one,
+                             new Vector2(0f, -22f), Vector2.zero);
 
-                var label = World.UiKit.AddText(rect, "Label", labels[i], 26, TextAnchor.MiddleCenter, Color.white);
-                World.UiKit.Anchor(label.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-                intentLabels[i] = label;
-
-                var btn = go.AddComponent<Button>();
-                btn.targetGraphic = img;
-                int captured = i;
-                btn.onClick.AddListener(() => SetIntent(intents[captured]));
+                int index = i;
+                var button = intentButtons[i].gameObject.AddComponent<Button>();
+                button.onClick.AddListener(() => SetIntent((ShotIntent)index));
             }
-
-            SetIntent(ShotIntent.Normal);
+            RefreshIntent();
         }
 
         private void BuildJoystickVisuals()
         {
-            joyBase = World.UiKit.AddImage(CanvasRect, "JoyBase", Dim);
-            joyBase.rectTransform.sizeDelta = new Vector2(220, 220);
-            joyKnob = World.UiKit.AddImage(CanvasRect, "JoyKnob", new Color(1f, 1f, 1f, 0.4f));
-            joyKnob.rectTransform.sizeDelta = new Vector2(86, 86);
-            SetJoystickVisible(false);
+            battingControls = UiKit.NewUi("BattingControls", CanvasRect).transform as RectTransform;
+            UiKit.Anchor(battingControls, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            joyBase = UiKit.AddImage(battingControls, "JoyBase", new Color(0f, 0.85f, 1f, 0.16f));
+            joyBase.sprite = UITheme.RoundedSprite(32);
+            UiKit.Anchor(UiKit.Rect(joyBase.gameObject), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                         new Vector2(-70f, -70f), new Vector2(70f, 70f));
+            var ring = UiKit.AddImage(UiKit.Rect(joyBase.gameObject), "Ring", new Color(0f, 0.85f, 1f, 0.5f));
+            ring.sprite = UITheme.RoundedSprite(32);
+            UiKit.Anchor(UiKit.Rect(ring.gameObject), Vector2.zero, Vector2.one,
+                         Vector2.zero, Vector2.zero);
+            var hole = UiKit.AddImage(UiKit.Rect(ring.gameObject), "Hole", new Color(0f, 0.85f, 1f, 0.12f));
+            hole.sprite = UITheme.RoundedSprite(32);
+            UiKit.Anchor(UiKit.Rect(hole.gameObject), Vector2.zero, Vector2.one,
+                         Vector2.one * 3f, -Vector2.one * 3f);
+
+            joyKnob = UiKit.AddImage(battingControls, "JoyKnob", UITheme.Cyan);
+            joyKnob.sprite = UITheme.RoundedSprite(32);
+            UiKit.Anchor(UiKit.Rect(joyKnob.gameObject), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                         new Vector2(-34f, -34f), new Vector2(34f, 34f));
         }
 
         private void BuildSwipeZone()
         {
-            var zoneHint = World.UiKit.AddText(CanvasRect, "SwipeHint",
-                "SWIPE TO PLAY\nrelease = shot", 24, TextAnchor.MiddleCenter, new Color(1, 1, 1, 0.35f));
-            zoneHint.rectTransform.anchorMin = new Vector2(0.78f, 0.06f);
-            zoneHint.rectTransform.anchorMax = new Vector2(0.78f, 0.06f);
-            zoneHint.rectTransform.sizeDelta = new Vector2(320, 70);
-
-            swipeIndicator = World.UiKit.AddImage(CanvasRect, "SwipeIndicator", new Color(1f, 0.9f, 0.35f, 0.85f));
-            swipeIndicator.rectTransform.sizeDelta = new Vector2(10, 10);
-            swipeIndicator.rectTransform.pivot = new Vector2(0.5f, 0f);
+            swipeIndicator = UiKit.AddImage(CanvasRect, "SwipeLine", new Color(0f, 0.85f, 1f, 0.75f));
+            swipeIndicator.sprite = UITheme.RoundedSprite(6);
             swipeIndicator.gameObject.SetActive(false);
+        }
+
+        private void BuildBottomChips()
+        {
+            deliveryChipBorder = UiKit.AddImage(CanvasRect, "DeliveryChip", UITheme.Border);
+            deliveryChipBorder.sprite = UITheme.RoundedSprite(32);
+            UiKit.Anchor(UiKit.Rect(deliveryChipBorder.gameObject), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                         new Vector2(-260f, 18f), new Vector2(-20f, 58f));
+            var dBody = UiKit.AddImage(UiKit.Rect(deliveryChipBorder.gameObject), "Body", UITheme.Panel);
+            dBody.sprite = UITheme.RoundedSprite(30);
+            UiKit.Anchor(UiKit.Rect(dBody.gameObject), Vector2.zero, Vector2.one,
+                         Vector2.one * 2f, -Vector2.one * 2f);
+            deliveryChipText = UiComponents.Label(UiKit.Rect(dBody.gameObject), "Text", "WAITING",
+                                                  UITheme.FontSub, TextAnchor.MiddleCenter, UITheme.TextWhite);
+            UiKit.Anchor(UiKit.Rect(deliveryChipText.gameObject), Vector2.zero, Vector2.one,
+                         new Vector2(10f, 0f), new Vector2(-10f, 0f));
+
+            timingChipBorder = UiKit.AddImage(CanvasRect, "TimingChip", UITheme.Cyan);
+            timingChipBorder.sprite = UITheme.RoundedSprite(32);
+            UiKit.Anchor(UiKit.Rect(timingChipBorder.gameObject), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                         new Vector2(20f, 18f), new Vector2(260f, 58f));
+            var tBody = UiKit.AddImage(UiKit.Rect(timingChipBorder.gameObject), "Body", UITheme.Panel);
+            tBody.sprite = UITheme.RoundedSprite(30);
+            UiKit.Anchor(UiKit.Rect(tBody.gameObject), Vector2.zero, Vector2.one,
+                         Vector2.one * 2f, -Vector2.one * 2f);
+            timingChipText = UiComponents.Label(UiKit.Rect(tBody.gameObject), "Text", "TIMING",
+                                                UITheme.FontSub, TextAnchor.MiddleCenter, UITheme.Cyan);
+            UiKit.Anchor(UiKit.Rect(timingChipText.gameObject), Vector2.zero, Vector2.one,
+                         new Vector2(10f, 0f), new Vector2(-10f, 0f));
         }
 
         private void BuildPopup()
         {
-            popupText = World.UiKit.AddText(CanvasRect, "Popup", "", 72, TextAnchor.MiddleCenter, Color.white);
-            popupText.rectTransform.anchorMin = new Vector2(0.5f, 0.55f);
-            popupText.rectTransform.anchorMax = new Vector2(0.5f, 0.55f);
-            popupText.rectTransform.sizeDelta = new Vector2(1200, 120);
+            popupText = UiComponents.Label(CanvasRect, "Popup", "", 30,
+                                           TextAnchor.MiddleCenter, UITheme.TextWhite);
+            UiKit.Anchor(UiKit.Rect(popupText.gameObject), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                         new Vector2(0f, 120f), new Vector2(0f, 160f));
         }
 
-        /// <summary>Broadcast lower-left toast: delivery type + pace.</summary>
-        private void BuildToast()
+        private void BuildMomentCard()
         {
-            toastBg = World.UiKit.AddImage(CanvasRect, "ToastBg", new Color(0.04f, 0.06f, 0.12f, 0f));
-            toastBg.sprite = World.UiKit.WhiteSprite;
-            toastBg.raycastTarget = false;
-            var r = toastBg.rectTransform;
-            r.anchorMin = new Vector2(0f, 0f);
-            r.anchorMax = new Vector2(0f, 0f);
-            r.pivot = new Vector2(0f, 0f);
-            r.anchoredPosition = new Vector2(16, 34);
-            r.sizeDelta = new Vector2(360, 44);
+            momentRect = PanelAt("MomentCard", new Vector2(0f, 1f),
+                                 new Vector2(16f, -150f), new Vector2(470f, -20f));
+            momentGroup = UiComponents.FadeGroup(momentRect.gameObject);
+            momentGroup.alpha = 0f;
 
-            toastText = World.UiKit.AddText(toastBg.transform, "ToastText", "", 24,
-                TextAnchor.MiddleLeft, new Color(1f, 1f, 1f, 0f));
-            World.UiKit.Anchor(toastText.rectTransform, Vector2.zero, Vector2.one,
-                new Vector2(14, 0), new Vector2(-10, 0));
+            var accent = UiKit.AddImage(momentRect, "Accent", UITheme.Amber);
+            UiKit.Anchor(UiKit.Rect(accent.gameObject), new Vector2(0f, 0f), new Vector2(0f, 1f),
+                         new Vector2(10f, 14f), new Vector2(15f, -14f));
+
+            momentTitle = UiComponents.Label(momentRect, "Title", "", UITheme.FontCardTitle,
+                                             TextAnchor.MiddleLeft, UITheme.Amber);
+            UiKit.Anchor(UiKit.Rect(momentTitle.gameObject), new Vector2(0f, 0.55f), new Vector2(1f, 1f),
+                         new Vector2(30f, 0f), new Vector2(-14f, -6f));
+            momentDetail = UiKit.AddText(momentRect, "Detail", "", UITheme.FontSub,
+                                         TextAnchor.MiddleLeft, UITheme.TextWhite);
+            UiKit.Anchor(UiKit.Rect(momentDetail.gameObject), new Vector2(0f, 0.28f), new Vector2(1f, 0.58f),
+                         new Vector2(30f, 0f), new Vector2(-14f, 0f));
+            momentSub = UiKit.AddText(momentRect, "Sub", "", UITheme.FontSub,
+                                      TextAnchor.MiddleLeft, UITheme.TextDim);
+            UiKit.Anchor(UiKit.Rect(momentSub.gameObject), new Vector2(0f, 0f), new Vector2(1f, 0.3f),
+                         new Vector2(30f, 4f), new Vector2(-14f, 0f));
         }
 
-        /// <summary>Full-width centre band for FOUR / SIX / WICKET moments.</summary>
-        private void BuildBanner()
+        private void BuildOverCard()
         {
-            bannerBg = World.UiKit.AddImage(CanvasRect, "BannerBg", new Color(0.05f, 0.07f, 0.14f, 0f));
-            bannerBg.sprite = World.UiKit.WhiteSprite;
-            bannerBg.raycastTarget = false;
-            var r = bannerBg.rectTransform;
-            r.anchorMin = new Vector2(0f, 0.62f);
-            r.anchorMax = new Vector2(1f, 0.62f);
-            r.pivot = new Vector2(0.5f, 0.5f);
-            r.anchoredPosition = Vector2.zero;
-            r.sizeDelta = new Vector2(0, 96);
+            overCardRect = PanelAt("OverCard", new Vector2(1f, 0f),
+                                   new Vector2(-420f, 14f), new Vector2(-16f, 118f));
+            overHeader = UiComponents.Label(overCardRect, "Header", "THIS OVER", UITheme.FontSub,
+                                            TextAnchor.MiddleLeft, UITheme.TextDim);
+            UiKit.Anchor(UiKit.Rect(overHeader.gameObject), new Vector2(0f, 0.62f), new Vector2(0.55f, 1f),
+                         new Vector2(16f, 0f), new Vector2(0f, -4f));
+            partnershipText = UiComponents.Label(overCardRect, "Runs", "0 RUNS", UITheme.FontSub,
+                                                 TextAnchor.MiddleRight, UITheme.Green);
+            UiKit.Anchor(UiKit.Rect(partnershipText.gameObject), new Vector2(0.55f, 0.62f), new Vector2(1f, 1f),
+                         new Vector2(0f, 0f), new Vector2(-16f, -4f));
 
-            bannerText = World.UiKit.AddText(bannerBg.transform, "BannerText", "", 64,
-                TextAnchor.MiddleCenter, new Color(1f, 1f, 1f, 0f));
-            World.UiKit.Anchor(bannerText.rectTransform, Vector2.zero, Vector2.one,
-                Vector2.zero, Vector2.zero);
+            for (int i = 0; i < 6; i++)
+            {
+                var chip = UiComponents.Chip(overCardRect, "Chip" + i, 44f, "·", UITheme.Border);
+                UiKit.Anchor(UiKit.Rect(chip.gameObject), new Vector2(0f, 0f), new Vector2(0f, 0f),
+                             new Vector2(16f + i * 58f, 12f), new Vector2(60f + i * 58f, 56f));
+                overChips.Add(chip);
+            }
         }
 
-        /// <summary>Subtle full-screen tint pulse for PERFECT timing.</summary>
         private void BuildTimingFlash()
         {
-            timingFlash = World.UiKit.AddImage(CanvasRect, "TimingFlash", new Color(1f, 0.85f, 0.2f, 0f));
-            timingFlash.sprite = World.UiKit.WhiteSprite;
-            timingFlash.raycastTarget = false;
-            World.UiKit.Anchor(timingFlash.rectTransform, Vector2.zero, Vector2.one,
-                Vector2.zero, Vector2.zero);
+            timingFlash = UiKit.AddImage(CanvasRect, "TimingFlash", new Color(0, 0, 0, 0));
+            UiKit.Anchor(UiKit.Rect(timingFlash.gameObject), Vector2.zero, Vector2.one,
+                         Vector2.zero, Vector2.zero);
         }
 
-        // ------------------------------------------------------------------ runtime
-
-        public void SetIntent(ShotIntent intent)
+        private void BuildOverlay()
         {
-            currentIntent = intent;
-            input.SelectedIntent = intent;
-            Color[] on = { new Color(0.2f, 0.55f, 0.95f, 0.95f), new Color(0.16f, 0.7f, 0.35f, 0.95f),
-                           new Color(0.95f, 0.45f, 0.15f, 0.95f), new Color(0.75f, 0.2f, 0.65f, 0.95f) };
-            for (int i = 0; i < 4; i++)
+            var dim = UiKit.AddImage(CanvasRect, "OverlayDim", new Color(0.02f, 0.03f, 0.06f, 0.72f));
+            overlayPanel = UiKit.Rect(dim.gameObject);
+            UiKit.Anchor(overlayPanel, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            overlayGroup = UiComponents.FadeGroup(overlayPanel.gameObject);
+            overlayGroup.alpha = 0f;
+            overlayPanel.gameObject.SetActive(false);
+
+            var card = UiComponents.Panel(overlayPanel, "Card", new Vector2(620f, 240f), UITheme.RadiusCard);
+            overlayTitle = UiComponents.Label(UiKit.Rect(card.gameObject), "Title", "",
+                                              UITheme.FontCardTitle + 6, TextAnchor.MiddleCenter, UITheme.Amber);
+            UiKit.Anchor(UiKit.Rect(overlayTitle.gameObject), new Vector2(0f, 0.52f), new Vector2(1f, 1f),
+                         new Vector2(20f, 0f), new Vector2(-20f, -8f));
+            overlayDetail = UiComponents.Label(UiKit.Rect(card.gameObject), "Detail", "",
+                                               UITheme.FontScore, TextAnchor.MiddleCenter, UITheme.TextWhite);
+            UiKit.Anchor(UiKit.Rect(overlayDetail.gameObject), new Vector2(0f, 0.24f), new Vector2(1f, 0.56f),
+                         new Vector2(20f, 0f), new Vector2(-20f, 0f));
+            overlaySub = UiKit.AddText(UiKit.Rect(card.gameObject), "Sub", "", UITheme.FontSub,
+                                       TextAnchor.MiddleCenter, UITheme.TextDim);
+            UiKit.Anchor(UiKit.Rect(overlaySub.gameObject), new Vector2(0f, 0f), new Vector2(1f, 0.28f),
+                         new Vector2(20f, 6f), new Vector2(-20f, 0f));
+        }
+
+        private void BuildResultScreen()
+        {
+            resultPanel = PanelAt("ResultScreen", new Vector2(0.5f, 0.5f),
+                                  new Vector2(-620f, -330f), new Vector2(620f, 330f), UITheme.RadiusCard);
+            var rg = UiComponents.FadeGroup(resultPanel.gameObject);
+            rg.alpha = 0f;
+            resultPanel.gameObject.SetActive(false);
+
+            resultTitle = UiComponents.Label(resultPanel, "Title", "", UITheme.FontResultTitle,
+                                             TextAnchor.MiddleCenter, UITheme.TextWhite);
+            UiKit.Anchor(UiKit.Rect(resultTitle.gameObject), new Vector2(0f, 0.78f), new Vector2(1f, 1f),
+                         new Vector2(20f, 0f), new Vector2(-20f, -10f));
+            resultMargin = UiComponents.Label(resultPanel, "Margin", "", UITheme.FontLabel,
+                                              TextAnchor.MiddleCenter, UITheme.Amber);
+            UiKit.Anchor(UiKit.Rect(resultMargin.gameObject), new Vector2(0f, 0.7f), new Vector2(1f, 0.8f),
+                         new Vector2(20f, 0f), new Vector2(-20f, 0f));
+
+            BuildResultColumn("ColInnings", 0.02f, 0.34f, "MATCH INNINGS", out resultInnings);
+            BuildResultColumn("ColPotm", 0.35f, 0.67f, "PLAYER OF THE MATCH", out resultPotm);
+            resultPotmSub = resultPotm; // second line lives inside the same text block
+            BuildResultColumn("ColDetails", 0.68f, 0.99f, "MATCH DETAILS", out resultDetails);
+
+            playAgainButton = UiComponents.ThemedButton(resultPanel, "PlayAgain", "PLAY AGAIN",
+                                                        new Vector2(220f, 62f), ButtonStyle.Outline);
+            UiKit.Anchor(UiKit.Rect(playAgainButton.gameObject), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                         new Vector2(-250f, 26f), new Vector2(-30f, 88f));
+            playAgainButton.onClick.AddListener(() =>
             {
-                bool active = ((int)intent) == i;
-                intentButtons[i].color = active ? on[i] : new Color(0.1f, 0.12f, 0.2f, 0.75f);
+                if (PlayAgainPressed != null) PlayAgainPressed();
+            });
+
+            continueButton = UiComponents.ThemedButton(resultPanel, "Continue", "CONTINUE TO FRANCHISE",
+                                                       new Vector2(330f, 62f), ButtonStyle.Filled);
+            UiKit.Anchor(UiKit.Rect(continueButton.gameObject), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                         new Vector2(30f, 26f), new Vector2(360f, 88f));
+            continueButton.onClick.AddListener(() =>
+            {
+                if (ContinueToFranchise != null) ContinueToFranchise();
+            });
+        }
+
+        private void BuildResultColumn(string name, float x0, float x1, string header, out Text body)
+        {
+            var col = UiComponents.Panel(resultPanel, name, Vector2.zero, UITheme.RadiusButton,
+                                         new Color(1f, 1f, 1f, 0.05f), UITheme.Border);
+            UiKit.Anchor(col, new Vector2(x0, 0.24f), new Vector2(x1, 0.68f),
+                         new Vector2(6f, 0f), new Vector2(-6f, 0f));
+            var h = UiComponents.Label(col, "Header", header, UITheme.FontSub,
+                                       TextAnchor.MiddleLeft, UITheme.TextDim);
+            UiKit.Anchor(UiKit.Rect(h.gameObject), new Vector2(0f, 0.8f), new Vector2(1f, 1f),
+                         new Vector2(14f, 0f), new Vector2(-10f, -6f));
+            body = UiKit.AddText(col, "Body", "", UITheme.FontSub + 2,
+                                 TextAnchor.UpperLeft, UITheme.TextWhite);
+            UiKit.Anchor(UiKit.Rect(body.gameObject), new Vector2(0f, 0f), new Vector2(1f, 0.8f),
+                         new Vector2(14f, 6f), new Vector2(-10f, 0f));
+        }
+
+        // ------------------------------------------------------------------ match data
+
+        /// <summary>Phase 5: subscribe to the rules engine for over chips,
+        /// partnership strip and result-screen stats. Single source of truth
+        /// stays Core.Rules - the HUD only observes.</summary>
+        public void BindMatch(CricketGame.BattingPrototype.Match.MatchController matchCtl)
+        {
+            if (matchCtl == null || matchCtl.Match == null) return;
+            var match = matchCtl.Match;
+            match.BallCompleted += args => OnBallCompleted(args.Record);
+            match.InningsStarted += args => ClearOverChips();
+        }
+
+        private void OnBallCompleted(BallRecord record)
+        {
+            var outcome = record.Outcome;
+            string token;
+            Color border;
+            if (outcome.IsWicket) { token = "W"; border = UITheme.Danger; }
+            else if (!outcome.CountsAsLegalBall) { token = "wd"; border = UITheme.Amber; }
+            else if (outcome.TotalRuns >= 6) { token = "6"; border = UITheme.Amber; }
+            else if (outcome.TotalRuns >= 4) { token = "4"; border = UITheme.Cyan; }
+            else if (outcome.TotalRuns == 0) { token = "·"; border = UITheme.Border; }
+            else { token = outcome.TotalRuns.ToString(); border = new Color(1f, 1f, 1f, 0.35f); }
+
+            ShiftChips(token, border);
+
+            if (outcome.IsWicket) { partnershipRuns = 0; partnershipBalls = 0; }
+            else
+            {
+                partnershipRuns += outcome.TotalRuns;
+                if (outcome.CountsAsLegalBall) partnershipBalls++;
             }
-            if (IntentChanged != null) IntentChanged(intent);
+            if (partnershipText != null)
+                partnershipText.text = partnershipRuns + " RUNS (" + partnershipBalls + "b)";
+        }
+
+        private readonly Queue<KeyValuePair<string, Color>> chipQueue =
+            new Queue<KeyValuePair<string, Color>>();
+
+        private void ShiftChips(string token, Color border)
+        {
+            chipQueue.Enqueue(new KeyValuePair<string, Color>(token, border));
+            while (chipQueue.Count > overChips.Count) chipQueue.Dequeue();
+            int i = 0;
+            foreach (var kv in chipQueue)
+            {
+                overChips[i].text = kv.Key;
+                overChips[i].color = kv.Key == "·" ? UITheme.TextDim : UITheme.TextWhite;
+                overChips[i].gameObject.GetComponent<Image>().color = kv.Value;
+                i++;
+            }
+        }
+
+        private void ClearOverChips()
+        {
+            chipQueue.Clear();
+            partnershipRuns = 0;
+            partnershipBalls = 0;
+            if (partnershipText != null) partnershipText.text = "0 RUNS (0b)";
+            foreach (var chip in overChips)
+            {
+                chip.text = "·";
+                chip.gameObject.GetComponent<Image>().color = UITheme.Border;
+            }
         }
 
         public void SetScoreboard(int runs, int wickets, int balls)
         {
-            string side = battingSideLabel;
-            scoreText.text = side + "  " + runs + "/" + wickets + "   (" + balls + " of 6 balls)";
+            if (scoreText != null)
+                scoreText.text = battingSideLabel + "  " + runs + "/" + wickets;
+            if (ballsText != null)
+                ballsText.text = "(" + balls + " of 6 balls)";
         }
 
-        /// <summary>Which side is batting, for the scoreboard ("YOU" / "AI").</summary>
         public void SetBattingSideLabel(string label)
         {
             battingSideLabel = string.IsNullOrEmpty(label) ? "SCORE" : label;
         }
 
-        /// <summary>Chase line under the score (spec section 2):
-        /// target, runs still required, balls and wickets in hand, run rate.</summary>
         public void SetChaseInfo(int target, int required, int ballsRemaining,
                                  int wicketsRemaining, float runRate)
         {
-            if (chaseText == null) return;
-            string rr = "   ·   RR " + runRate.ToString("0.0");
+            if (chaseTitle == null) return;
             if (target <= 0)
             {
-                chaseText.text = "SET A TARGET   ·   " + ballsRemaining + " BALLS LEFT" + rr;
+                chaseTitle.text = "SET A TARGET";
+                chaseTitle.color = UITheme.TextDim;
+                chaseSub.text = ballsRemaining + " BALLS LEFT   ·   RR " + runRate.ToString("0.0");
             }
             else
             {
-                chaseText.text = "TARGET " + target + "   ·   NEED " + required +
-                                 "   ·   " + ballsRemaining + " BALLS   ·   " +
-                                 wicketsRemaining + (wicketsRemaining == 1 ? " WICKET" : " WICKETS")
-                                 + " LEFT" + rr;
+                chaseTitle.text = "NEED " + required;
+                chaseTitle.color = UITheme.Cyan;
+                chaseSub.text = "TARGET " + target + "  ·  " + ballsRemaining + " BALLS  ·  " +
+                                wicketsRemaining + " WKTS  ·  RR " + runRate.ToString("0.0");
             }
+            if (batterText != null)
+                batterText.text = wicketsRemaining > 0
+                    ? battingSideLabel + " batting   ·   " + wicketsRemaining + " wickets in hand"
+                    : battingSideLabel + " all out";
         }
+
+        // ------------------------------------------------------------------ feel feedback
 
         public void ShowPopup(string message, Color color, float duration = 1.1f)
         {
@@ -435,21 +526,118 @@ namespace CricketGame.BattingPrototype.Hud
             popupRoutine = StartCoroutine(PopupRoutine(message, color, duration));
         }
 
-        /// <summary>Phase 4: colour-coded timing-quality flash (spec section 3).
-        /// PERFECT reads green, MISS red, in between warm gold.</summary>
         public void ShowTimingQuality(string label, TimingWindow window)
         {
-            if (label == "MISSED") return;   // the miss popup already covers it
+            if (label == "MISSED") return;
             Color c;
             switch (window)
             {
-                case TimingWindow.Perfect: c = new Color(0.45f, 1f, 0.5f); break;
-                case TimingWindow.Good: c = new Color(0.75f, 0.95f, 0.5f); break;
+                case TimingWindow.Perfect: c = UITheme.Green; break;
+                case TimingWindow.Good: c = UITheme.CyanSoft; break;
                 case TimingWindow.Early:
-                case TimingWindow.Late: c = new Color(1f, 0.8f, 0.35f); break;
-                default: c = new Color(1f, 0.55f, 0.3f); break;
+                case TimingWindow.Late: c = UITheme.Amber; break;
+                default: c = UITheme.Danger; break;
+            }
+            if (timingChipText != null)
+            {
+                timingChipText.text = label + " TIMING";
+                timingChipText.color = c;
+                timingChipBorder.color = c;
             }
             ShowPopup(label, c, 0.55f);
+        }
+
+        public void ShowDeliveryToast(string message)
+        {
+            if (deliveryChipText == null) return;
+            if (chipRoutine != null) StopCoroutine(chipRoutine);
+            chipRoutine = StartCoroutine(ChipRoutine(message));
+        }
+
+        private IEnumerator ChipRoutine(string message)
+        {
+            deliveryChipText.text = message;
+            float t = 0f;
+            const float life = 2.2f;
+            while (t < life)
+            {
+                t += Time.deltaTime;
+                float a = Mathf.Clamp01(t / 0.12f) * (t > life - 0.4f ? Mathf.Clamp01((life - t) / 0.4f) : 1f);
+                var c = deliveryChipText.color; c.a = a; deliveryChipText.color = c;
+                var b = deliveryChipBorder.color; b.a = 0.14f + 0.6f * a; deliveryChipBorder.color = b;
+                yield return null;
+            }
+        }
+
+        public void ShowBoundaryBanner(string message, Color color)
+        {
+            ShowMoment(message, "", "", color);
+        }
+
+        public void ShowWicketBanner(string message)
+        {
+            ShowMoment(message, "", "", UITheme.Danger);
+        }
+
+        private void ShowMoment(string title, string detail, string sub, Color color)
+        {
+            if (momentRoutine != null) StopCoroutine(momentRoutine);
+            momentTitle.text = title;
+            momentDetail.text = detail;
+            momentSub.text = sub;
+            momentTitle.color = color;
+            momentColor = color;
+            momentRoutine = StartCoroutine(MomentRoutine(1.6f));
+        }
+
+        /// <summary>Phase 5 broadcast card with detail lines (boundary distance,
+        /// dismissal text...).</summary>
+        public void ShowMomentCard(string title, string detail, string sub, Color color, float life = 1.8f)
+        {
+            if (momentRoutine != null) StopCoroutine(momentRoutine);
+            momentTitle.text = title;
+            momentDetail.text = detail;
+            momentSub.text = sub;
+            momentTitle.color = color;
+            momentColor = color;
+            momentRoutine = StartCoroutine(MomentRoutine(life));
+        }
+
+        private IEnumerator MomentRoutine(float life)
+        {
+            momentRect.gameObject.GetComponent<Image>().color = momentColor; // border tint
+            float t = 0f;
+            while (t < life)
+            {
+                t += Time.deltaTime;
+                float inA = Mathf.Clamp01(t / 0.14f);
+                float outA = t > life - 0.4f ? Mathf.Clamp01((life - t) / 0.4f) : 1f;
+                momentGroup.alpha = inA * outA;
+                momentRect.localScale = Vector3.one * Mathf.Lerp(0.94f, 1f, Mathf.Clamp01(t / 0.18f));
+                yield return null;
+            }
+            momentGroup.alpha = 0f;
+        }
+
+        public void FlashTiming(Color color)
+        {
+            StartCoroutine(FlashRoutine(color));
+        }
+
+        private IEnumerator FlashRoutine(Color color)
+        {
+            float t = 0f;
+            const float life = 0.35f;
+            while (t < life)
+            {
+                t += Time.deltaTime;
+                var c = color;
+                c.a = 0.16f * Mathf.Sin(Mathf.PI * Mathf.Clamp01(t / life));
+                timingFlash.color = c;
+                yield return null;
+            }
+            var done = color; done.a = 0f;
+            timingFlash.color = done;
         }
 
         private IEnumerator PopupRoutine(string message, Color color, float duration)
@@ -460,90 +648,99 @@ namespace CricketGame.BattingPrototype.Hud
             while (t < duration)
             {
                 t += Time.deltaTime;
-                float alpha = t > duration - 0.3f ? Mathf.Clamp01((duration - t) / 0.3f) : 1f;
-                var c = popupText.color; c.a = alpha; popupText.color = c;
+                var c = popupText.color;
+                c.a = t > duration - 0.3f ? Mathf.Clamp01((duration - t) / 0.3f) : 1f;
+                popupText.color = c;
                 yield return null;
             }
             popupText.text = "";
         }
 
-        /// <summary>Small broadcast-style delivery info toast (fades after ~1.6 s).</summary>
-        public void ShowDeliveryToast(string message)
+        // ------------------------------------------------------------------ overlays
+
+        public void ShowInningsComplete(int runs, int wickets, int balls, int target)
         {
-            if (toastRoutine != null) StopCoroutine(toastRoutine);
-            toastRoutine = StartCoroutine(ToastRoutine(message));
+            ShowOverlayCard("INNINGS COMPLETE", runs + "/" + wickets + "  from " + balls + " balls",
+                            "TARGET  " + target, false);
         }
 
-        private IEnumerator ToastRoutine(string message)
+        public void ShowInningsBreak(int target)
         {
-            toastText.text = message;
-            float t = 0f;
-            const float life = 1.6f;
-            while (t < life)
+            ShowOverlayCard("THE CHASE", "AI need " + target + " to win",
+                            "You bowl. Pick your deliveries wisely.", false);
+        }
+
+        public void HideOverlays()
+        {
+            overlayPanel.gameObject.SetActive(false);
+            overlayGroup.alpha = 0f;
+            resultPanel.gameObject.SetActive(false);
+        }
+
+        private void ShowOverlayCard(string title, string detail, string sub, bool showPlayAgain)
+        {
+            overlayTitle.text = title;
+            overlayDetail.text = detail;
+            overlaySub.text = sub;
+            overlayPanel.gameObject.SetActive(true);
+            overlayGroup.alpha = 0f;
+            UITweenHost.Fade(overlayGroup, 1f, UITheme.TweenMed);
+        }
+
+        public void ShowMatchResult(MatchResult result, bool playerWon)
+        {
+            resultPanel.gameObject.SetActive(true);
+            var rg = resultPanel.GetComponent<CanvasGroup>();
+            rg.alpha = 0f;
+            UITweenHost.Fade(rg, 1f, UITheme.TweenSlow);
+
+            resultTitle.text = playerWon ? "YOU WIN!" : "AI WINS!";
+            resultTitle.color = playerWon ? UITheme.Cyan : UITheme.Danger;
+            resultMargin.text = result != null
+                ? result.Describe("YOU", "AI").ToUpperInvariant()
+                : "";
+
+            if (resultInnings != null && result != null)
+                resultInnings.text = "YOU   " + Line(result.FirstInnings) +
+                                     "\nAI    " + Line(result.SecondInnings);
+            if (resultPotm != null)
             {
-                t += Time.deltaTime;
-                float inA = Mathf.Clamp01(t / 0.15f);
-                float outA = t > life - 0.4f ? Mathf.Clamp01((life - t) / 0.4f) : 1f;
-                float a = inA * outA;
-                var tc = toastText.color; tc.a = a; toastText.color = tc;
-                var bc = toastBg.color; bc.a = 0.62f * a; toastBg.color = bc;
-                yield return null;
+                resultPotm.text = (playerWon ? "YOU" : "AI") + "\n";
+                resultPotm.color = playerWon ? UITheme.Cyan : UITheme.Amber;
             }
-            toastText.text = "";
+            if (resultDetails != null)
+                resultDetails.text = "Format   SUPER OVER\nBalls   6 per innings\nWickets   2 max";
         }
 
-        /// <summary>Centre band for boundary/wicket moments.</summary>
-        public void ShowBoundaryBanner(string message, Color color)
+        private static string Line(InningsSummary s)
         {
-            if (bannerRoutine != null) StopCoroutine(bannerRoutine);
-            bannerRoutine = StartCoroutine(BannerRoutine(message, color, 1.25f));
+            return s == null ? "-" : s.Runs + "/" + s.Wickets + " (" + s.LegalBalls + "b)";
         }
 
-        public void ShowWicketBanner(string message)
+        // ------------------------------------------------------------------ controls
+
+        public void SetIntent(ShotIntent intent)
         {
-            if (bannerRoutine != null) StopCoroutine(bannerRoutine);
-            bannerRoutine = StartCoroutine(BannerRoutine(message, new Color(1f, 0.22f, 0.18f), 1.5f));
+            currentIntent = intent;
+            RefreshIntent();
+            if (IntentChanged != null) IntentChanged(intent);
         }
 
-        private IEnumerator BannerRoutine(string message, Color color, float life)
+        private void RefreshIntent()
         {
-            bannerText.text = message;
-            bannerText.color = color;
-            float t = 0f;
-            while (t < life)
+            for (int i = 0; i < 4; i++)
             {
-                t += Time.deltaTime;
-                float inA = Mathf.Clamp01(t / 0.12f);
-                float outA = t > life - 0.45f ? Mathf.Clamp01((life - t) / 0.45f) : 1f;
-                float a = inA * outA;
-                var tc = bannerText.color; tc.a = a; bannerText.color = tc;
-                var bc = bannerBg.color; bc.a = 0.55f * a; bannerBg.color = bc;
-                yield return null;
+                bool active = (int)currentIntent == i;
+                intentButtons[i].color = active ? UITheme.Cyan : UITheme.DimFill;
+                intentLabels[i].color = active ? UITheme.BgDark : UITheme.TextWhite;
             }
-            bannerText.text = "";
         }
 
-        /// <summary>One soft pulse of colour when the timing is PERFECT.</summary>
-        public void FlashTiming(Color color)
+        public void SetBattingControlsVisible(bool visible)
         {
-            if (flashRoutine != null) StopCoroutine(flashRoutine);
-            flashRoutine = StartCoroutine(FlashRoutine(color));
-        }
-
-        private IEnumerator FlashRoutine(Color color)
-        {
-            float t = 0f;
-            const float life = 0.35f;
-            while (t < life)
-            {
-                t += Time.deltaTime;
-                float a = 0.16f * Mathf.Sin(Mathf.PI * Mathf.Clamp01(t / life));
-                var c = color; c.a = a;
-                timingFlash.color = c;
-                yield return null;
-            }
-            var done = color; done.a = 0f;
-            timingFlash.color = done;
+            battingControlsVisible = visible;
+            SetJoystickVisible(joystickShown);
+            if (intentPanelRect != null) intentPanelRect.gameObject.SetActive(visible);
         }
 
         private void SetJoystickVisible(bool visible)
@@ -554,35 +751,39 @@ namespace CricketGame.BattingPrototype.Hud
             joyKnob.gameObject.SetActive(show);
         }
 
-        /// <summary>Screen-pixel rect of the intent buttons (touch exclusion zone).</summary>
         public Rect IntentButtonsScreenRect()
         {
             Vector3[] corners = new Vector3[4];
             intentPanelRect.GetWorldCorners(corners);
-            // Overlay canvas: world units convert to screen pixels via the canvas scale factor.
             float scale = Canvas.scaleFactor;
-            float xMin = corners[0].x * scale;
-            float yMin = corners[0].y * scale;
-            float xMax = corners[2].x * scale;
-            float yMax = corners[2].y * scale;
-            return new Rect(xMin, yMin, xMax - xMin, yMax - yMin);
+            return new Rect(corners[0].x * scale, corners[0].y * scale,
+                            (corners[2].x - corners[0].x) * scale,
+                            (corners[2].y - corners[0].y) * scale);
         }
 
         private void LateUpdate()
         {
-            // --- joystick visuals (convert screen px -> canvas local units)
+            if (input == null) return;
+
             if (input.JoystickActive)
             {
+                SetJoystickVisible(true);
                 Vector2 local;
                 if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
                         CanvasRect, input.JoystickAnchorScreen, null, out local))
                 {
                     joyBase.rectTransform.anchoredPosition = local;
-                    joyKnob.rectTransform.anchoredPosition = local + ScreenToCanvas(input.JoystickVector * Screen.height * 0.11f);
+                    joyKnob.rectTransform.anchoredPosition =
+                        local + ScreenToCanvas(input.JoystickVector * Screen.height * 0.11f);
                 }
             }
+            else if (joystickShown && battingControlsVisible)
+            {
+                // rest at the home position, bottom-left thumb zone
+                joyBase.rectTransform.anchoredPosition = new Vector2(-Screen.width * 0.32f, -Screen.height * 0.28f);
+                joyKnob.rectTransform.anchoredPosition = joyBase.rectTransform.anchoredPosition;
+            }
 
-            // --- swipe live indicator
             if (input.SwipeActive)
             {
                 Vector2 delta = input.SwipeCurrentScreen - input.SwipeAnchorScreen;
@@ -598,15 +799,9 @@ namespace CricketGame.BattingPrototype.Hud
                     float angle = Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg - 90f;
                     swipeIndicator.rectTransform.localRotation = Quaternion.Euler(0, 0, angle);
                 }
-                else
-                {
-                    swipeIndicator.gameObject.SetActive(false);
-                }
+                else swipeIndicator.gameObject.SetActive(false);
             }
-            else
-            {
-                swipeIndicator.gameObject.SetActive(false);
-            }
+            else swipeIndicator.gameObject.SetActive(false);
         }
 
         private Vector2 ScreenToCanvas(Vector2 screenDelta)

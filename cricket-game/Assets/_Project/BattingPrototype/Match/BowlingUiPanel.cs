@@ -1,20 +1,18 @@
+using CricketGame.BattingPrototype.UI;
+using CricketGame.BattingPrototype.World;
 using CricketGame.Core.Batting;
 using CricketGame.Core.Bowling;
-using CricketGame.BattingPrototype.Hud;
-using CricketGame.BattingPrototype.World;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace CricketGame.BattingPrototype.Match
 {
     /// <summary>
-    /// The player's bowling controls. Phase 3 base (line/length pad + type
-    /// buttons) expanded for Phase 4 (spec sections 5-7):
-    ///   * 11 delivery types in a 3x4 grid (all types from the spec list)
-    ///   * LEFT/RIGHT line, UP/DOWN length
-    ///   * a release-timing bar: tap RELEASE near the centre for the intended
-    ///     ball; early/late releases drift the length, bad ones can spray wide
-    /// Easy to learn, difficult to master; large thumb-friendly targets.
+    /// Phase 5 restyle of the player's bowling controls, Figma broadcast
+    /// layout: themed delivery column on the left, line/length pad, bottom
+    /// RELEASE TIMING bar with sweet spot, and a live SPELL ANALYSIS panel on
+    /// the right fed by the rules engine (single source of truth).
+    /// Behaviour API is unchanged from Phase 4.
     /// </summary>
     public sealed class BowlingUiPanel : MonoBehaviour
     {
@@ -33,21 +31,20 @@ namespace CricketGame.BattingPrototype.Match
         };
         private static readonly string[] TypeNames =
         {
-            "FAST", "INSWING", "OUTSWING", "YORKER",
+            "PACE", "INSWING", "OUTSWING", "YORKER",
             "FULL", "GOOD", "SHORT", "BOUNCER",
             "OFF-CUT", "LEG-CUT", "SLOWER",
         };
 
-        private Image[] typeButtons = new Image[TypeOrder.Length];
+        private readonly Image[] typeButtons = new Image[TypeOrder.Length];
         private int selectedType;
 
         // Release-timing bar.
         private RectTransform releaseRoot;
         private RectTransform releaseMarker;
-        private Image releaseBarBg;
         private bool releaseActive;
         private float releaseClock;
-        private const float ReleaseWindow = 0.9f;   // seconds for one sweep
+        private const float ReleaseWindow = 0.9f;
         public bool ReleaseCaptured { get; private set; }
         public float ReleaseOffset { get; private set; }
 
@@ -55,8 +52,14 @@ namespace CricketGame.BattingPrototype.Match
         public float Line { get; private set; }
         public float Length { get; private set; }
 
-        private static readonly Color Dim = new Color(1f, 1f, 1f, 0.14f);
-        private static readonly Color Active = new Color(0.3f, 0.85f, 1f, 0.5f);
+        // spell analysis
+        private Text spellDots;
+        private Text spellBounds;
+        private Text spellSpeed;
+        private int dots;
+        private int boundaries;
+        private float speedSum;
+        private int speedCount;
 
         public void Build(Canvas canvas)
         {
@@ -68,47 +71,63 @@ namespace CricketGame.BattingPrototype.Match
             root = UiKit.Rect(go);
             UiKit.Anchor(root, new Vector2(0, 0), new Vector2(1, 1), Vector2.zero, Vector2.zero);
 
-            BuildTypeGrid();
+            BuildTypeColumn();
+            BuildPad();
             BuildReleaseBar();
-
-            // ---- line / length pad, bottom left
-            BuildPadButton("LEFT", "\u25C0", new Vector2(26f, 130f), () => NudgeLine(-1));
-            BuildPadButton("RIGHT", "\u25B6", new Vector2(186f, 130f), () => NudgeLine(1));
-            BuildPadButton("UP", "\u25B2", new Vector2(106f, 205f), () => NudgeLength(-1));
-            BuildPadButton("DOWN", "\u25BC", new Vector2(106f, 55f), () => NudgeLength(1));
-
-            // ---- readouts above the pad
-            lineLabel = UiKit.AddText(root, "LineReadout", LineText(), 24,
-                TextAnchor.MiddleLeft, new Color(0.85f, 0.95f, 1f));
-            UiKit.Anchor(UiKit.Rect(lineLabel.gameObject), new Vector2(0, 0), new Vector2(0, 0),
-                new Vector2(26f, 268f), new Vector2(320f, 302f));
-            lengthLabel = UiKit.AddText(root, "LengthReadout", LengthText(), 24,
-                TextAnchor.MiddleLeft, new Color(0.85f, 0.95f, 1f));
-            UiKit.Anchor(UiKit.Rect(lengthLabel.gameObject), new Vector2(0, 0), new Vector2(0, 0),
-                new Vector2(26f, 236f), new Vector2(320f, 268f));
+            BuildSpellAnalysis();
 
             Refresh();
             SetVisible(false);
         }
 
-        private void BuildTypeGrid()
+        /// <summary>Phase 5: observe the rules engine for the spell panel.</summary>
+        public void BindMatch(MatchController matchCtl)
         {
-            // 3 rows x 4 columns, bottom right, thumb-sized.
+            if (matchCtl == null || matchCtl.Match == null) return;
+            matchCtl.Match.BallCompleted += args =>
+            {
+                if (args.Record == null || args.Record.InningsIndex != 1) return;
+                var o = args.Record.Outcome;
+                if (!o.CountsAsLegalBall) return;
+                if (o.TotalRuns == 0 && !o.IsWicket) dots++;
+                if (o.TotalRuns >= 4) boundaries++;
+                if (HudStats.LastDeliverySpeedKph > 1f)
+                {
+                    speedSum += HudStats.LastDeliverySpeedKph;
+                    speedCount++;
+                }
+                RefreshSpell();
+            };
+            matchCtl.Match.InningsStarted += args =>
+            {
+                dots = 0; boundaries = 0; speedSum = 0f; speedCount = 0;
+                RefreshSpell();
+            };
+        }
+
+        private void RefreshSpell()
+        {
+            if (spellDots != null) spellDots.text = dots.ToString();
+            if (spellBounds != null) spellBounds.text = boundaries.ToString();
+            if (spellSpeed != null)
+                spellSpeed.text = speedCount > 0 ? Mathf.RoundToInt(speedSum / speedCount) + " KPH" : "-";
+        }
+
+        private void BuildTypeColumn()
+        {
             for (int i = 0; i < TypeOrder.Length; i++)
             {
-                int col = i % 4, row = i / 4;
-                float x = -270f + col * 132f;
-                float y = 20f + (2 - row) * 62f;
-
-                typeButtons[i] = UiKit.AddImage(root, "TypeBtn_" + TypeNames[i], Dim);
-                RectTransform r = UiKit.Rect(typeButtons[i].gameObject);
+                float yTop = 330f - i * 52f;
+                typeButtons[i] = UiKit.AddImage(root, "TypeBtn_" + TypeNames[i], UITheme.DimFill);
+                typeButtons[i].sprite = UITheme.RoundedSprite((int)UITheme.RadiusButton);
                 typeButtons[i].raycastTarget = true;
-                UiKit.Anchor(r, new Vector2(1, 0), new Vector2(1, 0),
-                    new Vector2(x, y), new Vector2(x + 124f, y + 56f));
-                Text label = UiKit.AddText(r, "Label", TypeNames[i], 22,
-                    TextAnchor.MiddleCenter, Color.white);
+                RectTransform r = UiKit.Rect(typeButtons[i].gameObject);
+                UiKit.Anchor(r, new Vector2(0, 0.5f), new Vector2(0, 0.5f),
+                             new Vector2(16f, yTop - 46f), new Vector2(128f, yTop));
+                Text label = UiComponents.Label(r, "Label", TypeNames[i], 17,
+                                                TextAnchor.MiddleCenter, UITheme.TextWhite);
                 UiKit.Anchor(UiKit.Rect(label.gameObject), Vector2.zero, Vector2.one,
-                    Vector2.zero, Vector2.zero);
+                             Vector2.zero, Vector2.zero);
 
                 int index = i;
                 var button = typeButtons[i].gameObject.AddComponent<Button>();
@@ -116,50 +135,92 @@ namespace CricketGame.BattingPrototype.Match
             }
         }
 
+        private void BuildPad()
+        {
+            BuildPadButton("LEFT", "◀", new Vector2(150f, 66f), () => NudgeLine(-1));
+            BuildPadButton("RIGHT", "▶", new Vector2(306f, 66f), () => NudgeLine(1));
+            BuildPadButton("UP", "▲", new Vector2(228f, 140f), () => NudgeLength(-1));
+            BuildPadButton("DOWN", "▼", new Vector2(228f, -8f), () => NudgeLength(1));
+
+            lineLabel = UiComponents.Label(root, "LineReadout", LineText(), UITheme.FontSub,
+                                           TextAnchor.MiddleLeft, UITheme.CyanSoft);
+            UiKit.Anchor(UiKit.Rect(lineLabel.gameObject), new Vector2(0, 0), new Vector2(0, 0),
+                         new Vector2(150f, 232f), new Vector2(390f, 262f));
+            lengthLabel = UiComponents.Label(root, "LengthReadout", LengthText(), UITheme.FontSub,
+                                             TextAnchor.MiddleLeft, UITheme.CyanSoft);
+            UiKit.Anchor(UiKit.Rect(lengthLabel.gameObject), new Vector2(0, 0), new Vector2(0, 0),
+                         new Vector2(150f, 200f), new Vector2(390f, 230f));
+        }
+
         private void BuildReleaseBar()
         {
-            releaseBarBg = UiKit.AddImage(root, "ReleaseBar", new Color(0f, 0f, 0f, 0.45f));
-            releaseRoot = UiKit.Rect(releaseBarBg.gameObject);
-            UiKit.Anchor(releaseRoot, new Vector2(0.5f, 0), new Vector2(0.5f, 0),
-                new Vector2(-260f, 210f), new Vector2(260f, 252f));
+            var label = UiComponents.Label(root, "ReleaseLabel", "RELEASE TIMING", UITheme.FontSub,
+                                           TextAnchor.MiddleCenter, UITheme.TextDim);
+            UiKit.Anchor(UiKit.Rect(label.gameObject), new Vector2(0.5f, 0), new Vector2(0.5f, 0),
+                         new Vector2(-130f, 96f), new Vector2(130f, 122f));
 
-            // centre sweet spot
-            Image sweet = UiKit.AddImage(releaseRoot, "SweetSpot",
-                new Color(0.4f, 1f, 0.5f, 0.35f));
+            var bg = UiKit.AddImage(root, "ReleaseBar", UITheme.Panel);
+            bg.sprite = UITheme.RoundedSprite(8);
+            releaseRoot = UiKit.Rect(bg.gameObject);
+            UiKit.Anchor(releaseRoot, new Vector2(0.5f, 0), new Vector2(0.5f, 0),
+                         new Vector2(-180f, 58f), new Vector2(180f, 92f));
+
+            Image sweet = UiKit.AddImage(releaseRoot, "SweetSpot", new Color(0.13f, 0.77f, 0.37f, 0.45f));
+            sweet.sprite = UITheme.RoundedSprite(6);
             UiKit.Anchor(UiKit.Rect(sweet.gameObject), new Vector2(0.5f, 0), new Vector2(0.5f, 1),
-                new Vector2(-26f, 0f), new Vector2(26f, 0f));
+                         new Vector2(-24f, 3f), new Vector2(24f, -3f));
 
             releaseMarker = UiKit.Rect(UiKit.AddImage(releaseRoot, "ReleaseMarker",
-                new Color(1f, 0.9f, 0.3f, 0.95f)).gameObject);
+                                                      UITheme.Amber).gameObject);
             UiKit.Anchor(releaseMarker, new Vector2(0, 0), new Vector2(0, 1),
-                new Vector2(-4f, 0f), new Vector2(4f, 0f));
+                         new Vector2(-3f, 2f), new Vector2(3f, -2f));
 
-            Image releaseBtn = UiKit.AddImage(root, "ReleaseBtn", new Color(1f, 0.5f, 0.2f, 0.5f));
-            RectTransform rb = UiKit.Rect(releaseBtn.gameObject);
-            releaseBtn.raycastTarget = true;
-            UiKit.Anchor(rb, new Vector2(0.5f, 0), new Vector2(0.5f, 0),
-                new Vector2(-110f, 118f), new Vector2(110f, 196f));
-            Text bl = UiKit.AddText(rb, "Label", "RELEASE", 30,
-                TextAnchor.MiddleCenter, Color.white);
-            UiKit.Anchor(UiKit.Rect(bl.gameObject), Vector2.zero, Vector2.one,
-                Vector2.zero, Vector2.zero);
-            var button = releaseBtn.gameObject.AddComponent<Button>();
-            button.onClick.AddListener(CaptureRelease);
+            var releaseBtn = UiComponents.ThemedButton(root, "ReleaseBtn", "RELEASE",
+                                                       new Vector2(200f, 56f), ButtonStyle.Filled, 24);
+            UiKit.Anchor(UiKit.Rect(releaseBtn.gameObject), new Vector2(0.5f, 0), new Vector2(0.5f, 0),
+                         new Vector2(-100f, 128f), new Vector2(100f, 184f));
+            releaseBtn.onClick.AddListener(CaptureRelease);
 
             releaseRoot.gameObject.SetActive(false);
         }
 
-        /// <summary>Runner: start the release window once the run-up ends.</summary>
+        private void BuildSpellAnalysis()
+        {
+            var card = UiComponents.Panel(root, "SpellCard", Vector2.zero, UITheme.RadiusCard);
+            UiKit.Anchor(card, new Vector2(1, 0.5f), new Vector2(1, 0.5f),
+                         new Vector2(-266f, -120f), new Vector2(-16f, 120f));
+
+            var header = UiComponents.Label(card, "Header", "SPELL ANALYSIS", UITheme.FontLabel,
+                                            TextAnchor.MiddleLeft, UITheme.Amber);
+            UiKit.Anchor(UiKit.Rect(header.gameObject), new Vector2(0, 0.8f), new Vector2(1, 1),
+                         new Vector2(16f, 0f), new Vector2(-12f, -6f));
+
+            SpellRow(card, "Dot Balls", out spellDots, 0.55f);
+            SpellRow(card, "Boundaries", out spellBounds, 0.30f);
+            SpellRow(card, "Avg Speed", out spellSpeed, 0.05f);
+        }
+
+        private void SpellRow(RectTransform parent, string label, out Text value, float y0)
+        {
+            var l = UiKit.AddText(parent, "L_" + label, label, UITheme.FontSub,
+                                  TextAnchor.MiddleLeft, UITheme.TextDim);
+            UiKit.Anchor(UiKit.Rect(l.gameObject), new Vector2(0, y0), new Vector2(0.6f, y0 + 0.25f),
+                         new Vector2(16f, 0f), new Vector2(0f, 0f));
+            value = UiComponents.Label(parent, "V_" + label, "0", UITheme.FontSub,
+                                       TextAnchor.MiddleRight, UITheme.TextWhite);
+            UiKit.Anchor(UiKit.Rect(value.gameObject), new Vector2(0.6f, y0), new Vector2(1, y0 + 0.25f),
+                         new Vector2(0f, 0f), new Vector2(-16f, 0f));
+        }
+
         public void BeginRelease()
         {
             if (releaseRoot != null) releaseRoot.gameObject.SetActive(true);
             releaseActive = true;
             releaseClock = 0f;
             ReleaseCaptured = false;
-            ReleaseOffset = ReleaseControl.MaxError * 1.4f; // worst if never tapped
+            ReleaseOffset = ReleaseControl.MaxError * 1.4f;
         }
 
-        /// <summary>Runner: cancel the window (redeliver / state change).</summary>
         public void CancelRelease()
         {
             releaseActive = false;
@@ -172,7 +233,6 @@ namespace CricketGame.BattingPrototype.Match
             if (!releaseActive || ReleaseCaptured) return;
             ReleaseCaptured = true;
             releaseActive = false;
-            // Marker sweeps -1 -> +1 over the window; centre = perfect.
             float phase = Mathf.Clamp01(releaseClock / ReleaseWindow) * 2f - 1f;
             ReleaseOffset = phase * ReleaseControl.MaxError;
         }
@@ -183,7 +243,6 @@ namespace CricketGame.BattingPrototype.Match
             releaseClock += Time.deltaTime;
             if (releaseClock >= ReleaseWindow)
             {
-                // Auto-release at the end of the sweep (always late).
                 ReleaseCaptured = true;
                 releaseActive = false;
                 ReleaseOffset = ReleaseControl.MaxError * 1.1f;
@@ -197,15 +256,15 @@ namespace CricketGame.BattingPrototype.Match
         private void BuildPadButton(string name, string glyph, Vector2 bottomLeft,
                                     UnityEngine.Events.UnityAction action)
         {
-            Image img = UiKit.AddImage(root, "Pad_" + name, Dim);
-            RectTransform r = UiKit.Rect(img.gameObject);
+            Image img = UiKit.AddImage(root, "Pad_" + name, UITheme.DimFill);
+            img.sprite = UITheme.RoundedSprite((int)UITheme.RadiusButton);
             img.raycastTarget = true;
+            RectTransform r = UiKit.Rect(img.gameObject);
             UiKit.Anchor(r, new Vector2(0, 0), new Vector2(0, 0),
-                bottomLeft, bottomLeft + new Vector2(72f, 66f));
-            Text label = UiKit.AddText(r, "Glyph", glyph, 34,
-                TextAnchor.MiddleCenter, Color.white);
+                         bottomLeft, bottomLeft + new Vector2(70f, 62f));
+            Text label = UiKit.AddText(r, "Glyph", glyph, 28, TextAnchor.MiddleCenter, UITheme.TextWhite);
             UiKit.Anchor(UiKit.Rect(label.gameObject), Vector2.zero, Vector2.one,
-                Vector2.zero, Vector2.zero);
+                         Vector2.zero, Vector2.zero);
             var button = img.gameObject.AddComponent<Button>();
             button.onClick.AddListener(action);
         }
@@ -245,7 +304,7 @@ namespace CricketGame.BattingPrototype.Match
             for (int i = 0; i < typeButtons.Length; i++)
             {
                 if (typeButtons[i] == null) continue;
-                typeButtons[i].color = i == selectedType ? Active : Dim;
+                typeButtons[i].color = i == selectedType ? UITheme.Cyan : UITheme.DimFill;
             }
         }
 

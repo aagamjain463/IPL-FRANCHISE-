@@ -18,8 +18,8 @@ namespace CricketGame.BattingPrototype.Bootstrap
     /// </summary>
     public class BattingBootstrap : MonoBehaviour
     {
-        [Tooltip("Show the tuning/debug panel on start.")]
-        [SerializeField] private bool debugPanelVisible = true;
+        [Tooltip("Show the tuning/debug panel on start (testers only).")]
+        [SerializeField] private bool debugPanelVisible = false;
 
         [Tooltip("Optional designer-tuned bowler profile asset. Empty = code default.")]
         [SerializeField] private BowlerProfile bowlerProfile;
@@ -36,6 +36,10 @@ namespace CricketGame.BattingPrototype.Bootstrap
 
             // World (field, stadium dressing, rigs, ball, lights, camera).
             BattingWorld world = BattingWorldBuilder.Build(root.transform);
+
+            // Phase 5: dusk lighting, floodlight glow, crowd bands, quality presets.
+            World.StadiumAtmosphere.Attach(world.Root, world.Camera);
+            Game.Haptics.Enabled = UI.HudStats.HapticsEnabled;
 
             // Camera controller drives the built camera.
             var camGo = new GameObject("CameraRig");
@@ -84,6 +88,37 @@ namespace CricketGame.BattingPrototype.Bootstrap
             panelGo.transform.SetParent(root.transform, false);
             var bowlingPanel = panelGo.AddComponent<BowlingUiPanel>();
             bowlingPanel.Build(hud.Canvas);
+
+            // Phase 5: HUDs observe the rules engine directly (over chips,
+            // partnership strip, spell analysis) - no duplicated scoring state.
+            hud.BindMatch(matchCtl);
+            bowlingPanel.BindMatch(matchCtl);
+
+            // Phase 5 presentation screens.
+            var preGo = new GameObject("PreMatchScreen");
+            preGo.transform.SetParent(root.transform, false);
+            var preMatch = preGo.AddComponent<UI.PreMatchScreen>();
+            preMatch.Build(hud.Canvas);
+
+            var pauseGo = new GameObject("PauseMenuScreen");
+            pauseGo.transform.SetParent(root.transform, false);
+            var pause = pauseGo.AddComponent<UI.PauseMenuScreen>();
+            pause.Build(hud.Canvas);
+
+            hud.PausePressed += pause.Open;
+            pause.QuitPressed += () =>
+            {
+                matchCtl.ResetMatch();
+                camCtrl.PreMatchOrbit();
+                preMatch.Show();
+            };
+            preMatch.Started += camCtrl.ShowSetup;
+            matchCtl.FlowChanged += state =>
+            {
+                if (state == Match.MatchFlowState.MatchResult) camCtrl.ShowResultHold();
+            };
+            camCtrl.PreMatchOrbit();
+            preMatch.Show();
 
             // Debug panel.
             var debugGo = new GameObject("DebugUI");

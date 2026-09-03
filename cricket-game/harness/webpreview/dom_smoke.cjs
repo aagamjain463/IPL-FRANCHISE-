@@ -67,6 +67,9 @@ const canvas = els["view"] = fakeEl();
 eval(fs.readFileSync(path.join(__dirname, "engine.js"), "utf8") + "\n"
    + fs.readFileSync(path.join(__dirname, "preview.js"), "utf8"));
 
+// Phase 5: the pre-match screen gates play; the smoke test starts it directly.
+if (window.__startPreview) window.__startPreview();
+
 const fire = (el, name, ev) => {
   const ls = (el.listeners && el.listeners[name]) || [];
   for (const fn of ls) fn(ev);
@@ -144,7 +147,7 @@ const fire = (el, name, ev) => {
       legalTotal, ", phase:", dbg.match.phase, ")");
     process.exit(1);
   }
-  if (!/of 6 balls/.test(score)) {
+  if (!/\(\d\/6\)/.test(score)) {
     console.error("FAIL: scoreboard format unexpected:", score);
     process.exit(1);
   }

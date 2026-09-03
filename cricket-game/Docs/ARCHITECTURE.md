@@ -130,6 +130,26 @@ The engine raises events (`InningsStarted`, `BallCompleted`,
 `InningsCompleted`, `MatchCompleted`) so any number of listeners (HUD, audio,
 analytics, future web bridge) can observe without coupling.
 
+## Presentation layer (BattingPrototype/UI + World) — Phase 5
+
+`UITheme` is the single visual source of truth (palette, radii, type scale,
+tween timings) distilled from the approved Figma direction; `UiComponents`
+builds rounded panels/buttons/chips from runtime sprites; `UITweenHost` runs
+fade/scale/slide tweens on UNSCALED time so menus animate while paused.
+
+Screens (`PreMatchScreen`, `PauseMenuScreen`) hold `Time.timeScale = 0` and
+release it explicitly; Quit returns to pre-match via `MatchController.ResetMatch`.
+`BattingHud` (restyled, API-identical) and `BowlingUiPanel` OBSERVE the rules
+engine through `SuperOverMatch.BallCompleted/InningsStarted` for over chips,
+partnership strip and SPELL ANALYSIS — no second scoring system. The result
+screen renders the Figma three-column layout from `MatchResult` summaries and
+exposes `ContinueToFranchise` as the future web-bridge hook.
+
+`StadiumAtmosphere` adds dusk lighting, floodlight glow, crowd colour bands with
+a sine shimmer and a HIGH-only second stand tier; `QualityPreset` (LOW/MED/HIGH)
+gates all of it. `CameraController` gains `PreMatchOrbit` (unscaled-time sweep)
+and `ResultHold` states. Debug panel now starts hidden.
+
 ## Verification
 
 | Layer | Where | How |
