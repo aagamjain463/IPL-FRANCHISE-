@@ -860,7 +860,6 @@ namespace CricketGame.BattingPrototype.Hud
         joyBase.rectTransform != null &&
         joyKnob.rectTransform != null;
 
-    // Joystick active
     if (joystickReady && input.JoystickActive)
     {
         if (CanvasRect == null)
@@ -887,7 +886,6 @@ namespace CricketGame.BattingPrototype.Hud
         return;
     }
 
-    // Joystick resting position
     if (joystickReady && joystickShown && battingControlsVisible)
     {
         joyBase.rectTransform.anchoredPosition =
@@ -900,5 +898,22 @@ namespace CricketGame.BattingPrototype.Hud
             joyBase.rectTransform.anchoredPosition;
     }
 }
+
+
+// 👇 ADD THIS DIRECTLY HERE
+private Vector2 ScreenToCanvas(Vector2 screenDelta)
+{
+    if (Canvas == null)
+        return screenDelta;
+
+    float sf = Canvas.scaleFactor;
+
+    return sf > 0.0001f
+        ? screenDelta / sf
+        : screenDelta;
+}
+
+
+// 👇 THESE SHOULD ALREADY BE AT THE VERY END
 }
 }
