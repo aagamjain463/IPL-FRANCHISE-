@@ -240,6 +240,36 @@ def direction_deviation(offset):
     return offset * 1.6
 
 
+def lateral_movement(swing, seam):
+    """Combined lateral movement (+ moving away/off, - moving in/leg), clamped."""
+    return clamp(swing + seam, -1.5, 1.5)
+
+
+def edge_side(swing, seam):
+    """Which side a mistimed edge flies: WITH the ball's movement (+ off / - leg),
+    or 0 when the lateral movement is negligible (caller flips a coin)."""
+    move = lateral_movement(swing, seam)
+    if move >= 0.15:
+        return 1
+    if move <= -0.15:
+        return -1
+    return 0
+
+
+def movement_edge_bias(timing_offset, swing, seam):
+    """Edge-probability adjustment from swing/seam movement vs timing."""
+    move = lateral_movement(swing, seam)
+    frac = abs(move) / 1.5
+    if frac <= 0.0:
+        return 0.0
+    mistime = max(0.0, abs(timing_offset) - 0.045)
+    s = min(1.0, mistime / 0.12)
+    product = timing_offset * move
+    if product > 0.0:
+        return 0.10 * frac * s
+    return -0.04 * frac * s
+
+
 # --- direction resolver ----------------------------------------------------------
 
 MIN_DIR_STRENGTH = 0.25
@@ -405,17 +435,34 @@ def resolve_contact(rng: random.Random, delivery: Delivery, shot, direction,
         r["direction"] = direction_from_angle(-delivery.line * 0.15, r["elevation"])
         return r
 
-    p_edge = edge_probability(abs_off, direction["reach"], delivery.speed_kph)
+    p_edge = edge_probability(abs_off, direction["reach"], delivery.speed_kph) \
+        + movement_edge_bias(timing_offset, delivery.swing, delivery.seam)
     if shot["awkward"]:
         p_edge = min(0.7, p_edge * 1.6)
+    p_edge = clamp(p_edge, 0.01, 0.55)
     if rng.random() < p_edge:
         r["outcome"] = "edge"
         r["quality"] = 0.2
-        r["exit_kph"] = delivery.speed_kph * (0.42 + 0.25 * rng.random())
-        r["elevation"] = 6 + 34 * rng.random()
+        # Thin vs thick: poor reach + a bat caught on the wrong side of the
+        # movement makes a THICK edge that skims away fast and square; fine
+        # contact makes a THIN, looping edge toward keeper/slip.
+        move = lateral_movement(delivery.swing, delivery.seam)
+        product = timing_offset * move
+        thick = clamp(0.25 + (1.0 - direction["reach"]) * 0.55
+                      + (0.20 if product > 0.0 else 0.0), 0.0, 1.0)
+        r["exit_kph"] = delivery.speed_kph * (0.34 + 0.38 * thick + 0.16 * rng.random())
+        if thick < 0.5:
+            r["elevation"] = 20.0 + 22.0 * rng.random()   # thin: loops
+        else:
+            r["elevation"] = 4.0 + 14.0 * rng.random()    # thick: skims
         r["lofted"] = r["elevation"] > 22
-        side = -1 if rng.random() < 0.5 else 1
-        angle = side * (1.66 + 0.9 * rng.random())
+        side_rand = -1 if rng.random() < 0.5 else 1
+        side = edge_side(delivery.swing, delivery.seam)
+        side_sign = side if side != 0 else side_rand
+        if thick < 0.5:
+            angle = side_sign * (1.85 + 0.45 * rng.random())   # fine behind square
+        else:
+            angle = side_sign * (1.20 + 0.70 * rng.random())   # squarer
         r["direction"] = direction_from_angle(angle, r["elevation"])
         return r
 

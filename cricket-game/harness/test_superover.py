@@ -233,6 +233,69 @@ class TestTies(unittest.TestCase):
         self.assertEqual(m.result.outcome, OUTCOME_TIE)
 
 
+class TestPhase1EdgeCases(unittest.TestCase):
+    """Phase 1 spec edge-case battery: the exact delivery-count boundary
+    scenarios a Super Over must get right (six/four/wicket on ball 6,
+    target reached on ball 1, a first innings of zero)."""
+
+    def test_six_on_the_final_ball_wins(self):
+        m = start_chase_after(*(L(1),) * 6)  # target 7
+        m.record_delivery(L(1))
+        for _ in range(4):
+            m.record_delivery(L(0))  # 1 after 5 balls, need 6
+        self.assertEqual(m.runs_required, 6)
+        self.assertEqual(m.current_innings.balls_remaining, 1)
+        m.record_delivery(L(6))      # SIX off the 6th ball
+        self.assertEqual(m.phase, PHASE_COMPLETED)
+        self.assertEqual(m.result.outcome, OUTCOME_SECOND_WIN)
+        self.assertEqual(m.second.runs, 7)
+        self.assertEqual(m.second.legal_balls, 6)
+        self.assertEqual(m.result.margin_balls, 0)
+        self.assertEqual(m.result.margin_wickets, 2)
+
+    def test_four_on_the_final_ball_wins(self):
+        m = start_chase_after(L(3), L(3), L(3), L(0), L(0), L(0))  # target 10
+        for r in (2, 2, 2, 0, 0):
+            m.record_delivery(L(r))  # 6 after 5 balls, need 4
+        self.assertEqual(m.runs_required, 4)
+        m.record_delivery(L(4))      # FOUR off the 6th ball -> exactly 10
+        self.assertEqual(m.result.outcome, OUTCOME_SECOND_WIN)
+        self.assertEqual(m.second.runs, 10)
+        self.assertEqual(m.second.legal_balls, 6)
+        self.assertEqual(m.result.margin_balls, 0)
+
+    def test_wicket_on_sixth_ball_ends_first_innings(self):
+        m = SuperOverMatch()
+        m.start()
+        for _ in range(5):
+            m.record_delivery(L(1))  # 5 after 5 balls
+        m.record_delivery(W("bowled"))  # wicket off the 6th legal ball
+        self.assertEqual(m.phase, PHASE_BREAK)
+        self.assertEqual(m.first.runs, 5)
+        self.assertEqual(m.first.wickets, 1)
+        self.assertEqual(m.first.legal_balls, 6)
+        self.assertEqual(m.target, 6)
+
+    def test_first_innings_score_zero_sets_target_one(self):
+        m = SuperOverMatch()
+        m.start()
+        for _ in range(6):
+            m.record_delivery(L(0))
+        self.assertEqual(m.phase, PHASE_BREAK)
+        self.assertEqual(m.first.runs, 0)
+        self.assertEqual(m.target, 1)
+        self.assertEqual(m.runs_required, 1)
+
+    def test_target_reached_on_ball_one(self):
+        m = start_chase_after(L(4), L(0), L(0), L(0), L(0), L(0))  # target 5
+        m.record_delivery(L(6))   # first ball of the chase wins it
+        self.assertEqual(m.phase, PHASE_COMPLETED)
+        self.assertEqual(m.result.outcome, OUTCOME_SECOND_WIN)
+        self.assertEqual(m.second.legal_balls, 1)
+        self.assertEqual(m.result.margin_balls, 5)
+        self.assertEqual(m.result.margin_wickets, 2)
+
+
 class TestDisplayState(unittest.TestCase):
     def test_target_required_balls_wickets(self):
         m = start_chase_after(L(4), L(4), L(4), L(1), L(0), L(0))  # 13 -> target 14

@@ -307,7 +307,10 @@ namespace CricketGame.Core.Fielding
                         bool rising = vel.Y > 0f;
                         if (rising && !(pos.Y <= 1.6f && ballSpeedKph < 90f)) continue;
 
-                        float p = CatchProbability(f, ballSpeedKph, pos.Y);
+                        float p = CatchProbability(f, ballSpeedKph, pos.Y)
+                                * CatchGrader.BiasFor(CatchGrader.Grade(ballSpeedKph, pos.Y, d, false));
+                        if (p < 0.05f) p = 0.05f;
+                        if (p > 0.97f) p = 0.97f;
                         if (rng.NextFloat() < p)
                         {
                             result.Kind = FieldingKind.Caught;

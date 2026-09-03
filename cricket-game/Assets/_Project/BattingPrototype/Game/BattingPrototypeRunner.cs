@@ -653,7 +653,26 @@ namespace CricketGame.BattingPrototype.Game
 
         private void ShowContactFeedback(SwingReport swing)
         {
-            string text = swing.Selection.Name.ToUpper() + "  -  " + swing.Window.ToString().ToUpper();
+            // Readable contact line: shot + timing + foot pose + reach, so the
+            // player learns WHY a ball was mistimed or edged (spec: wrong
+            // decisions must be punishable AND learnable).
+            FootPose pose = FootworkController.Pose(engine.Foot);
+            string poseLabel = pose == FootPose.FrontFoot ? "FRONT"
+                : pose == FootPose.BackFoot ? "BACK" : "NEUTRAL";
+            string text;
+            if (swing.Contact.Outcome == ContactOutcome.Edge)
+            {
+                text = "EDGE!  -  " + swing.Window.ToString().ToUpper()
+                     + "  [" + poseLabel + " · reach "
+                     + swing.Direction.ReachQuality.ToString("0.0") + "]";
+            }
+            else
+            {
+                text = swing.Selection.Name.ToUpper() + "  -  "
+                     + swing.Window.ToString().ToUpper()
+                     + "  [" + poseLabel + " · reach "
+                     + swing.Direction.ReachQuality.ToString("0.0") + "]";
+            }
             Color color = WindowColor(swing.Window);
             hud.ShowPopup(text, color, 0.95f);
             if (swing.Window == TimingWindow.Perfect) hud.FlashTiming(color);

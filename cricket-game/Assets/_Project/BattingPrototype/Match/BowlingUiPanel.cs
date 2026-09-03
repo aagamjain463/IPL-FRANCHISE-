@@ -97,6 +97,11 @@ namespace CricketGame.BattingPrototype.Match
         private void RebindEngine()
         {
             if (boundController == null || boundController.Match == null) return;
+            // Phase 1: (re)binding happens after the rules engine is rebuilt on
+            // PLAY AGAIN / format switch, where the new engine's InningsStarted
+            // fires BEFORE the re-bind. Reset the spell counters here so a
+            // replayed match never carries the previous match's analysis.
+            ResetSpellStats();
             boundController.Match.BallCompleted += args =>
             {
                 if (args.Record == null || args.Record.InningsIndex != 1) return;
@@ -122,6 +127,12 @@ namespace CricketGame.BattingPrototype.Match
                 dots = 0; boundaries = 0; speedSum = 0f; speedCount = 0;
                 RefreshSpell();
             };
+        }
+
+        private void ResetSpellStats()
+        {
+            dots = 0; boundaries = 0; speedSum = 0f; speedCount = 0;
+            RefreshSpell();
         }
 
         private void RefreshSpell()

@@ -457,6 +457,10 @@ namespace CricketGame.BattingPrototype.Hud
             // Phase 6: chips reset every over, not just every innings.
             matchRef.OverCompleted += args => ClearOverChips();
             matchRef.WicketFallen += args => UpdateBatterLine();
+            // Phase 1: when the rules engine is rebuilt (PLAY AGAIN / format
+            // switch) the new engine's InningsStarted can fire before this
+            // re-bind, so clear the over chips immediately to avoid stale state.
+            ClearOverChips();
             UpdateBatterLine();
         }
 
@@ -750,7 +754,7 @@ namespace CricketGame.BattingPrototype.Hud
             UITweenHost.Fade(overlayGroup, 1f, UITheme.TweenMed);
         }
 
-        public void ShowMatchResult(MatchResult result, bool playerWon)
+        public void ShowMatchResult(MatchResult result)
         {
             resultPanel.gameObject.SetActive(true);
             var rg = resultPanel.GetComponent<CanvasGroup>();
@@ -758,8 +762,12 @@ namespace CricketGame.BattingPrototype.Hud
             UITweenHost.Fade(rg, 1f, UITheme.TweenSlow);
             AudioManager.Play(GameSound.UiTransition);
 
-            resultTitle.text = playerWon ? "YOU WIN!" : "AI WINS!";
-            resultTitle.color = playerWon ? UITheme.Cyan : UITheme.Danger;
+            // Phase 1: a Super Over has three results — PLAYER WIN / AI WIN / TIE.
+            // A tie must never be presented as an AI win.
+            bool playerWon = result != null && result.Outcome == MatchOutcome.FirstInningsWin;
+            bool tied = result != null && result.Outcome == MatchOutcome.Tie;
+            resultTitle.text = tied ? "TIE!" : (playerWon ? "YOU WIN!" : "AI WINS!");
+            resultTitle.color = tied ? UITheme.Amber : (playerWon ? UITheme.Cyan : UITheme.Danger);
             resultMargin.text = result != null
                 ? result.Describe("YOU", "AI").ToUpperInvariant()
                 : "";
@@ -772,7 +780,7 @@ namespace CricketGame.BattingPrototype.Hud
                 string potm = result != null && result.Scorecard != null
                               && !string.IsNullOrEmpty(result.Scorecard.PlayerOfMatch)
                     ? result.Scorecard.PlayerOfMatch
-                    : (playerWon ? "YOU" : "AI");
+                    : (tied ? "TIED" : (playerWon ? "YOU" : "AI"));
                 resultPotm.text = "PLAYER OF THE MATCH\n" + potm;
                 resultPotm.color = UITheme.Amber;
             }
