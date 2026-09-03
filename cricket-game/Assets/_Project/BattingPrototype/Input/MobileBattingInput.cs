@@ -9,26 +9,22 @@ namespace CricketGame.BattingPrototype.Input
 {
     /// <summary>
     /// Touch-first batting input. Left half of the screen: dynamic analog
-    /// joystick for footwork. Right half: swipe for shot direction, the
-    /// RELEASE of the swipe plays the shot (that moment is timed).
+    /// joystick for footwork. Right half: swipe for shot direction.
     ///
-    /// Uses the Input System's EnhancedTouch API (documented, stable touch
-    /// phases + finger tracking). A mouse-drag fallback lets the prototype be
-    /// played in the editor on desktop. Emits only the generic
-    /// <see cref="BattingInputFrame"/> - the engine never sees touches.
+    /// Uses the Input System's EnhancedTouch API.
+    /// Mouse fallback allows the prototype to be played in the Unity editor.
     /// </summary>
     public class MobileBattingInput : MonoBehaviour, IBattingInputSource
     {
-        /// <summary>Current shot intent (set by the HUD intent buttons).</summary>
         public ShotIntent SelectedIntent = ShotIntent.Normal;
 
-        /// <summary>Screen-pixel rect occupied by the intent buttons; touches starting here are UI, not swipes.</summary>
         public Rect IntentButtonsRectScreen;
 
-        // --- live gesture state (read by HUD visuals) ---
+        // --- live gesture state ---
         public bool JoystickActive { get; private set; }
         public Vector2 JoystickAnchorScreen { get; private set; }
         public Vector2 JoystickVector { get; private set; }
+
         public bool SwipeActive { get; private set; }
         public Vector2 SwipeAnchorScreen { get; private set; }
         public Vector2 SwipeCurrentScreen { get; private set; }
@@ -38,12 +34,14 @@ namespace CricketGame.BattingPrototype.Input
 
         private const int MaxTouches = 10;
         private readonly bool[] slotDown = new bool[MaxTouches];
+
         private int joySlot = -1;
         private int swipeSlot = -1;
+
         private Vector2 swipeAnchor;
         private Vector2 swipeCurrent;
 
-        // mouse fallback state
+        // Mouse fallback
         private bool mouseIsDown;
         private bool mouseIsJoy;
         private bool mouseIsSwipe;
@@ -56,27 +54,87 @@ namespace CricketGame.BattingPrototype.Input
 
         private void Awake()
         {
+            // Make absolutely sure Enhanced Touch is enabled
+            // before Update() can access activeTouches.
             if (!EnhancedTouchSupport.enabled)
+            {
                 EnhancedTouchSupport.Enable();
+            }
+
             joystickRadius = Mathf.Max(60f, Screen.height * 0.11f);
+        }
+
+        private void OnEnable()
+        {
+            // Handles cases where the component is disabled/re-enabled.
+            if (!EnhancedTouchSupport.enabled)
+            {
+                EnhancedTouchSupport.Enable();
+            }
+        }
+
+        private void OnDisable()
+        {
+            // Reset gesture state when the input component is disabled.
+            JoystickActive = false;
+            SwipeActive = false;
+            JoystickVector = Vector2.zero;
+
+            joySlot = -1;
+            swipeSlot = -1;
+
+            mouseIsDown = false;
+            mouseIsJoy = false;
+            mouseIsSwipe = false;
+        }
+
+        private void OnDestroy()
+        {
+            // Only disable Enhanced Touch when this component is destroyed.
+            if (EnhancedTouchSupport.enabled)
+            {
+                EnhancedTouchSupport.Disable();
+            }
         }
 
         private void Update()
         {
             joystickRadius = Mathf.Max(60f, Screen.height * 0.11f);
 
-            bool anyTouch = UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches.Count > 0;
-            if (anyTouch) ReadTouches();
-            else ReadMouseFallback();
+            // Safety check: EnhancedTouch API must be enabled before
+            // accessing Touch.activeTouches.
+            if (!EnhancedTouchSupport.enabled)
+            {
+                EnhancedTouchSupport.Enable();
+            }
+
+            bool anyTouch =
+                UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches.Count > 0;
+
+            if (anyTouch)
+            {
+                ReadTouches();
+            }
+            else
+            {
+                ReadMouseFallback();
+            }
         }
 
-        // ------------------------------------------------------------- touch (EnhancedTouch)
+        // -------------------------------------------------------------
+        // Enhanced Touch
+        // -------------------------------------------------------------
 
         private void ReadTouches()
         {
-          foreach (var touch in UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches)
+            foreach (var touch in UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches)
             {
-                int slot = Mathf.Clamp(touch.finger.index, 0, MaxTouches - 1);
+                int slot = Mathf.Clamp(
+                    touch.finger.index,
+                    0,
+                    MaxTouches - 1
+                );
+
                 Vector2 pos = touch.screenPosition;
 
                 switch (touch.phase)
@@ -88,8 +146,15 @@ namespace CricketGame.BattingPrototype.Input
 
                     case TouchPhase.Moved:
                     case TouchPhase.Stationary:
-                        if (slotDown[slot]) OnPointerMove(slot, pos);
-                        else { slotDown[slot] = true; OnPointerDown(slot, pos); }
+                        if (slotDown[slot])
+                        {
+                            OnPointerMove(slot, pos);
+                        }
+                        else
+                        {
+                            slotDown[slot] = true;
+                            OnPointerDown(slot, pos);
+                        }
                         break;
 
                     case TouchPhase.Ended:
@@ -104,12 +169,16 @@ namespace CricketGame.BattingPrototype.Input
             }
         }
 
-        // ------------------------------------------------------------- mouse fallback
+        // -------------------------------------------------------------
+        // Mouse fallback
+        // -------------------------------------------------------------
 
         private void ReadMouseFallback()
         {
             var mouse = Mouse.current;
-            if (mouse == null) return;
+
+            if (mouse == null)
+                return;
 
             Vector2 pos = mouse.position.ReadValue();
             bool down = mouse.leftButton.isPressed;
@@ -117,27 +186,39 @@ namespace CricketGame.BattingPrototype.Input
             if (down && !mouseIsDown)
             {
                 mouseIsDown = true;
-                mouseIsJoy = pos.x < Screen.width * 0.5f;
-                mouseIsSwipe = !mouseIsJoy && !IntentButtonsRectScreen.Contains(pos);
+
+                mouseIsJoy =
+                    pos.x < Screen.width * 0.5f;
+
+                mouseIsSwipe =
+                    !mouseIsJoy &&
+                    !IntentButtonsRectScreen.Contains(pos);
+
                 if (mouseIsJoy)
                 {
                     JoystickAnchorScreen = pos;
                     JoystickVector = Vector2.zero;
                     JoystickActive = true;
-                    if (JoystickStarted != null) JoystickStarted();
+
+                    JoystickStarted?.Invoke();
                 }
                 else if (mouseIsSwipe)
                 {
                     swipeAnchor = pos;
                     swipeCurrent = pos;
+
                     SwipeAnchorScreen = pos;
                     SwipeCurrentScreen = pos;
+
                     SwipeActive = true;
                 }
             }
             else if (down && mouseIsDown)
             {
-                if (mouseIsJoy) UpdateJoystick(pos);
+                if (mouseIsJoy)
+                {
+                    UpdateJoystick(pos);
+                }
                 else if (mouseIsSwipe)
                 {
                     swipeCurrent = pos;
@@ -150,49 +231,64 @@ namespace CricketGame.BattingPrototype.Input
                 {
                     JoystickActive = false;
                     JoystickVector = Vector2.zero;
-                    if (JoystickEnded != null) JoystickEnded();
+
+                    JoystickEnded?.Invoke();
                 }
                 else if (mouseIsSwipe)
                 {
                     ReleaseSwipe(swipeCurrent - swipeAnchor);
                     SwipeActive = false;
                 }
+
                 mouseIsDown = false;
                 mouseIsJoy = false;
                 mouseIsSwipe = false;
             }
         }
 
-        // ------------------------------------------------------------- shared gesture logic
+        // -------------------------------------------------------------
+        // Shared gesture logic
+        // -------------------------------------------------------------
 
         private void OnPointerDown(int slot, Vector2 pos)
         {
-            bool leftHalf = pos.x < Screen.width * 0.5f;
+            bool leftHalf =
+                pos.x < Screen.width * 0.5f;
 
             if (leftHalf && joySlot == -1)
             {
                 joySlot = slot;
+
                 JoystickAnchorScreen = pos;
                 JoystickVector = Vector2.zero;
                 JoystickActive = true;
-                if (JoystickStarted != null) JoystickStarted();
+
+                JoystickStarted?.Invoke();
                 return;
             }
 
-            if (!leftHalf && swipeSlot == -1 && !IntentButtonsRectScreen.Contains(pos))
+            if (!leftHalf &&
+                swipeSlot == -1 &&
+                !IntentButtonsRectScreen.Contains(pos))
             {
                 swipeSlot = slot;
+
                 swipeAnchor = pos;
                 swipeCurrent = pos;
+
                 SwipeAnchorScreen = pos;
                 SwipeCurrentScreen = pos;
+
                 SwipeActive = true;
             }
         }
 
         private void OnPointerMove(int slot, Vector2 pos)
         {
-            if (slot == joySlot) UpdateJoystick(pos);
+            if (slot == joySlot)
+            {
+                UpdateJoystick(pos);
+            }
             else if (slot == swipeSlot)
             {
                 swipeCurrent = pos;
@@ -205,41 +301,63 @@ namespace CricketGame.BattingPrototype.Input
             if (slot == joySlot)
             {
                 joySlot = -1;
+
                 JoystickActive = false;
                 JoystickVector = Vector2.zero;
-                if (JoystickEnded != null) JoystickEnded();
+
+                JoystickEnded?.Invoke();
             }
             else if (slot == swipeSlot)
             {
                 swipeSlot = -1;
+
                 SwipeActive = false;
+
                 ReleaseSwipe(pos - swipeAnchor);
             }
         }
 
         private void UpdateJoystick(Vector2 pos)
         {
-            Vector2 raw = pos - JoystickAnchorScreen;
-            float mag = raw.magnitude;
-            if (mag > joystickRadius) raw = raw * (joystickRadius / mag);
-            JoystickVector = raw / joystickRadius; // analog, magnitude <= 1
+            Vector2 raw =
+                pos - JoystickAnchorScreen;
+
+            float mag =
+                raw.magnitude;
+
+            if (mag > joystickRadius)
+            {
+                raw *= joystickRadius / mag;
+            }
+
+            JoystickVector =
+                raw / joystickRadius;
         }
 
         private void ReleaseSwipe(Vector2 delta)
         {
-            float mag = delta.magnitude;
-            float maxSwipe = Screen.height * 0.35f;
-            float strength = Mathf.Clamp01(mag / maxSwipe);
+            float mag =
+                delta.magnitude;
+
+            float maxSwipe =
+                Screen.height * 0.35f;
+
+            float strength =
+                Mathf.Clamp01(mag / maxSwipe);
 
             Vector2 dir;
+
             if (mag < 18f)
             {
-                dir = new Vector2(0f, 1f); // bare tap: straight
-                strength = Mathf.Max(strength, 0.35f);
+                dir = new Vector2(0f, 1f);
+
+                strength =
+                    Mathf.Max(strength, 0.35f);
             }
             else
             {
-                dir = delta.normalized;
+                dir =
+                    delta.normalized;
             }
 
             swingQueued = true;
@@ -247,24 +365,44 @@ namespace CricketGame.BattingPrototype.Input
             queuedStrength = strength;
         }
 
-        // ------------------------------------------------------------- generic output
+        // -------------------------------------------------------------
+        // Generic batting output
+        // -------------------------------------------------------------
 
         public BattingInputFrame Sample()
         {
-            var frame = BattingInputFrame.Idle;
-            frame.Intent = SelectedIntent;
+            var frame =
+                BattingInputFrame.Idle;
 
-            // Screen up = forward stride (+Z), screen right = off side (+X).
-            frame.Footwork = new Vec2(JoystickVector.x, JoystickVector.y);
+            frame.Intent =
+                SelectedIntent;
+
+            // Screen up = forward stride (+Z)
+            // Screen right = off side (+X)
+            frame.Footwork =
+                new Vec2(
+                    JoystickVector.x,
+                    JoystickVector.y
+                );
 
             if (swingQueued)
             {
                 swingQueued = false;
+
                 frame.SwingTriggered = true;
-                frame.ShotDirection = new Vec2(queuedDirection.x, queuedDirection.y);
-                frame.SwipeStrength = queuedStrength;
+
+                frame.ShotDirection =
+                    new Vec2(
+                        queuedDirection.x,
+                        queuedDirection.y
+                    );
+
+                frame.SwipeStrength =
+                    queuedStrength;
             }
+
             return frame;
         }
     }
 }
+
