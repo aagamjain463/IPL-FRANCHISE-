@@ -808,6 +808,15 @@ namespace CricketGame.BattingPrototype.Hud
         private void SetJoystickVisible(bool visible)
         {
             joystickShown = visible;
+            // The joystick visuals are created exactly once in
+            // BuildJoystickVisuals(). If they are missing at runtime, never
+            // dereference them, and clear the stale "shown" flag so the
+            // per-frame joystick code in LateUpdate stays inert.
+            if (joyBase == null || joyKnob == null)
+            {
+                joystickShown = false;
+                return;
+            }
             bool show = visible && battingControlsVisible;
             joyBase.gameObject.SetActive(show);
             joyKnob.gameObject.SetActive(show);
@@ -827,7 +836,12 @@ namespace CricketGame.BattingPrototype.Hud
         {
             if (input == null) return;
 
-            if (input.JoystickActive)
+            // The joystick visuals are created exactly once in
+            // BuildJoystickVisuals(). If they are missing at runtime, skip all
+            // joystick positioning instead of dereferencing null references.
+            bool joystickReady = joyBase != null && joyKnob != null;
+
+            if (joystickReady && input.JoystickActive)
             {
                 SetJoystickVisible(true);
                 Vector2 local;
@@ -839,7 +853,7 @@ namespace CricketGame.BattingPrototype.Hud
                         local + ScreenToCanvas(input.JoystickVector * Screen.height * 0.11f);
                 }
             }
-            else if (joystickShown && battingControlsVisible)
+            else if (joystickReady && joystickShown && battingControlsVisible)
             {
                 // rest at the home position, bottom-left thumb zone
                 joyBase.rectTransform.anchoredPosition = new Vector2(-Screen.width * 0.32f, -Screen.height * 0.28f);
