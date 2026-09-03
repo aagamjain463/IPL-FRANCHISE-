@@ -16,15 +16,18 @@ namespace CricketGame.BattingPrototype.Bowling
         private readonly IRng rng = new SystemRng();
 
         /// <summary>Debug hook: force deliveries to a type (null = use the plan).</summary>
+        [System.NonSerialized]
         public DeliveryType? ForcedType;
 
         /// <summary>Phase 3: overrides the plan's accuracy while >= 0 (AI difficulty).</summary>
         public float AccuracyOverride = -1f;
 
         /// <summary>Debug hook: fully manual delivery from the panel sliders (wins over everything).</summary>
+        [System.NonSerialized]
         public DeliveryData? ManualDelivery;
 
         /// <summary>Phase 4: AI bowling strategy override (type + spot hints).</summary>
+        [System.NonSerialized]
         public CricketGame.Core.AI.AiBowlingPlan? StrategyOverride;
 
         /// <summary>Phase 4: run AI deliveries through release scatter + spray
