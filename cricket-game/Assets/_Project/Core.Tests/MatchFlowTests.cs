@@ -246,6 +246,75 @@ namespace CricketGame.Core.Tests
             }
             return swings > 0 ? total / swings : 0f;
         }
+
+        [Test]
+        public void AiDeterministicWithSameSeed()
+        {
+            var delivery = GoodBall();
+            var ctx = new AiChaseContext
+            {
+                Target = 20, Score = 10, BallsRemaining = 4, WicketsRemaining = 2,
+            };
+            var rng1 = new SeededRng(42);
+            var plan1 = AiBattingPlanner.Plan(rng1, delivery, ctx, AiDifficulty.Medium, true);
+            var rng2 = new SeededRng(42);
+            var plan2 = AiBattingPlanner.Plan(rng2, delivery, ctx, AiDifficulty.Medium, true);
+            Assert.AreEqual(plan1.Swing, plan2.Swing);
+            Assert.AreEqual(plan1.Intent, plan2.Intent);
+            Assert.AreEqual(plan1.Angle, plan2.Angle, 1e-6f);
+            Assert.AreEqual(plan1.Strength, plan2.Strength, 1e-6f);
+            Assert.AreEqual(plan1.Offset, plan2.Offset, 1e-6f);
+        }
+
+        [Test]
+        public void AiNeverProducesImpossibleActions()
+        {
+            var delivery = GoodBall();
+            var ctx = new AiChaseContext
+            {
+                Target = 20, Score = 10, BallsRemaining = 4, WicketsRemaining = 2,
+            };
+            for (int i = 0; i < 1000; i++)
+            {
+                var plan = AiBattingPlanner.Plan(new SeededRng(i), delivery, ctx, AiDifficulty.Medium, null);
+                if (plan.Swing)
+                {
+                    Assert.True(plan.Angle >= -1.35f && plan.Angle <= 1.35f,
+                        "Shot angle must be within valid range");
+                    Assert.True(plan.Strength >= 0.55f && plan.Strength <= 1.0f,
+                        "Strength must be within valid range");
+                    Assert.True(plan.FootTarget.X >= -1.15f && plan.FootTarget.X <= 1.15f,
+                        "Foot target X must be within valid range");
+                    Assert.True(plan.FootTarget.Y >= -0.55f && plan.FootTarget.Y <= 0.75f,
+                        "Foot target Y must be within valid range");
+                }
+            }
+        }
+
+        [Test]
+        public void AiMoreDefensiveWithFewWickets()
+        {
+            float DefensiveRate(int wickets)
+            {
+                var delivery = GoodBall();
+                var ctx = new AiChaseContext
+                {
+                    Target = 15, Score = 10, BallsRemaining = 4, WicketsRemaining = wickets,
+                };
+                int defensive = 0, n = 800;
+                for (int i = 0; i < n; i++)
+                {
+                    var plan = AiBattingPlanner.Plan(new SeededRng(i * 7 + 3), delivery, ctx,
+                                                     AiDifficulty.Medium, null);
+                    if (plan.Swing && plan.Intent == ShotIntent.Defensive) defensive++;
+                }
+                return defensive / (float)n;
+            }
+            float oneWicket = DefensiveRate(1);
+            float twoWickets = DefensiveRate(2);
+            Assert.Greater(twoWickets, oneWicket + 0.05f,
+                "AI should be more defensive with only 1 wicket remaining");
+        }
     }
 
     [TestFixture]
@@ -368,6 +437,25 @@ namespace CricketGame.Core.Tests
             Assert.AreEqual(0, inn.Striker);
             m.RecordDelivery(W(DismissalKind.Bowled));
             Assert.AreEqual(0, inn.Striker);   // replacement guards the same end
+        }
+
+        [Test]
+        public void BoundariesDoNotRotateStrike()
+        {
+            var m = new SuperOverMatch(SuperOverConfig.Standard);
+            m.Start();
+            var inn = m.FirstInnings;
+            Assert.AreEqual(0, inn.Striker);
+            m.RecordDelivery(L(4));
+            Assert.AreEqual(0, inn.Striker, "Four must not rotate strike");
+            m.RecordDelivery(L(4));
+            Assert.AreEqual(0, inn.Striker, "Another four must not rotate strike");
+            m.RecordDelivery(L(6));
+            Assert.AreEqual(0, inn.Striker, "Six must not rotate strike");
+            m.RecordDelivery(L(1));
+            Assert.AreEqual(1, inn.Striker, "Single rotates strike");
+            m.RecordDelivery(L(4));
+            Assert.AreEqual(1, inn.Striker, "Four after single must not rotate strike");
         }
 
         [Test]

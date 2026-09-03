@@ -52,8 +52,8 @@ namespace CricketGame.BattingPrototype.Ball
             var ball = ballGo.AddComponent<BallController>();
             ball.rigidbody = ballGo.AddComponent<Rigidbody>();
             ball.rigidbody.mass = 0.16f;
-            ball.rigidbody.drag = 0.06f;
-            ball.rigidbody.angularDrag = 0.4f;
+            ball.rigidbody.linearDamping = 0.06f;
+            ball.rigidbody.angularDamping = 0.4f;
             ball.rigidbody.isKinematic = true;
             ball.rigidbody.useGravity = true;
             ball.rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
@@ -95,7 +95,7 @@ namespace CricketGame.BattingPrototype.Ball
             bounceFired = false;
             restTimer = 0f;
             rigidbody.isKinematic = true;
-            rigidbody.velocity = Vector3.zero;
+            rigidbody.linearVelocity = Vector3.zero;
             rigidbody.angularVelocity = Vector3.zero;
             transform.position = ToUnity(traj.Position(0f));
         }
@@ -121,7 +121,7 @@ namespace CricketGame.BattingPrototype.Ball
             inFlight = false;
             struck = true;
             rigidbody.isKinematic = false;
-            rigidbody.velocity = ToUnity(direction) * (exitSpeedKph / 3.6f);
+            rigidbody.linearVelocity = ToUnity(direction) * (exitSpeedKph / 3.6f);
             rigidbody.angularVelocity = new Vector3(Random.Range(-18f, 18f), Random.Range(-18f, 18f), 0f);
         }
 
@@ -142,7 +142,7 @@ namespace CricketGame.BattingPrototype.Ball
             inFlight = false;
             struck = false;
             rigidbody.isKinematic = true;
-            rigidbody.velocity = Vector3.zero;
+            rigidbody.linearVelocity = Vector3.zero;
             rigidbody.angularVelocity = Vector3.zero;
             transform.position = position;
         }
@@ -196,7 +196,7 @@ namespace CricketGame.BattingPrototype.Ball
             }
 
             // Rest detection: slow ball on the ground.
-            if (groundedSinceStrike && rigidbody.velocity.sqrMagnitude < 0.35f && transform.position.y < 0.12f)
+            if (groundedSinceStrike && rigidbody.linearVelocity.sqrMagnitude < 0.35f && transform.position.y < 0.12f)
             {
                 restTimer += Time.deltaTime;
                 if (restTimer > 0.25f)

@@ -261,6 +261,25 @@ namespace CricketGame.Core.Tests
             Assert.AreEqual(DeliveryType.Yorker, plan.Type);
             Assert.AreEqual("yorker_at_the_death", plan.Reason);
         }
+
+        [Test]
+        public void AiBowlingVarietyAvoidsExcessiveRepetition()
+        {
+            var rng = new SeededRng(99);
+            var ctx = new AiBowlingContext { Score = 10, WicketsRemaining = 2, BallsRemaining = 6 };
+            var types = new System.Collections.Generic.List<DeliveryType>();
+            for (int i = 0; i < 30; i++)
+            {
+                var history = new BatterHistoryEntry[0];
+                var plan = AiBowlingPlanner.Plan(rng, history, ctx, AiDifficulty.Medium);
+                types.Add(plan.Type);
+            }
+            int goodLength = 0;
+            foreach (var t in types) if (t == DeliveryType.GoodLength) goodLength++;
+            Assert.Less(goodLength, 25, "Good length should not dominate more than 80% of deliveries");
+            var uniqueTypes = new System.Collections.Generic.HashSet<DeliveryType>(types);
+            Assert.Greater(uniqueTypes.Count, 2, "AI should use at least 3 different delivery types");
+        }
     }
 
     [TestFixture]

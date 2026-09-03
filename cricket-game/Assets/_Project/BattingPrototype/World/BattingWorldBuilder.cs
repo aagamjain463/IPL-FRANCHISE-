@@ -66,12 +66,12 @@ namespace CricketGame.BattingPrototype.World
             var gc = ground.GetComponent<Collider>();
             if (gc != null)
             {
-                var phys = new PhysicMaterial("PitchGround")
+                var phys = new PhysicsMaterial("PitchGround")
                 {
                     dynamicFriction = 0.55f,
                     staticFriction = 0.65f,
                     bounciness = 0.35f,
-                    bounceCombine = PhysicMaterialCombine.Average
+                    bounceCombine = PhysicsMaterialCombine.Average
                 };
                 gc.material = phys;
             }
