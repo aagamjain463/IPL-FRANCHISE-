@@ -75,7 +75,15 @@ namespace CricketGame.BattingPrototype.Bootstrap
             bowlerGo.transform.SetParent(root.transform, false);
             var bowler = bowlerGo.AddComponent<BowlerController>();
 
-            // HUD.
+            // HUD and Input System EventSystem.
+            if (UnityEngine.EventSystems.EventSystem.current == null)
+            {
+                var esGo = new GameObject("EventSystem");
+                esGo.transform.SetParent(root.transform, false);
+                esGo.AddComponent<UnityEngine.EventSystems.EventSystem>();
+                esGo.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+            }
+
             var hudGo = new GameObject("HudRoot");
             hudGo.transform.SetParent(root.transform, false);
             var hud = hudGo.AddComponent<BattingHud>();

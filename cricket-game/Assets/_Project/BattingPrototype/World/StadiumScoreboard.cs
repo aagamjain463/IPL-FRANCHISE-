@@ -36,7 +36,13 @@ namespace CricketGame.BattingPrototype.World
             textGo.transform.localPosition = new Vector3(0, 10.2f, 33.9f);
             textGo.transform.localEulerAngles = new Vector3(0, 180f, 0);
             board.text = textGo.AddComponent<TextMesh>();
-            board.text.font = UiKit.DefaultFont;
+            var font = UiKit.DefaultFont;
+            if (font != null)
+            {
+                board.text.font = font;
+                var mr = textGo.GetComponent<MeshRenderer>();
+                if (mr != null && font.material != null) mr.sharedMaterial = font.material;
+            }
             board.text.characterSize = 0.62f;
             board.text.fontSize = 48;
             board.text.alignment = TextAlignment.Center;

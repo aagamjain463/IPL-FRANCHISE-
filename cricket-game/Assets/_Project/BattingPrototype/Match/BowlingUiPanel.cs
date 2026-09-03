@@ -80,11 +80,24 @@ namespace CricketGame.BattingPrototype.Match
             SetVisible(false);
         }
 
+        private MatchController boundController;
+
         /// <summary>Phase 5: observe the rules engine for the spell panel.</summary>
         public void BindMatch(MatchController matchCtl)
         {
-            if (matchCtl == null || matchCtl.Match == null) return;
-            matchCtl.Match.BallCompleted += args =>
+            if (matchCtl == null) return;
+            if (boundController != matchCtl)
+            {
+                boundController = matchCtl;
+                matchCtl.EngineReplaced += RebindEngine;
+            }
+            RebindEngine();
+        }
+
+        private void RebindEngine()
+        {
+            if (boundController == null || boundController.Match == null) return;
+            boundController.Match.BallCompleted += args =>
             {
                 if (args.Record == null || args.Record.InningsIndex != 1) return;
                 var o = args.Record.Outcome;
@@ -98,13 +111,13 @@ namespace CricketGame.BattingPrototype.Match
                 }
                 RefreshSpell();
             };
-            matchCtl.Match.InningsStarted += args =>
+            boundController.Match.InningsStarted += args =>
             {
                 dots = 0; boundaries = 0; speedSum = 0f; speedCount = 0;
                 RefreshSpell();
             };
             // Phase 6: spell stats are per-over in limited-overs cricket.
-            matchCtl.Match.OverCompleted += args =>
+            boundController.Match.OverCompleted += args =>
             {
                 dots = 0; boundaries = 0; speedSum = 0f; speedCount = 0;
                 RefreshSpell();

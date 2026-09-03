@@ -118,6 +118,7 @@ namespace CricketGame.BattingPrototype.Hud
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1280, 720);
             scaler.matchWidthOrHeight = 0.5f;
+            canvasGo.AddComponent<GraphicRaycaster>();
 
             BuildTopBar();
             BuildPauseButton();
@@ -433,11 +434,23 @@ namespace CricketGame.BattingPrototype.Hud
         /// partnership strip and result-screen stats. Single source of truth
         /// stays Core.Rules - the HUD only observes.</summary>
         private LimitedOversMatch matchRef;
+        private MatchController boundController;
 
         public void BindMatch(CricketGame.BattingPrototype.Match.MatchController matchCtl)
         {
-            if (matchCtl == null || matchCtl.Match == null) return;
-            matchRef = matchCtl.Match;
+            if (matchCtl == null) return;
+            if (boundController != matchCtl)
+            {
+                boundController = matchCtl;
+                matchCtl.EngineReplaced += RebindEngine;
+            }
+            RebindEngine();
+        }
+
+        private void RebindEngine()
+        {
+            if (boundController == null || boundController.Match == null) return;
+            matchRef = boundController.Match;
             matchRef.BallCompleted += args => OnBallCompleted(args.Record);
             matchRef.InningsStarted += args => { ClearOverChips(); UpdateBatterLine(); };
             // Phase 6: chips reset every over, not just every innings.
@@ -496,7 +509,8 @@ namespace CricketGame.BattingPrototype.Hud
             {
                 overChips[i].text = kv.Key;
                 overChips[i].color = kv.Key == "·" ? UITheme.TextDim : UITheme.TextWhite;
-                overChips[i].gameObject.GetComponent<Image>().color = kv.Value;
+                var img = overChips[i].GetComponentInParent<Image>();
+                if (img != null) img.color = kv.Value;
                 i++;
             }
         }
@@ -510,7 +524,8 @@ namespace CricketGame.BattingPrototype.Hud
             foreach (var chip in overChips)
             {
                 chip.text = "·";
-                chip.gameObject.GetComponent<Image>().color = UITheme.Border;
+                var img = chip.GetComponentInParent<Image>();
+                if (img != null) img.color = UITheme.Border;
             }
         }
 
@@ -643,7 +658,8 @@ namespace CricketGame.BattingPrototype.Hud
 
         private IEnumerator MomentRoutine(float life)
         {
-            momentRect.gameObject.GetComponent<Image>().color = momentColor; // border tint
+            var img = momentRect != null ? momentRect.gameObject.GetComponent<Image>() : null;
+            if (img != null) img.color = momentColor; // border tint
             float t = 0f;
             while (t < life)
             {

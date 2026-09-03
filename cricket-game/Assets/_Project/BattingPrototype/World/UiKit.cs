@@ -18,19 +18,35 @@ namespace CricketGame.BattingPrototype.World
             }
         }
 
+        private static Font defaultFont;
+
         public static Font DefaultFont
         {
             get
             {
-                Font f = null;
-                try { f = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
-                catch (System.Exception) { f = null; }
-                if (f == null)
+                if (defaultFont != null) return defaultFont;
+                try { defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); }
+                catch (System.Exception) { defaultFont = null; }
+                if (defaultFont == null)
                 {
-                    try { f = Resources.GetBuiltinResource<Font>("LegacySans.ttf"); }
-                    catch (System.Exception) { f = null; }
+                    try { defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
+                    catch (System.Exception) { defaultFont = null; }
                 }
-                return f;
+                if (defaultFont == null)
+                {
+                    try { defaultFont = Resources.GetBuiltinResource<Font>("LegacySans.ttf"); }
+                    catch (System.Exception) { defaultFont = null; }
+                }
+                if (defaultFont == null)
+                {
+                    var fonts = Resources.FindObjectsOfTypeAll<Font>();
+                    if (fonts != null && fonts.Length > 0) defaultFont = fonts[0];
+                }
+                if (defaultFont == null)
+                {
+                    defaultFont = Font.CreateDynamicFontFromOSFont(new[] { "Arial", "Helvetica", "Segoe UI", "Sans-Serif" }, 16);
+                }
+                return defaultFont;
             }
         }
 
