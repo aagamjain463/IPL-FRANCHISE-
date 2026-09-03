@@ -31,7 +31,7 @@ namespace CricketGame.BattingPrototype.Game
         private IEnumerator WicketCues(ShotOutcomeResult result)
         {
             AudioManager.Play(GameSound.Wicket);
-            if (result != null && result.Kind == ShotOutcomeKind.Bowled)
+           if (result.Kind == ShotOutcomeKind.Bowled)
                 AudioManager.Play(GameSound.BallOnStumps);
             AudioManager.Play(GameSound.Appeal);
             yield return new WaitForSeconds(0.55f);
