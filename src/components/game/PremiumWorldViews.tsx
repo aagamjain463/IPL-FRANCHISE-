@@ -183,10 +183,42 @@ export const PremiumAuctionView: React.FC = () => {
   const nextBid = Number((auc.currentBidCr + getBidIncrement(auc.currentBidCr)).toFixed(2));
   const isUserLeading = auc.currentLeadingTeamId === gameState.userTeamId;
   const canBid = Boolean(player && team?.purseCr >= nextBid && !isUserLeading);
-  const upcoming = auc.allPlayerPool.slice((auc.currentPlayerIndex || 0) + 1, (auc.currentPlayerIndex || 0) + 9);
-  const userSquad = (team.rosterPlayerIds || []).map(id => gameState.allPlayers[id]).filter(Boolean);
+  const upcoming = useMemo(() => {
+    return auc.allPlayerPool.slice((auc.currentPlayerIndex || 0) + 1, (auc.currentPlayerIndex || 0) + 9);
+  }, [auc.allPlayerPool, auc.currentPlayerIndex]);
+  const userSquad = useMemo(() => {
+    return (team?.rosterPlayerIds || []).map(id => gameState.allPlayers[id]).filter(Boolean);
+  }, [team?.rosterPlayerIds, gameState.allPlayers]);
   const inspectedTeam = gameState.teams[inspectTeamId] || team;
-  const inspectedSquad = (inspectedTeam.rosterPlayerIds || []).map(id => gameState.allPlayers[id]).filter(Boolean).sort((a, b) => b.overall - a.overall);
+  const inspectedSquad = useMemo(() => {
+    return (inspectedTeam?.rosterPlayerIds || []).map(id => gameState.allPlayers[id]).filter(Boolean).sort((a, b) => b.overall - a.overall);
+  }, [inspectedTeam?.rosterPlayerIds, gameState.allPlayers]);
+
+  const handleBidAction = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      (e.currentTarget as HTMLElement)?.blur();
+    }
+    if (!canBid) return;
+
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(45);
+      } catch {
+        // ignore if vibration is unsupported or blocked
+      }
+    }
+
+    const currentScroll = window.scrollY;
+    placeUserBid();
+
+    requestAnimationFrame(() => {
+      if (Math.abs(window.scrollY - currentScroll) > 2) {
+        window.scrollTo({ top: currentScroll, behavior: 'instant' as ScrollBehavior });
+      }
+    });
+  };
+
   const openMultiplayer = () => {
     setActiveTab('MultiplayerAuction');
     setCurrentScreen('MultiplayerAuction');
@@ -396,19 +428,33 @@ export const PremiumAuctionView: React.FC = () => {
 
         <motion.div className="clean-auction__bid" variants={shouldReduceMotion ? undefined : cardMotion}>
           <small>CURRENT BID</small>
-          <AnimatePresence mode="wait" initial={false}>
+          <div className="clean-auction__bid-box">
             <motion.h2
               key={`${auc.activePlayer?.id || 'lot'}-${auc.currentBidCr}`}
-              variants={shouldReduceMotion ? undefined : bidPulseMotion}
-              initial={shouldReduceMotion ? false : "initial"}
-              animate="enter"
-              exit="exit"
-            >₹{auc.currentBidCr.toFixed(2)}Cr</motion.h2>
-          </AnimatePresence>
+              animate={shouldReduceMotion ? undefined : { scale: [0.95, 1.05, 1], filter: ['brightness(1.4)', 'brightness(1)'] }}
+              transition={{ duration: 0.26, ease: 'easeOut' }}
+            >
+              ₹{auc.currentBidCr.toFixed(2)}Cr
+            </motion.h2>
+          </div>
           <p>{leading ? `${leading.name} leading` : 'No paddle raised yet'}</p>
           <div className="clean-auction__timer"><Clock className="w-5 h-5" /> 0:{auc.auctionTimerSeconds.toString().padStart(2, '0')} · {auc.hammerState}</div>
           <div className="clean-auction__actions clean-auction__actions--two">
-            <motion.button onClick={placeUserBid} disabled={!canBid} whileTap={shouldReduceMotion ? undefined : tapGesture}>{isUserLeading ? 'YOU LEAD' : `BID ₹${nextBid}Cr`}</motion.button>
+            <motion.button
+              id="btn-clean-bid"
+              onClick={handleBidAction}
+              aria-disabled={!canBid}
+              className={`transition transform active:scale-95 ${
+                !canBid 
+                  ? 'opacity-60 cursor-not-allowed pointer-events-none' 
+                  : isUserLeading 
+                  ? 'bg-emerald-500 text-black border border-emerald-400' 
+                  : 'bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/25'
+              }`}
+              whileTap={shouldReduceMotion || !canBid ? undefined : tapGesture}
+            >
+              {isUserLeading ? 'YOU LEAD' : `BID ₹${nextBid}Cr`}
+            </motion.button>
             <motion.button onClick={fastForwardAuctionPlayer} className="ghost" whileTap={shouldReduceMotion ? undefined : tapGesture}>RESOLVE LOT</motion.button>
           </div>
         </motion.div>
@@ -494,6 +540,51 @@ export const PremiumAuctionView: React.FC = () => {
           </article>
         </section>
       )}
+
+      {/* Mobile-First Sticky Bidding Dock - Always in thumb reach on mobile */}
+      <aside className="clean-auction__mobile-dock">
+        <div className="flex flex-col min-w-0 pr-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-[#FFE27D] font-mono font-black uppercase tracking-wider">
+              Lot #{auc.currentPlayerIndex + 1}
+            </span>
+            <span className="text-[10px] text-slate-300 font-bold truncate max-w-[110px]">
+              {player.shortName || player.name}
+            </span>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-xl font-black font-mono text-[#FFE27D] leading-none">
+              ₹{auc.currentBidCr.toFixed(2)}Cr
+            </span>
+            <span className={`text-[10px] font-mono font-bold flex items-center gap-0.5 ${auc.auctionTimerSeconds <= 3 ? 'text-red-400' : 'text-slate-400'}`}>
+              <Clock className="w-2.5 h-2.5" /> 0:{auc.auctionTimerSeconds.toString().padStart(2, '0')}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleBidAction}
+            aria-disabled={!canBid}
+            className={`px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition active:scale-95 shadow-lg ${
+              isUserLeading
+                ? 'bg-emerald-500 text-black border border-emerald-400 font-mono font-bold'
+                : !canBid
+                ? 'bg-slate-800 text-slate-500 border border-slate-700 pointer-events-none'
+                : 'bg-gradient-to-r from-[#D4AF37] to-amber-400 text-black shadow-[#D4AF37]/30'
+            }`}
+          >
+            {isUserLeading ? 'YOU LEAD' : `BID ₹${nextBid}Cr`}
+          </button>
+          <button
+            onClick={fastForwardAuctionPlayer}
+            className="px-2.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[10px] font-bold uppercase tracking-wider"
+            title="Fast resolve lot"
+          >
+            PASS
+          </button>
+        </div>
+      </aside>
     </motion.div>
   );
 };

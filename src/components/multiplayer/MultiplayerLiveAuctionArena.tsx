@@ -79,6 +79,28 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
 
   const canPlaceAnyBid = !isUserLeading && !roomState.isPaused && roomState.status === 'in_progress' && !isOverseasCapped && !isSquadCapped;
 
+  const handleMultiplayerBidClick = (bidVal: number, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      (e.currentTarget as HTMLElement)?.blur();
+    }
+    if (!canPlaceAnyBid || myPurse < bidVal) return;
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate(45);
+      } catch {
+        // ignore
+      }
+    }
+    const currentScroll = window.scrollY;
+    onPlaceBid(bidVal);
+    requestAnimationFrame(() => {
+      if (Math.abs(window.scrollY - currentScroll) > 2) {
+        window.scrollTo({ top: currentScroll, behavior: 'instant' as ScrollBehavior });
+      }
+    });
+  };
+
   // Recommended Auto-Bid valuation for current lot
   const recommendedValuation = useMemo(() => {
     if (!currentLot) return 5.0;
@@ -418,13 +440,13 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
                 {/* Main Large Action Button */}
                 <button
                   id="btn-multiplayer-raise-bid"
-                  onClick={() => onPlaceBid(standardNextBid)}
-                  disabled={!canPlaceAnyBid || !canAffordStandard}
+                  onClick={(e) => handleMultiplayerBidClick(standardNextBid, e)}
+                  aria-disabled={!canPlaceAnyBid || !canAffordStandard}
                   className={`w-full py-5 px-6 rounded-2xl font-black text-base uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 transition transform active:scale-95 ${
                     isUserLeading
-                      ? 'bg-emerald-950/80 text-emerald-300 border-2 border-emerald-500/50 cursor-not-allowed shadow-emerald-500/10'
+                      ? 'bg-emerald-950/80 text-emerald-300 border-2 border-emerald-500/50 cursor-not-allowed shadow-emerald-500/10 pointer-events-none'
                       : !canPlaceAnyBid || !canAffordStandard
-                      ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                      ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed pointer-events-none'
                       : 'bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#D4AF37] hover:brightness-110 text-black shadow-[#D4AF37]/30 cursor-pointer animate-pulse'
                   }`}
                 >
@@ -452,16 +474,12 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
                       return (
                         <button
                           key={inc}
-                          onClick={() => {
-                            if (canAfford) {
-                              onPlaceBid(bidVal);
-                            }
-                          }}
-                          disabled={!canAfford}
+                          onClick={(e) => handleMultiplayerBidClick(bidVal, e)}
+                          aria-disabled={!canAfford}
                           className={`p-2.5 rounded-xl border text-xs font-mono font-black transition flex items-center justify-center gap-1 ${
                             canAfford
-                              ? 'bg-[#05070a] hover:bg-[#1e293b] text-[#D4AF37] border-[#1e293b] cursor-pointer hover:border-[#D4AF37]/50'
-                              : 'bg-[#05070a]/50 text-slate-600 border-slate-800 cursor-not-allowed'
+                              ? 'bg-[#05070a] hover:bg-[#1e293b] text-[#D4AF37] border-[#1e293b] cursor-pointer hover:border-[#D4AF37]/50 active:scale-95'
+                              : 'bg-[#05070a]/50 text-slate-600 border-slate-800 cursor-not-allowed pointer-events-none'
                           }`}
                         >
                           <span>+ ₹{inc.toFixed(2)} Cr</span>
@@ -883,6 +901,41 @@ export const MultiplayerLiveAuctionArena: React.FC<MultiplayerLiveAuctionArenaPr
             </div>
           </div>
         </div>
+      )}
+
+      {/* MOBILE STICKY BID DOCK FOR MULTIPLAYER */}
+      {currentLot && !roomState.isPaused && roomState.status === 'in_progress' && (
+        <aside className="md:hidden fixed bottom-0 left-0 right-0 z-50 p-2.5 px-3 bg-[#0a101f]/95 border-t border-[#D4AF37]/40 backdrop-blur-md flex items-center justify-between gap-2 shadow-2xl safe-area-inset-bottom">
+          <div className="flex flex-col min-w-0 pr-1">
+            <span className="text-[10px] text-[#FFE27D] font-mono font-black uppercase tracking-wider truncate">
+              {currentLot.name}
+            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-lg font-black font-mono text-[#FFE27D] leading-none">
+                ₹{roomState.currentHighBidCr.toFixed(2)}Cr
+              </span>
+              <span className={`text-[10px] font-mono font-bold flex items-center gap-0.5 ${roomState.timerSeconds <= 3 ? 'text-red-400' : 'text-slate-400'}`}>
+                <Clock className="w-2.5 h-2.5" /> 0:{roomState.timerSeconds.toString().padStart(2, '0')}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={(e) => handleMultiplayerBidClick(standardNextBid, e)}
+              aria-disabled={!canPlaceAnyBid || !canAffordStandard}
+              className={`px-4 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition active:scale-95 shadow-lg ${
+                isUserLeading
+                  ? 'bg-emerald-500 text-black border border-emerald-400 font-mono font-bold pointer-events-none'
+                  : !canPlaceAnyBid || !canAffordStandard
+                  ? 'bg-slate-800 text-slate-500 border border-slate-700 pointer-events-none'
+                  : 'bg-gradient-to-r from-[#D4AF37] to-amber-400 text-black shadow-[#D4AF37]/30'
+              }`}
+            >
+              {isUserLeading ? 'YOU LEAD' : `BID ₹${standardNextBid.toFixed(2)}Cr`}
+            </button>
+          </div>
+        </aside>
       )}
     </div>
   );
