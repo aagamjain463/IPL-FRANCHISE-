@@ -65,7 +65,7 @@ namespace CricketGame.BattingPrototype.Input
         {
             joystickRadius = Mathf.Max(60f, Screen.height * 0.11f);
 
-            bool anyTouch = EnhancedTouch.Touch.activeTouches.Count > 0;
+            bool anyTouch = UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches.Count > 0;
             if (anyTouch) ReadTouches();
             else ReadMouseFallback();
         }
