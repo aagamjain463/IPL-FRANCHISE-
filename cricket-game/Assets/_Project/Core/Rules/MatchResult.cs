@@ -32,6 +32,18 @@ namespace CricketGame.Core.Rules
             };
         }
 
+        /// <summary>Phase 6: builds the same summary from a limited-overs innings.</summary>
+        public static InningsSummary From2(LimitedOvers.LimitedOversInnings innings)
+        {
+            return new InningsSummary
+            {
+                Runs = innings.Runs,
+                Wickets = innings.Wickets,
+                LegalBalls = innings.LegalBalls,
+                TotalDeliveries = innings.TotalDeliveries
+            };
+        }
+
         public override string ToString()
         {
             return Runs + "/" + Wickets + " (" + LegalBalls + " balls)";
@@ -62,6 +74,12 @@ namespace CricketGame.Core.Rules
 
         public InningsSummary FirstInnings;
         public InningsSummary SecondInnings;
+
+        /// <summary>
+        /// Phase 6: full player-level scorecard. Null for Super Over matches;
+        /// populated by the limited-overs engine for franchise consumption (§28).
+        /// </summary>
+        public LimitedOvers.LimitedOversScorecard Scorecard;
 
         /// <summary>
         /// Human-readable summary. Side names are injected by the caller so the

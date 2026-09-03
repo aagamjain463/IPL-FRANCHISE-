@@ -24,6 +24,9 @@ namespace CricketGame.Core.Rules
         /// <summary>Runs still required after this delivery (second innings only).</summary>
         public int? RunsNeededAfter;
 
+        /// <summary>True when this delivery completed an over (Phase 6 §5).</summary>
+        public bool OverJustCompleted;
+
         public override string ToString()
         {
             string s = (InningsIndex + 1) + "." + DeliveryNumberInInnings + " " + Outcome
