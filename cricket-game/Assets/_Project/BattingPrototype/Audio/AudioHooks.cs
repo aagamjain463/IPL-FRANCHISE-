@@ -9,6 +9,9 @@ namespace CricketGame.BattingPrototype.Audio
     {
         DeliveryRelease,
         BatContact,
+        BatEdge,
+        BallBounce,
+        BallOnStumps,
         BoundaryFour,
         BoundarySix,
         Wicket,

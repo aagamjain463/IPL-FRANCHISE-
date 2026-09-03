@@ -13,7 +13,7 @@ namespace CricketGame.BattingPrototype.Camera
     /// </summary>
     public class CameraController : MonoBehaviour
     {
-        private enum State { Setup, BlendToGameplay, Gameplay, Follow, FollowLong, Wicket, CatchEmphasis, FieldingFollow, Return, PreMatchOrbit, ResultHold }
+        private enum State { Setup, BlendToGameplay, Gameplay, Follow, FollowLong, Wicket, CatchEmphasis, FieldingFollow, Return, PreMatchOrbit, ResultHold, BowlingView }
         private float orbitAngle;
 
         private static readonly Vector3 SetupPos = new Vector3(11.5f, 4.6f, 10f);
@@ -66,9 +66,9 @@ namespace CricketGame.BattingPrototype.Camera
         /// <summary>Called when the bowler starts the run-up; blends to the gameplay view.</summary>
         public void BeginRunUp()
         {
-            blendFromPos = transform.position;
-            blendFromLook = lastLook;
-            state = State.BlendToGameplay;
+            // Phase 5 (spec 16): short over-the-shoulder bowling view first,
+            // then the blend to gameplay completes before release.
+            state = State.BowlingView;
             stateTime = 0f;
         }
 
@@ -235,6 +235,21 @@ namespace CricketGame.BattingPrototype.Camera
                     orbitAngle += Time.unscaledDeltaTime * 0.05f;
                     pos = new Vector3(Mathf.Sin(orbitAngle) * 30f, 11f, 10f + Mathf.Cos(orbitAngle) * 30f);
                     look = new Vector3(0f, 1.5f, 10f);
+                    break;
+                }
+
+                case State.BowlingView:
+                {
+                    // Behind the bowler's shoulder, framing batsman + pitch.
+                    pos = new Vector3(0.7f, 2.35f, 24.5f);
+                    look = new Vector3(-0.35f, 1.1f, -0.2f);
+                    if (stateTime > 0.55f)
+                    {
+                        blendFromPos = transform.position;
+                        blendFromLook = lastLook;
+                        state = State.BlendToGameplay;
+                        stateTime = 0f;
+                    }
                     break;
                 }
 

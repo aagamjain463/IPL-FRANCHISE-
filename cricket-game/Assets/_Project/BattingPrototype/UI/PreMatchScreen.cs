@@ -112,6 +112,7 @@ namespace CricketGame.BattingPrototype.UI
             root.gameObject.SetActive(true);
             group.alpha = 1f;
             Time.timeScale = 0f;
+            AudioManager.Play(GameSound.UiTransition);
         }
 
         private void StartMatch()

@@ -110,3 +110,19 @@ Second pass closing the remaining §26 checklist items:
 
 Verification: brace-lint balanced on all touched C#; `node --check`, `smoke.cjs`,
 `dom_smoke.cjs` green; 166-test Python pack green.
+
+---
+
+## 9. Third pass: cameras, audio cues, atmosphere depth
+
+- **Bowling camera (§16)** — `CameraController.BowlingView`: over-the-shoulder
+  bowler view for the first half-second of the run-up, blending to the gameplay
+  view before release (readability preserved). Preview mirrors it with a damped
+  `bowl` cam mode during the run-up.
+- **Audio cues fire at real moments (§18)** — new `Game/PresentationCues.cs`
+  observes `GameplayEvents`: release, bounce, bat contact vs **edge**, boundary
+  four/six, wicket (+`BallOnStumps` when bowled), appeal → 0.55 s → umpire
+  signal. `UiTransition` fires on pre-match / pause / result reveals. Enum grows
+  `BatEdge`, `BallBounce`, `BallOnStumps`.
+- **Atmospheric depth + resolution scaling (§4/§23)** — linear dusk fog fades
+  the far stands; LOW preset renders at 85% resolution via `Screen.SetResolution`.

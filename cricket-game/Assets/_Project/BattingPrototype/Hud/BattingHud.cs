@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using CricketGame.BattingPrototype.Audio;
 using CricketGame.BattingPrototype.UI;
 using CricketGame.BattingPrototype.World;
 using CricketGame.Core.Batting;
@@ -727,6 +728,7 @@ namespace CricketGame.BattingPrototype.Hud
             var rg = resultPanel.GetComponent<CanvasGroup>();
             rg.alpha = 0f;
             UITweenHost.Fade(rg, 1f, UITheme.TweenSlow);
+            AudioManager.Play(GameSound.UiTransition);
 
             resultTitle.text = playerWon ? "YOU WIN!" : "AI WINS!";
             resultTitle.color = playerWon ? UITheme.Cyan : UITheme.Danger;

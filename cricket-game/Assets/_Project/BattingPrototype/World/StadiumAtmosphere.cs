@@ -56,6 +56,13 @@ namespace CricketGame.BattingPrototype.World
             }
             RenderSettings.ambientLight = new Color(0.42f, 0.46f, 0.60f);
 
+            // Atmospheric depth: linear fog fades the far stands (spec 4).
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogColor = new Color(0.07f, 0.09f, 0.18f);
+            RenderSettings.fogStartDistance = 70f;
+            RenderSettings.fogEndDistance = 170f;
+
             var stadium = worldRoot.Find("Stadium");
             if (stadium == null) return;
 
@@ -201,6 +208,13 @@ namespace CricketGame.BattingPrototype.World
             for (int i = 0; i < tier2.Count; i++) tier2[i].SetActive(high);
 
             QualitySettings.shadowDistance = high ? 60f : 0f;
+
+            // Render-resolution scaling (spec 23): LOW renders at 85%.
+            float scale = HudStats.Quality == QualityPreset.Low ? 0.85f : 1f;
+            int w = Mathf.RoundToInt(Screen.currentResolution.width * scale);
+            int h = Mathf.RoundToInt(Screen.currentResolution.height * scale);
+            if (w > 32 && h > 32 && (w != Screen.width || h != Screen.height))
+                Screen.SetResolution(w, h, Screen.fullScreen);
         }
 
         private void Update()

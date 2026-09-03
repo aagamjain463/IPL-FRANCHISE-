@@ -148,6 +148,11 @@ namespace CricketGame.BattingPrototype.Bootstrap
             vfxGo.transform.SetParent(root.transform, false);
             var vfx = vfxGo.AddComponent<Game.Vfx>();
             vfx.Bind(runner.Events, world);
+
+            var cuesGo = new GameObject("PresentationCues");
+            cuesGo.transform.SetParent(root.transform, false);
+            var cues = cuesGo.AddComponent<Game.PresentationCues>();
+            cues.Bind(runner.Events);
         }
     }
 }

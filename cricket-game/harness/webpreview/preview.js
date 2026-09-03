@@ -403,6 +403,7 @@ function releaseBall() {
   const d = (redeliverNext && lastDeliveryData) ? lastDeliveryData : nextDeliveryData();
   redeliverNext = false;
   lastDeliveryData = d;
+  camMode = "game";   // Phase 5: bowling cam hands back at release
   engine.beginDelivery(d);
   struckApplied = false;
   pendingOutcome = null;
@@ -668,6 +669,11 @@ function updateCamera(dt) {
     desiredPos = SETUP_POS; desiredLook = SETUP_LOOK;
   } else if (camMode === "wicket") {
     desiredPos = WICKET_POS; desiredLook = WICKET_LOOK;
+  } else if (camMode === "bowl") {
+    // Phase 5 (spec 16): over-the-shoulder bowler view during the run-up;
+    // the damping blend hands back to gameplay before release settles.
+    desiredPos = { x: 0.7, y: 2.35, z: bowlerZ + 3.4 };
+    desiredLook = { x: -0.35, y: 1.1, z: -0.2 };
   } else if (camMode === "followBoundary" && flight.mode === "free") {
     // Boundary chase: drift back and up so the flight stays framed to the rope.
     desiredLook = flight.pos;
@@ -1517,7 +1523,7 @@ function frame(now) {
 
   switch (phase) {
     case "pre":
-      if (phaseT >= 0.9) { phase = "runup"; phaseT = 0; camMode = "game"; }
+      if (phaseT >= 0.9) { phase = "runup"; phaseT = 0; camMode = "bowl"; }  // Phase 5 bowling cam
       break;
     case "runup": {
       const t = clamp(phaseT / 0.9, 0, 1);

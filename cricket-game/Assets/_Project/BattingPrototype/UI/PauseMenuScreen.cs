@@ -148,7 +148,7 @@ namespace CricketGame.BattingPrototype.UI
             root.gameObject.SetActive(true);
             group.alpha = 0f;
             UITweenHost.Fade(group, 1f, UITheme.TweenMed);
-            AudioManager.Play(GameSound.UiClick);
+            AudioManager.Play(GameSound.UiTransition);
         }
 
         public void Close()
