@@ -177,13 +177,25 @@ namespace CricketGame.BattingPrototype.Game
         private void OnSwingCommitted(SwingReport report)
         {
             float timeUntilContact = engine.ActiveDelivery.TimeToContact - engine.DeliveryTime;
-            swingCtrl.PlaySwing(
-                Mathf.Max(0.05f, timeUntilContact),
-                report.Direction.AngleFromStraight,
-                report.Selection.Lofted,
-                report.Selection.Awkward,
-                TimingSystem.PowerCurve(report.TimingOffset));
-            animCtrl.NotifySwingPlayed();
+
+            // Phase 4: contextual animation. Edges deflect, awkward requests
+            // snap to the nearest believable gesture (never a broken anim).
+            FootPose pose = FootworkController.Pose(engine.Foot);
+            FootPoseKind poseKind = pose == FootPose.Front ? FootPoseKind.Front
+                : pose == FootPose.Back ? FootPoseKind.Back : FootPoseKind.Neutral;
+            ShotAnimationSpec spec = report.Contact != null && report.Contact.Outcome == ContactOutcome.Edge
+                ? ShotAnimationResolver.ResolveEdge(report)
+                : ShotAnimationResolver.Resolve(report, poseKind);
+            // Honour the timing model: the bat must arrive at the contact time.
+            spec.Duration = Mathf.Clamp(timeUntilContact / Mathf.Max(0.15f, spec.ContactFraction),
+                                        0.30f, 0.85f);
+            animCtrl.NotifySwingPlayed(spec);
+
+            // Phase 4 timing FEEL: tier label + haptic + camera response.
+            TimingFeedbackResult feel = TimingFeedback.Resolve(report.Window, report.Intent);
+            hud.ShowTimingQuality(feel.Label, report.Window);
+            Haptics.Play(feel.Haptic);
+            cam.OnShotQuality(feel.Camera);
             Events.FireShotPlayed(report);
 
             if (!report.WillContact && report.Window == TimingWindow.Missed)
@@ -211,6 +223,9 @@ namespace CricketGame.BattingPrototype.Game
                 StartCoroutine(KnockStumps());
                 Events.FireWicket(outcome);
                 AudioManager.Play(GameSound.Wicket);
+                Haptics.Play(0.7f);
+                animCtrl.NotifyReaction(ShotAnimationResolver.ResolveReaction(
+                    report.Swung, true, outcome.Kind == ShotOutcomeKind.Lbw));
             }
             else
             {
@@ -219,6 +234,8 @@ namespace CricketGame.BattingPrototype.Game
                     hud.ShowPopup("BEATEN!", new Color(1f, 0.75f, 0.3f), 0.9f);
                 else
                     hud.ShowPopup("LEFT ALONE", new Color(0.8f, 0.9f, 1f), 0.8f);
+                animCtrl.NotifyReaction(ShotAnimationResolver.ResolveReaction(
+                    report.Swung, false, false));
             }
 
             Events.FireDeliveryComplete(outcome);
@@ -432,6 +449,17 @@ namespace CricketGame.BattingPrototype.Game
                 rulesOutcome = DeliveryOutcome.Wicket(DismissalKind.Caught);
             else
                 rulesOutcome = DeliveryOutcome.Legal(pendingFielding.Runs);
+
+            // Phase 4: let the AI bowler read what the player just did.
+            if (matchCtl.PlayerIsBatting && engine.LastSwing.HasValue)
+            {
+                SwingReport sr = engine.LastSwing.Value;
+                matchCtl.NoteBatterShot(
+                    ShotSelector.SectorOf(sr.Direction.AngleFromStraight),
+                    rulesOutcome.IsWicket ? 0 : pendingFielding.Runs,
+                    sr.Intent);
+            }
+
             RecordNow(rulesOutcome);
             fieldingActive = false;
             ballResolved = true;
@@ -492,14 +520,39 @@ namespace CricketGame.BattingPrototype.Game
 
                     if (matchCtl.PlayerIsBowling)
                     {
-                        data = bowling.PlayerDelivery(bowlingPanel.SelectedType,
-                                                      bowlingPanel.Line, bowlingPanel.Length,
-                                                      0.9f);
+                        // Phase 4: release-timing skill check (spec section 7).
+                        bowlingPanel.BeginRelease();
+                        while (!bowlingPanel.ReleaseCaptured)
+                            yield return null;
+                        var bowled = bowling.PlayerDeliveryWithRelease(
+                            bowlingPanel.SelectedType, bowlingPanel.Line, bowlingPanel.Length,
+                            bowlingPanel.ReleaseOffset, 0.9f);
+                        data = bowled.Delivery;
+                        hud.ShowDeliveryToast("RELEASE: " + bowled.Quality.ToString().ToUpperInvariant());
                     }
                     else
                     {
+                        // Phase 4: AI bowling reads the batter before choosing.
+                        bowling.StrategyOverride = matchCtl.NextAiBowlingPlan();
+                        bowling.Phase4Difficulty = matchCtl.Difficulty;
                         data = bowling.NextDelivery();
                     }
+                }
+
+                // Phase 4: a sprayed delivery is a WIDE - one extra run, no
+                // legal ball. Announce it, record it, and bowl again.
+                if (bowling.LastDeliveryWasWide)
+                {
+                    hud.ShowBoundaryBanner("WIDE!", new Color(1f, 0.6f, 0.3f));
+                    Events.FireDeliveryComplete(new ShotOutcomeResult
+                    {
+                        Kind = ShotOutcomeKind.Dot, Label = "WIDE", Runs = 0
+                    });
+                    matchCtl.RecordDelivery(DeliveryOutcome.Wide());
+                    cam.ReturnToGameplay();
+                    yield return new WaitForSeconds(1.0f);
+                    ballResolved = true;
+                    continue;
                 }
 
                 Deliver(data);
@@ -509,7 +562,8 @@ namespace CricketGame.BattingPrototype.Game
                 {
                     var hintTraj = new DeliveryTrajectory(data);
                     aiDriver.BeginDelivery(data, matchCtl.BuildChaseContext(),
-                                           matchCtl.Difficulty, hintTraj.HitsStumps());
+                                           matchCtl.Difficulty, hintTraj.HitsStumps(),
+                                           matchCtl.AiArchetype);
                 }
 
                 // --- wait for the ball to resolve

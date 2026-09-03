@@ -5,7 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const src = fs.readFileSync(path.join(__dirname, "engine.js"), "utf8");
 const sandbox = {};
-new Function("s", src + "; Object.assign(s, { BattingEngine, makeDelivery, Trajectory, windupTime, buildDelivery, nextDeliveryType, resolveOutcome, DELIVERY_TYPES, DELIVERY_SPECS, DELIVERY_LABELS, predictCarry, simulateFielding, defaultField, FIELD_SETUP, aiBattingPlan, aggressionState, aiSwingFrameTime, AI_DIFFICULTY, SuperOverMatchJS });")(sandbox);
+new Function("s", src + "; Object.assign(s, { BattingEngine, makeDelivery, Trajectory, windupTime, buildDelivery, nextDeliveryType, resolveOutcome, DELIVERY_TYPES, DELIVERY_SPECS, DELIVERY_LABELS, predictCarry, simulateFielding, defaultField, FIELD_SETUP, aiBattingPlan, aggressionState, aiSwingFrameTime, AI_DIFFICULTY, SuperOverMatchJS, timingFeedback, TIMING_TIERS, validateShotRequest, ALLOWED_SECTORS, BOWLER_PROFILES, releaseQuality, applyRelease, bowlWithRelease, deliveryLegality, sprayProbability, aiBowlingPlan, catchGrade, diveDecision, throwReturn, RELEASE_MAX_ERROR });")(sandbox);
 const S = sandbox;
 
 const ok = (cond, msg) => { if (!cond) throw new Error("FAIL: " + msg); };
@@ -285,4 +285,116 @@ ok(S.aggressionState(26, 4, 2) === "desperate", "agg desperate");
   ok(kinds.has("bowled") || kinds.has("lbw"), "stump wickets occur live");
 }
 
-console.log("SMOKE PASS (phase 1+2+3)");
+// ================= Phase 4: feel, bowling depth, smarter AI =================
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// 10. Timing feedback ladder + defensive cap.
+{
+  const ladder = ["perfect", "good", "early", "very_early"].map(
+    (w) => S.timingFeedback(w, "aggressive").power_mult);
+  for (let i = 1; i < ladder.length; i++) ok(ladder[i - 1] > ladder[i], "timing power ladder");
+  ok(S.timingFeedback("perfect", "aggressive").attack_boost > 1, "perfect aggression boosts");
+  ok(S.timingFeedback("perfect", "defensive").attack_boost <= 1, "perfect block stays a block");
+  ok(S.timingFeedback("missed").haptic === 0, "missed has no haptic");
+}
+// 11. Shot context: yorker snaps square shots to a believable leg-side dig.
+{
+  const res = S.validateShotRequest(-80 * Math.PI / 180, 0.05);
+  ok(res.snapped, "yorker pull request snaps");
+  ok(res.sector === "mid_wicket" && res.family === "flick", "snaps to leg-side flick");
+  const cut = S.validateShotRequest(80 * Math.PI / 180, 0.85);
+  ok(!cut.snapped && cut.family === "cut", "short ball cut is believable");
+}
+// 12. Release control: perfect exact, early fuller, late shorter.
+{
+  const rng = mulberry32(31);
+  const d = S.buildDelivery("good_length", rng, 1.0);
+  const same = S.applyRelease(d, 0.01, 0.75);
+  ok(same.line === d.line && same.length === d.length, "perfect release exact");
+  ok(S.releaseQuality(0.01) === "perfect", "release quality perfect");
+  const early = S.applyRelease(d, -0.12, 0.7);
+  ok(early.length < d.length, "early release over-pitches");
+  const late = S.applyRelease(d, 0.12, 0.7);
+  ok(late.length > d.length, "late release drags short");
+}
+// 13. Wide legality + spray gradient.
+{
+  ok(S.deliveryLegality(0.4) === "legal" && S.deliveryLegality(1.05) === "wide", "wide thresholds");
+  const spray = (diff) => S.sprayProbability(0.55, diff);
+  ok(spray("easy") > spray("hard"), "easy sprays more than hard");
+}
+// 14. Batter archetypes attack differently.
+{
+  const attackRate = (arch) => {
+    const rng = mulberry32(7);
+    let aggr = 0;
+    const n = 800;
+    for (let i = 0; i < n; i++) {
+      const d = S.buildDelivery("good_length", rng, 1.0);
+      const ctx = { target: null, score: 5, balls_remaining: 5, wickets_remaining: 2 };
+      const plan = S.aiBattingPlan(rng, d, ctx, "medium", true, arch);
+      if (plan.intent === "aggressive" || plan.intent === "lofted") aggr++;
+    }
+    return aggr / n;
+  };
+  ok(attackRate("aggressive") > attackRate("balanced") + 0.04, "aggressive attacks more");
+  ok(attackRate("balanced") > attackRate("defensive") + 0.04, "balanced > defensive");
+}
+// 15. AI bowling strategy adapts to repeated scoring.
+{
+  const rng = mulberry32(1);
+  const hist = [
+    { sector: "cover", runs: 4, intent: "aggressive" },
+    { sector: "cover", runs: 4, intent: "aggressive" },
+    { sector: "cover", runs: 1, intent: "normal" },
+  ];
+  const plan = S.aiBowlingPlan(rng, hist, { balls_remaining: 3, wickets_remaining: 2 }, "medium");
+  ok(plan.type === "leg_cutter" && plan.line_hint < 0, "attacks away from cover");
+  const death = S.aiBowlingPlan(rng, [], { balls_remaining: 2, wickets_remaining: 2 }, "medium");
+  ok(death.type === "yorker", "yorker at the death");
+}
+// 16. Catch grades + dives + throws.
+{
+  ok(S.catchGrade(60, 1.2, 6, false) === "easy", "easy catch");
+  ok(S.catchGrade(112, 0.8, 2, false) === "difficult", "difficult catch");
+  ok(S.catchGrade(95, 1, 1.5, true) === "edge", "edge catch");
+  const f = S.defaultField(1.0)[2]; // cover
+  ok(S.diveDecision(f, 0.8, 18, true, false) === "none", "no dive in reach");
+  ok(S.diveDecision(f, 2.2, 22, true, false) === "boundary_save", "boundary save dive");
+  const cannon = { throwSpeed: 26, throwAcc: 0.85 };
+  const noodle = { throwSpeed: 16, throwAcc: 0.85 };
+  ok(S.throwReturn(cannon, 45).travel_time < S.throwReturn(noodle, 45).travel_time,
+     "strong arm returns faster");
+}
+// 17. Wides in a live match never consume legal balls and matches complete.
+{
+  let widesSeen = 0;
+  for (let seed = 0; seed < 25; seed++) {
+    const rng = mulberry32(1000 + seed);
+    const m = new S.SuperOverMatchJS(); m.start();
+    let guard = 0;
+    while (m.phase !== "completed" && ++guard < 200) {
+      if (m.phase === "break") { m.startSecondInnings(); continue; }
+      const ctx = { score: m.innings[0].runs, balls_remaining: m.ballsRemaining(),
+                    wickets_remaining: m.wicketsRemaining() };
+      const strat = S.aiBowlingPlan(rng, [], ctx, "easy");
+      const sampled = S.buildDelivery(strat.type, rng, 0.6,
+        { lineHint: strat.line_hint, lengthHint: strat.length_hint });
+      const off = (rng() + rng() - 1) * 0.062 * 3;
+      const bowled = S.bowlWithRelease(rng, sampled, off, 0.6, "easy");
+      if (bowled.wide) { m.recordDelivery({ kind: "wide", runs: 1 }); widesSeen++; continue; }
+      m.recordDelivery({ kind: "legal", runs: 0 });
+    }
+    ok(m.phase === "completed", "match completes with wides");
+    ok(m.innings[0].legal_balls <= 6 && m.innings[1].legal_balls <= 6, "legal ball cap holds");
+  }
+  ok(widesSeen > 0, "wides occur in live play");
+}
+
+console.log("SMOKE PASS (phase 1+2+3+4)");

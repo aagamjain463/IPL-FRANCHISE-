@@ -19,6 +19,8 @@ GRAVITY = 9.81
 DELIVERY_TYPES = [
     "fast_straight", "fast_inswinger", "fast_outswinger", "yorker",
     "full_ball", "good_length", "short_ball", "bouncer",
+    # Phase 4 variations: pace-off and seam-position deliveries.
+    "off_cutter", "leg_cutter", "slower_ball",
 ]
 
 # name -> dict(speed=(lo,hi), line=(lo,hi), length=(lo,hi), swing=(lo,hi),
@@ -40,6 +42,15 @@ DELIVERY_SPECS = {
                             swing=(-0.20, 0.20), seam=(-0.25, 0.25), bounce=(1.00, 1.15)),
     "bouncer":         dict(speed=(133, 145), line=(-0.55, 0.05), length=(0.88, 0.97),
                             swing=(-0.15, 0.15), seam=(-0.15, 0.15), bounce=(1.10, 1.30)),
+    # --- Phase 4 variations -------------------------------------------------
+    # Cutters grip the pitch: less pace, pronounced seam movement.
+    "off_cutter":      dict(speed=(112, 122), line=(-0.10, 0.35), length=(0.40, 0.60),
+                            swing=(-0.20, 0.20), seam=(0.30, 0.75), bounce=(0.90, 1.00)),
+    "leg_cutter":      dict(speed=(112, 122), line=(-0.35, 0.10), length=(0.40, 0.60),
+                            swing=(-0.20, 0.20), seam=(-0.75, -0.30), bounce=(0.90, 1.00)),
+    # Slower ball: big pace-off, fullish, minimal movement - deception only.
+    "slower_ball":     dict(speed=(102, 114), line=(-0.20, 0.30), length=(0.15, 0.45),
+                            swing=(-0.25, 0.25), seam=(-0.20, 0.20), bounce=(0.88, 0.98)),
 }
 
 # Default over plan: weight per type (need not sum to 1).
@@ -47,7 +58,76 @@ DEFAULT_PLAN = {
     "good_length": 0.20, "fast_straight": 0.15, "full_ball": 0.12,
     "short_ball": 0.13, "fast_inswinger": 0.12, "fast_outswinger": 0.10,
     "yorker": 0.10, "bouncer": 0.08,
+    "off_cutter": 0.05, "leg_cutter": 0.05, "slower_ball": 0.05,
 }
+
+# --- Phase 4 bowler profiles ---------------------------------------------------
+# Each profile tunes pace, movement and the deliveries it leans on. Accuracy is
+# a base value; the release mechanic and difficulty move the actual execution.
+
+BOWLER_PROFILES = {
+    "fast": dict(
+        name="FAST BOWLER", speed_mult=1.06, swing_mult=0.7, seam_mult=0.8,
+        accuracy=0.78,
+        plan={"fast_straight": 0.24, "good_length": 0.18, "short_ball": 0.16,
+              "bouncer": 0.14, "yorker": 0.10, "fast_inswinger": 0.08,
+              "fast_outswinger": 0.06, "full_ball": 0.04},
+    ),
+    "swing": dict(
+        name="SWING BOWLER", speed_mult=0.96, swing_mult=1.35, seam_mult=0.7,
+        accuracy=0.74,
+        plan={"fast_inswinger": 0.24, "fast_outswinger": 0.22, "good_length": 0.16,
+              "full_ball": 0.12, "fast_straight": 0.10, "yorker": 0.08,
+              "short_ball": 0.05, "slower_ball": 0.03},
+    ),
+    "variation": dict(
+        name="PACE VARIATION BOWLER", speed_mult=0.92, swing_mult=0.8, seam_mult=1.25,
+        accuracy=0.80,
+        plan={"off_cutter": 0.20, "leg_cutter": 0.18, "slower_ball": 0.16,
+              "good_length": 0.16, "yorker": 0.12, "full_ball": 0.08,
+              "fast_straight": 0.06, "short_ball": 0.04},
+    ),
+}
+
+# Legality: how far off-line a delivery can be before it is called wide.
+WIDE_LINE_THRESHOLD = 0.95
+
+
+def delivery_legality(line):
+    """'legal' or 'wide'. Wides add a run and consume NO legal ball."""
+    return "wide" if abs(line) > WIDE_LINE_THRESHOLD else "legal"
+
+
+# Loss-of-control spray: a bowler occasionally lets the ball go completely.
+# Probability = (1 - accuracy) * rate(difficulty) - hard bowlers spray less.
+SPRAY_RATE = {"easy": 0.100, "medium": 0.080, "hard": 0.060}
+
+
+def spray_probability(accuracy, difficulty="medium"):
+    return min(0.12, (1.0 - clamp(accuracy, 0.0, 1.0))
+               * SPRAY_RATE.get(difficulty, SPRAY_RATE["medium"]))
+
+
+def bowl_with_release(rng, delivery, release_offset, accuracy=0.75,
+                      difficulty="medium"):
+    """Full bowling pipeline: release timing -> drift, then a control check.
+
+    Returns dict(delivery, quality, wide). `wide` deliveries are illegal:
+    they add one extra run and consume NO legal ball (rules engine already
+    supports DeliveryOutcome.wide()).
+    """
+    d = apply_release(delivery, release_offset, accuracy=accuracy)
+    quality = release_quality(release_offset)
+    if rng.random() < spray_probability(accuracy, difficulty):
+        sign = 1 if d.line >= 0 else -1
+        d = Delivery(
+            speed_kph=d.speed_kph,
+            line=clamp(sign * (0.98 + rng.random() * 0.22), -1.2, 1.2),
+            length=d.length, swing=d.swing, dtype=d.dtype, seam=d.seam,
+            bounce=d.bounce, release_height=d.release_height,
+        )
+    return {"delivery": d, "quality": quality,
+            "wide": delivery_legality(d.line) == "wide"}
 
 
 def _range(rng, lo_hi):
@@ -55,24 +135,95 @@ def _range(rng, lo_hi):
     return lo + (hi - lo) * rng.random()
 
 
-def build_delivery(dtype, rng, accuracy=0.75, plan=None):
+def build_delivery(dtype, rng, accuracy=0.75, plan=None, profile=None,
+                   line_hint=None, length_hint=None):
     """Samples one DeliveryData for a type. Accuracy (0..1) scales the
-    line/length dispersion around the sampled target."""
+    line/length dispersion around the sampled target.
+
+    Phase 4: `profile` (a BOWLER_PROFILES entry) scales speed/swing/seam and
+    can override accuracy; `line_hint`/`length_hint` bias the intended spot
+    (used by the AI bowling strategy) without changing the dispersion model.
+    """
     spec = DELIVERY_SPECS[dtype]
+    prof = BOWLER_PROFILES.get(profile) if profile else None
+    if prof is not None and accuracy is None:
+        accuracy = prof["accuracy"]
+
     line = _range(rng, spec["line"])
     length = _range(rng, spec["length"])
+    if line_hint is not None:
+        line = clamp(line * 0.4 + line_hint * 0.6, -1.2, 1.2)
+    if length_hint is not None:
+        length = clamp(length * 0.4 + length_hint * 0.6, 0.0, 1.0)
     # Dispersion: imperfect execution blurs the intended target.
-    disp = (1.0 - clamp(accuracy, 0.0, 1.0))
+    disp = (1.0 - clamp(accuracy if accuracy is not None else 0.75, 0.0, 1.0))
     line = clamp(line + (rng.random() * 2 - 1) * 0.45 * disp, -1.2, 1.2)
     length = clamp(length + (rng.random() * 2 - 1) * 0.30 * disp, 0.0, 1.0)
+
+    speed = _range(rng, spec["speed"])
+    swing = _range(rng, spec["swing"])
+    seam = _range(rng, spec["seam"])
+    if prof is not None:
+        speed *= prof["speed_mult"]
+        swing = clamp(swing * prof["swing_mult"], -1.5, 1.5)
+        seam = clamp(seam * prof["seam_mult"], -1.5, 1.5)
     return Delivery(
-        speed_kph=round(_range(rng, spec["speed"]), 1),
+        speed_kph=round(speed, 1),
         line=line,
         length=length,
-        swing=_range(rng, spec["swing"]),
+        swing=swing,
         dtype=dtype,
-        seam=_range(rng, spec["seam"]),
+        seam=seam,
         bounce=_range(rng, spec["bounce"]),
+    )
+
+
+# --- Phase 4 release control ---------------------------------------------------
+# The player's release window. PERFECT (|offset| <= 0.03 s) delivers the
+# intended ball; early/late releases drift the length and line in opposite
+# directions. Easy to learn, difficult to master - a late release shortens
+# the ball rather than ruining it.
+
+RELEASE_PERFECT_WINDOW = 0.03
+RELEASE_MAX_ERROR = 0.14
+
+
+def release_quality(offset):
+    a = abs(offset)
+    if a <= RELEASE_PERFECT_WINDOW:
+        return "perfect"
+    if a <= 0.07:
+        return "good"
+    if a <= RELEASE_MAX_ERROR:
+        return "early" if offset < 0 else "late"
+    return "very_early" if offset < 0 else "very_late"
+
+
+def apply_release(delivery, release_offset, accuracy=0.75):
+    """Applies the bowler's release timing to a sampled delivery (returns a
+    NEW Delivery). Perfect release = as intended. Early release over-pitches
+    (fuller, drifting wider); late release comes out short with the line
+    pulled in. Accuracy reduces the drift magnitude. Wides come from the
+    separate control check in bowl_with_release, not from this drift.
+    """
+    q = release_quality(release_offset)
+    if q == "perfect":
+        return delivery
+    err = clamp(abs(release_offset) / RELEASE_MAX_ERROR, 0.0, 1.6)
+    blur = 1.25 - clamp(accuracy, 0.0, 1.0)          # poor bowlers drift more
+    sign = 1 if delivery.line >= 0 else -1
+    if release_offset < 0:                            # early: fuller + wider
+        length = clamp(delivery.length - 0.34 * err * blur, 0.0, 1.0)
+        line_drift = 0.40 * err * blur
+        line = clamp(delivery.line + line_drift * sign, -1.2, 1.2)
+    else:                                             # late: shorter + inward
+        length = clamp(delivery.length + 0.30 * err * blur, 0.0, 1.0)
+        line_drift = 0.30 * err * blur
+        line = clamp(delivery.line - line_drift * sign, -1.2, 1.2)
+    return Delivery(
+        speed_kph=delivery.speed_kph, line=line, length=length,
+        swing=delivery.swing, dtype=delivery.dtype, seam=delivery.seam,
+        bounce=delivery.bounce, release_height=delivery.release_height,
     )
 
 

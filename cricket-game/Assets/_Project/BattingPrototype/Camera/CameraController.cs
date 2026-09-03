@@ -64,6 +64,19 @@ namespace CricketGame.BattingPrototype.Camera
         }
 
         /// <summary>
+        /// Phase 4 (spec section 3): timing-quality camera response. A subtle
+        /// FOV breath - never a shake - so perfect contact FEELS bigger
+        /// without ever disorienting the player.
+        /// </summary>
+        public void OnShotQuality(float intensity)
+        {
+            if (intensity <= 0.01f) return;
+            qualityPunch = Mathf.Clamp01(intensity);
+        }
+
+        private float qualityPunch;
+
+        /// <summary>
         /// Shot played: follow the ball into the field. Boundary shots stay
         /// followed until the ball settles (untilReturn = true).
         /// </summary>
@@ -207,6 +220,17 @@ namespace CricketGame.BattingPrototype.Camera
                 transform.rotation = Quaternion.Slerp(transform.rotation,
                     Quaternion.LookRotation(look - pos), 0.55f);
             lastLook = look;
+
+            // Phase 4 timing-quality FOV breath (subtle, never a shake).
+            if (qualityPunch > 0.001f)
+            {
+                cam.fieldOfView = 55f - qualityPunch * 4f;
+                qualityPunch = Mathf.MoveTowards(qualityPunch, 0f, Time.deltaTime * 3f);
+            }
+            else if (Mathf.Abs(cam.fieldOfView - 55f) > 0.01f)
+            {
+                cam.fieldOfView = Mathf.MoveTowards(cam.fieldOfView, 55f, Time.deltaTime * 12f);
+            }
         }
     }
 }

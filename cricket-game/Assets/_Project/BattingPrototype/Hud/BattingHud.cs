@@ -435,6 +435,23 @@ namespace CricketGame.BattingPrototype.Hud
             popupRoutine = StartCoroutine(PopupRoutine(message, color, duration));
         }
 
+        /// <summary>Phase 4: colour-coded timing-quality flash (spec section 3).
+        /// PERFECT reads green, MISS red, in between warm gold.</summary>
+        public void ShowTimingQuality(string label, TimingWindow window)
+        {
+            if (label == "MISSED") return;   // the miss popup already covers it
+            Color c;
+            switch (window)
+            {
+                case TimingWindow.Perfect: c = new Color(0.45f, 1f, 0.5f); break;
+                case TimingWindow.Good: c = new Color(0.75f, 0.95f, 0.5f); break;
+                case TimingWindow.Early:
+                case TimingWindow.Late: c = new Color(1f, 0.8f, 0.35f); break;
+                default: c = new Color(1f, 0.55f, 0.3f); break;
+            }
+            ShowPopup(label, c, 0.55f);
+        }
+
         private IEnumerator PopupRoutine(string message, Color color, float duration)
         {
             popupText.text = message;

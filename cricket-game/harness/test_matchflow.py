@@ -309,6 +309,8 @@ class FullMatchSoakTests(unittest.TestCase):
         for seed in range(80):
             _, log = mf.play_match(seed)
             for entry in log:
+                if "result" not in entry:      # Phase 4 wide: no bat outcome
+                    continue
                 kinds.add(entry["result"]["outcome_kind"])
         self.assertIn("caught", kinds)    # TEST 7 live
         self.assertIn("four", kinds)      # TEST 10 live
@@ -337,10 +339,11 @@ class FullMatchSoakTests(unittest.TestCase):
         self.assertNotAlmostEqual(easy, hard, delta=0.001)
 
     def test_forced_debug_outcomes_flow_through_the_match(self):
-        m, log = mf.play_match(5, force_innings1="six")
+        # Wides off: the forced-debug path must stay deterministic (36 runs).
+        m, log = mf.play_match(5, force_innings1="six", wides=False)
         # Every first-innings ball resolves as a six.
         for entry in log:
-            if entry["innings"] == 0:
+            if entry["innings"] == 0 and "result" in entry:
                 self.assertEqual(entry["result"]["runs"], 6)
         self.assertEqual(m.first.runs, 36)
 

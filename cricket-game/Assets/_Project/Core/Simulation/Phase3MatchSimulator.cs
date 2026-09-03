@@ -22,6 +22,8 @@ namespace CricketGame.Core.Simulation
         public int InningsIndex;
         public DeliveryType DeliveryType;
         public HeadlessDeliveryResult Result;
+        public bool Wide;               // Phase 4: illegal delivery, no result
+        public string BowlingReason;    // why the bowler chose this ball
     }
 
     /// <summary>
@@ -151,11 +153,26 @@ namespace CricketGame.Core.Simulation
             return DeliveryOutcome.Legal(r.Runs);
         }
 
+        // Phase 4: bowler release-timing scatter (mirrors matchflow_reference).
+        private static float ReleaseSd(AiDifficulty d)
+        {
+            switch (d)
+            {
+                case AiDifficulty.Easy: return 0.062f;
+                case AiDifficulty.Hard: return 0.051f;
+                default: return 0.055f;
+            }
+        }
+
         /// <summary>Simulates a complete Super Over between two AI sides.</summary>
         public static SuperOverMatch PlayMatch(long seed, AiDifficulty difficulty,
                                                out List<HeadlessBallLog> log,
                                                ForcedOutcome forceInnings1 = ForcedOutcome.None,
-                                               ForcedOutcome forceInnings2 = ForcedOutcome.None)
+                                               ForcedOutcome forceInnings2 = ForcedOutcome.None,
+                                               AiBatterArchetype archetype1 = AiBatterArchetype.Balanced,
+                                               AiBatterArchetype archetype2 = AiBatterArchetype.Balanced,
+                                               bool bowlingStrategy = true,
+                                               bool wides = true)
         {
             var rng = new SeededRng(seed);
             var match = new SuperOverMatch(SuperOverConfig.Standard);
@@ -163,10 +180,15 @@ namespace CricketGame.Core.Simulation
             log = new List<HeadlessBallLog>();
 
             var tune = AiDifficultyTuning.For(difficulty);
-            var plan1 = BowlerPlan.Default;
+            var archetypes = new[] { archetype1, archetype2 };
+            var batHistory = new[] { new List<BatterHistoryEntry>(),
+                                     new List<BatterHistoryEntry>() };
+            int safety = 0;
 
             while (!match.IsComplete)
             {
+                if (++safety > 200)
+                    throw new System.InvalidOperationException("PlayMatch did not converge");
                 if (match.Phase == MatchPhase.InningsBreak)
                 {
                     match.StartSecondInnings();
@@ -178,10 +200,6 @@ namespace CricketGame.Core.Simulation
                     ? tune.FieldVsPlayer : tune.FieldForPlayer;
                 var fielders = Fielder.DefaultField(fieldScale);
 
-                var dtype = DeliveryFactory.NextType(plan1, rng);
-                var delivery = DeliveryFactory.Build(dtype, rng, tune.AiBowlingAccuracy);
-                var traj = new DeliveryTrajectory(delivery);
-
                 var ctx = new AiChaseContext
                 {
                     Target = inningsIndex == 1 ? (int?)match.FirstInnings.Runs + 1 : null,
@@ -190,12 +208,73 @@ namespace CricketGame.Core.Simulation
                     WicketsRemaining = match.CurrentInnings.WicketsRemaining,
                 };
 
+                // ---- bowler side: strategy reads the batter, then the ball.
+                DeliveryType dtype;
+                float lineHint = float.NaN, lengthHint = float.NaN;
+                string reason = "stock";
+                if (bowlingStrategy)
+                {
+                    var bowlCtx = new AiBowlingContext
+                    {
+                        Score = ctx.Score,
+                        WicketsRemaining = ctx.WicketsRemaining,
+                        BallsRemaining = ctx.BallsRemaining,
+                    };
+                    var bplan = AiBowlingPlanner.Plan(rng, batHistory[inningsIndex].ToArray(),
+                                                      bowlCtx, difficulty);
+                    dtype = bplan.Type;
+                    lineHint = bplan.LineHint;
+                    lengthHint = bplan.LengthHint;
+                    reason = bplan.Reason;
+                }
+                else
+                {
+                    dtype = DeliveryFactory.NextType(BowlerPlan.Default, rng);
+                }
+
+                var delivery = DeliveryFactory.Build(dtype, rng, tune.AiBowlingAccuracy,
+                                                     lineHint, lengthHint);
+
+                // ---- release control + control check; a spray goes WIDE.
+                if (wides)
+                {
+                    float sd = ReleaseSd(difficulty);
+                    float releaseOffset = (rng.NextFloat() + rng.NextFloat() - 1f) * sd * 3f;
+                    var bowled = BowlingPipeline.Bowl(rng, delivery, releaseOffset,
+                                                      tune.AiBowlingAccuracy, difficulty);
+                    delivery = bowled.Delivery;
+                    if (bowled.Wide)
+                    {
+                        match.RecordDelivery(DeliveryOutcome.Wide());
+                        log.Add(new HeadlessBallLog
+                        {
+                            InningsIndex = inningsIndex,
+                            DeliveryType = dtype,
+                            Wide = true,
+                            BowlingReason = reason,
+                        });
+                        continue;
+                    }
+                }
+
+                var traj = new DeliveryTrajectory(delivery);
                 var plan = AiBattingPlanner.Plan(rng, delivery, ctx, difficulty,
-                                                 traj.HitsStumps());
+                                                 traj.HitsStumps(), archetypes[inningsIndex]);
 
                 var engineRng = new SeededRng(rng.Next(int.MaxValue));
                 var force = inningsIndex == 0 ? forceInnings1 : forceInnings2;
                 var res = PlayDelivery(rng, delivery, plan, engineRng, fielders, force);
+
+                // ---- remember the batter's shot so the bowler can adapt.
+                batHistory[inningsIndex].Add(new BatterHistoryEntry
+                {
+                    HasSector = plan.Swing,
+                    Sector = ShotSelector.SectorOf(plan.Angle),
+                    Runs = res.Runs,
+                    Intent = plan.Intent,
+                });
+                if (batHistory[inningsIndex].Count > 6)
+                    batHistory[inningsIndex].RemoveAt(0);
 
                 match.RecordDelivery(ToRulesOutcome(res));
                 log.Add(new HeadlessBallLog
@@ -203,6 +282,7 @@ namespace CricketGame.Core.Simulation
                     InningsIndex = inningsIndex,
                     DeliveryType = dtype,
                     Result = res,
+                    BowlingReason = reason,
                 });
             }
             return match;

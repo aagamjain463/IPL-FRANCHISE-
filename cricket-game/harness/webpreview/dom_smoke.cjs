@@ -76,6 +76,7 @@ const fire = (el, name, ev) => {
   let frames = 0;
   let swipeStartedAt = -1;
   let resultShown = 0;
+  let maxRunsSeen = 0;   // Phase 4: gameplay must actually produce runs
   let playAgainAt = -1;
   const maxFrames = 60 * 120;   // 2 simulated minutes: enough for a full match
 
@@ -103,7 +104,15 @@ const fire = (el, name, ev) => {
       const overlay = els["overlay"];
       const title = els["overlayTitle"] ? els["overlayTitle"].textContent : "";
       if (overlay && overlay.style.display === "flex" && /YOU WIN|YOU LOSE|TIE/.test(title)) {
-        if (playAgainAt < 0) { resultShown++; playAgainAt = frames + 45; }
+        if (playAgainAt < 0) {
+          resultShown++;
+          const m = window.__matchDebug ? window.__matchDebug().match : null;
+          if (m && m.result) {
+            maxRunsSeen = Math.max(maxRunsSeen,
+              m.result.first.runs + m.result.second.runs);
+          }
+          playAgainAt = frames + 45;
+        }
         if (frames >= playAgainAt) {
           fire(els["playAgain"], "pointerdown", { stopPropagation() {} });
           playAgainAt = -1;
@@ -139,6 +148,10 @@ const fire = (el, name, ev) => {
     console.error("FAIL: scoreboard format unexpected:", score);
     process.exit(1);
   }
-  console.log("RESULT SCREENS SHOWN:", resultShown);
+  if (maxRunsSeen < 1) {
+    console.error("FAIL: matches completed with ZERO total runs - gameplay not live");
+    process.exit(1);
+  }
+  console.log("RESULT SCREENS SHOWN:", resultShown, "· max combined runs in a match:", maxRunsSeen);
   console.log("PREVIEW RUNTIME OK (Phase 3 full match)");
 })();

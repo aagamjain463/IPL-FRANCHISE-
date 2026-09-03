@@ -60,9 +60,10 @@ class DeliveryFactoryTests(unittest.TestCase):
         n = 20000
         for _ in range(n):
             counts[bw.next_delivery_type(rng)] += 1
+        total = sum(bw.DEFAULT_PLAN.values())
         for dtype, weight in bw.DEFAULT_PLAN.items():
             frac = counts[dtype] / n
-            self.assertAlmostEqual(frac, weight, delta=0.02)
+            self.assertAlmostEqual(frac, weight / total, delta=0.02)
 
     def test_yorker_is_very_full_and_low(self):
         rng = random.Random(3)

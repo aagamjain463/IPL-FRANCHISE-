@@ -35,8 +35,15 @@ namespace CricketGame.Core.Bowling
                     return Spec(type, 121f, 133f, -0.20f, 0.40f, 0.45f, 0.62f, -0.35f, 0.35f, -0.40f, 0.40f, 0.95f, 1.05f);
                 case DeliveryType.ShortBall:
                     return Spec(type, 129f, 140f, -0.50f, 0.10f, 0.72f, 0.86f, -0.20f, 0.20f, -0.25f, 0.25f, 1.00f, 1.15f);
-                default: // Bouncer
+                case DeliveryType.Bouncer:
                     return Spec(type, 133f, 145f, -0.55f, 0.05f, 0.88f, 0.97f, -0.15f, 0.15f, -0.15f, 0.15f, 1.10f, 1.30f);
+                // --- Phase 4 variations: cutters grip, slower balls deceive.
+                case DeliveryType.OffCutter:
+                    return Spec(type, 112f, 122f, -0.10f, 0.35f, 0.40f, 0.60f, -0.20f, 0.20f, 0.30f, 0.75f, 0.90f, 1.00f);
+                case DeliveryType.LegCutter:
+                    return Spec(type, 112f, 122f, -0.35f, 0.10f, 0.40f, 0.60f, -0.20f, 0.20f, -0.75f, -0.30f, 0.90f, 1.00f);
+                default: // SlowerBall
+                    return Spec(type, 102f, 114f, -0.20f, 0.30f, 0.15f, 0.45f, -0.25f, 0.25f, -0.20f, 0.20f, 0.88f, 0.98f);
             }
         }
 
@@ -71,6 +78,10 @@ namespace CricketGame.Core.Bowling
         public float WGoodLength;
         public float WShortBall;
         public float WBouncer;
+        // Phase 4 variations.
+        public float WOffCutter;
+        public float WLegCutter;
+        public float WSlowerBall;
 
         /// <summary>0..1 execution accuracy: 1 = hits the planned spot exactly.</summary>
         public float Accuracy;
@@ -89,6 +100,9 @@ namespace CricketGame.Core.Bowling
                     WGoodLength = 0.20f,
                     WShortBall = 0.13f,
                     WBouncer = 0.08f,
+                    WOffCutter = 0.05f,
+                    WLegCutter = 0.05f,
+                    WSlowerBall = 0.05f,
                     Accuracy = 0.75f
                 };
             }
@@ -105,7 +119,10 @@ namespace CricketGame.Core.Bowling
                 case DeliveryType.FullBall: return WFullBall;
                 case DeliveryType.GoodLength: return WGoodLength;
                 case DeliveryType.ShortBall: return WShortBall;
-                default: return WBouncer;
+                case DeliveryType.Bouncer: return WBouncer;
+                case DeliveryType.OffCutter: return WOffCutter;
+                case DeliveryType.LegCutter: return WLegCutter;
+                default: return WSlowerBall;
             }
         }
     }
@@ -121,7 +138,8 @@ namespace CricketGame.Core.Bowling
         {
             DeliveryType.FastStraight, DeliveryType.FastInswinger, DeliveryType.FastOutswinger,
             DeliveryType.Yorker, DeliveryType.FullBall, DeliveryType.GoodLength,
-            DeliveryType.ShortBall, DeliveryType.Bouncer
+            DeliveryType.ShortBall, DeliveryType.Bouncer,
+            DeliveryType.OffCutter, DeliveryType.LegCutter, DeliveryType.SlowerBall
         };
 
         /// <summary>Weighted pick of the next delivery type from the plan.</summary>
@@ -144,9 +162,24 @@ namespace CricketGame.Core.Bowling
         /// <summary>Samples one delivery of the given type (accuracy applied).</summary>
         public static DeliveryData Build(DeliveryType type, IRng rng, float accuracy)
         {
+            return Build(type, rng, accuracy, float.NaN, float.NaN);
+        }
+
+        /// <summary>
+        /// Samples one delivery. Phase 4: optional line/length hints (from the
+        /// AI bowling strategy) bias the intended spot - 60% hint, 40% sampled
+        /// - without changing the dispersion model. NaN = no hint.
+        /// </summary>
+        public static DeliveryData Build(DeliveryType type, IRng rng, float accuracy,
+                                         float lineHint, float lengthHint)
+        {
             DeliverySpec spec = DeliverySpec.For(type);
             float line = Range(rng, spec.LineMin, spec.LineMax);
             float length = Range(rng, spec.LengthMin, spec.LengthMax);
+            if (!float.IsNaN(lineHint))
+                line = Clamp(line * 0.4f + lineHint * 0.6f, -1.2f, 1.2f);
+            if (!float.IsNaN(lengthHint))
+                length = Clamp01(length * 0.4f + lengthHint * 0.6f);
 
             float acc = accuracy < 0f ? 0f : accuracy > 1f ? 1f : accuracy;
             float disp = 1f - acc;
@@ -200,7 +233,10 @@ namespace CricketGame.Core.Bowling
                 case DeliveryType.FullBall: return "FULL";
                 case DeliveryType.GoodLength: return "GOOD LENGTH";
                 case DeliveryType.ShortBall: return "SHORT";
-                default: return "BOUNCER";
+                case DeliveryType.Bouncer: return "BOUNCER";
+                case DeliveryType.OffCutter: return "OFF-CUTTER";
+                case DeliveryType.LegCutter: return "LEG-CUTTER";
+                default: return "SLOWER BALL";
             }
         }
     }

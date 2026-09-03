@@ -13,6 +13,47 @@ namespace CricketGame.Core.AI
 
     public enum AiDifficulty { Easy, Medium, Hard }
 
+    /// <summary>Phase 4 batter personality (spec section 8).</summary>
+    public enum AiBatterArchetype { Aggressive, Balanced, Defensive }
+
+    /// <summary>
+    /// Archetype tuning: multiplies the situation-based intent weights and
+    /// nudges swing/leave discipline. Deterministic - no extra RNG
+    /// consumption - so Balanced reproduces Phase 3 behaviour bit-for-bit.
+    /// </summary>
+    public struct AiArchetypeTuning
+    {
+        public float WDefensive, WNormal, WAggressive, WLofted;
+        public float SwingChanceDelta;
+        public float LeaveDelta;
+        public float TimingSdMult;
+
+        public static AiArchetypeTuning For(AiBatterArchetype a)
+        {
+            switch (a)
+            {
+                case AiBatterArchetype.Aggressive:
+                    return new AiArchetypeTuning
+                    {
+                        WDefensive = 0.45f, WNormal = 0.90f, WAggressive = 1.35f, WLofted = 1.45f,
+                        SwingChanceDelta = 0.03f, LeaveDelta = -0.10f, TimingSdMult = 1.06f
+                    };
+                case AiBatterArchetype.Defensive:
+                    return new AiArchetypeTuning
+                    {
+                        WDefensive = 1.80f, WNormal = 1.10f, WAggressive = 0.55f, WLofted = 0.30f,
+                        SwingChanceDelta = -0.05f, LeaveDelta = 0.12f, TimingSdMult = 0.92f
+                    };
+                default: // Balanced
+                    return new AiArchetypeTuning
+                    {
+                        WDefensive = 1.00f, WNormal = 1.00f, WAggressive = 1.00f, WLofted = 1.00f,
+                        SwingChanceDelta = 0.00f, LeaveDelta = 0.00f, TimingSdMult = 1.00f
+                    };
+            }
+        }
+    }
+
     public struct AiDifficultyTuning
     {
         public float TimingSd;          // multiplier on state timing spread
@@ -109,27 +150,53 @@ namespace CricketGame.Core.AI
             }
         }
 
-        private static ShotIntent PickIntent(IRng rng, AiAggressionState s)
+        // Base situation weights {defensive, normal, aggressive, lofted}.
+        private static void BaseWeights(AiAggressionState s, float[] w)
         {
-            float roll = rng.NextFloat();
             switch (s)
             {
                 case AiAggressionState.Safe:
-                    return roll < 0.35f ? ShotIntent.Defensive : ShotIntent.Normal;
+                    w[0] = 0.35f; w[1] = 0.65f; w[2] = 0.00f; w[3] = 0.00f; break;
                 case AiAggressionState.Balanced:
-                    if (roll < 0.05f) return ShotIntent.Defensive;
-                    if (roll < 0.70f) return ShotIntent.Normal;
-                    if (roll < 0.95f) return ShotIntent.Aggressive;
-                    return ShotIntent.Lofted;
+                    w[0] = 0.05f; w[1] = 0.65f; w[2] = 0.25f; w[3] = 0.05f; break;
                 case AiAggressionState.Aggressive:
-                    if (roll < 0.30f) return ShotIntent.Normal;
-                    if (roll < 0.75f) return ShotIntent.Aggressive;
-                    return ShotIntent.Lofted;
-                default:
-                    if (roll < 0.10f) return ShotIntent.Normal;
-                    if (roll < 0.45f) return ShotIntent.Aggressive;
-                    return ShotIntent.Lofted;
+                    w[0] = 0.00f; w[1] = 0.30f; w[2] = 0.45f; w[3] = 0.25f; break;
+                default: // Desperate
+                    w[0] = 0.00f; w[1] = 0.10f; w[2] = 0.35f; w[3] = 0.55f; break;
             }
+        }
+
+        /// <summary>Situation sets the base weights; archetype rescales them.
+        /// With the Balanced archetype this reproduces the Phase 3 thresholds
+        /// exactly (weights sum to 1 and match the old roll cutoffs).</summary>
+        private static ShotIntent PickIntent(IRng rng, AiAggressionState s,
+                                             AiArchetypeTuning arch)
+        {
+            float[] w = new float[4];
+            BaseWeights(s, w);
+            w[0] *= arch.WDefensive;
+            w[1] *= arch.WNormal;
+            w[2] *= arch.WAggressive;
+            w[3] *= arch.WLofted;
+
+            float total = w[0] + w[1] + w[2] + w[3];
+            float roll = rng.NextFloat() * (total > 0f ? total : 1f);
+            float acc = 0f;
+            for (int i = 0; i < 4; i++)
+            {
+                acc += w[i];
+                if (roll < acc)
+                {
+                    switch (i)
+                    {
+                        case 0: return ShotIntent.Defensive;
+                        case 1: return ShotIntent.Normal;
+                        case 2: return ShotIntent.Aggressive;
+                        default: return ShotIntent.Lofted;
+                    }
+                }
+            }
+            return ShotIntent.Lofted;
         }
 
         /// <summary>Near-gaussian offset plus occasional outright errors.</summary>
@@ -153,9 +220,11 @@ namespace CricketGame.Core.AI
         /// <summary>Decides how the AI plays one delivery.</summary>
         public static AiBattingPlan Plan(IRng rng, DeliveryData delivery,
                                          AiChaseContext ctx, AiDifficulty difficulty,
-                                         bool? hitsStumpsHint)
+                                         bool? hitsStumpsHint,
+                                         AiBatterArchetype archetype = AiBatterArchetype.Balanced)
         {
             AiDifficultyTuning tune = AiDifficultyTuning.For(difficulty);
+            AiArchetypeTuning arch = AiArchetypeTuning.For(archetype);
 
             AiAggressionState state;
             int? required = null;
@@ -176,7 +245,10 @@ namespace CricketGame.Core.AI
             }
 
             StateSkill skill = SkillOf(state);
-            float sd = skill.TimingSd * tune.TimingSd;
+            // Phase 4 archetype: personality nudges swing/leave discipline.
+            float swingChance = Clamp(skill.SwingChance + arch.SwingChanceDelta, 0f, 1f);
+            float leaveWide = Clamp(skill.LeaveWide + arch.LeaveDelta, 0f, 0.9f);
+            float sd = skill.TimingSd * tune.TimingSd * arch.TimingSdMult;
             float mistake = tune.Mistake + (state == AiAggressionState.Desperate ? 0.14f : 0f);
 
             var plan = new AiBattingPlan { State = state };
@@ -192,20 +264,20 @@ namespace CricketGame.Core.AI
             bool hitsStumps = hitsStumpsHint ?? (delivery.Line * 0.45f <= 0.18f
                                                  && delivery.Line * 0.45f >= -0.18f);
             if (state == AiAggressionState.Safe && wideBall && !hitsStumps
-                && rng.NextFloat() < skill.LeaveWide)
+                && rng.NextFloat() < leaveWide)
             {
                 plan.LeaveReason = "wide_outside_off";
                 return plan;
             }
 
-            if (rng.NextFloat() > skill.SwingChance)
+            if (rng.NextFloat() > swingChance)
             {
                 plan.LeaveReason = "held_back";
                 return plan;
             }
 
             plan.Swing = true;
-            plan.Intent = PickIntent(rng, state);
+            plan.Intent = PickIntent(rng, state, arch);
 
             // Aim with the ball's line: off-stump balls driven through cover,
             // leg-side balls flicked square-ish. Desperate swings go straight.

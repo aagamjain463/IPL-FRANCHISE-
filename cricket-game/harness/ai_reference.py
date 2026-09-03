@@ -60,9 +60,37 @@ STATE_SKILL = {
     "desperate":  (1.00, 0.075, 0.00),
 }
 
+# --- Phase 4: batter archetypes (spec section 8) ------------------------------
+# Personality multiplies the situation-based state weights - the chase logic
+# still dominates, but an aggressive character attacks earlier and a
+# defensive one protects their wicket first. Deterministic weight shaping:
+# no extra RNG consumption, so 'balanced' reproduces Phase 3 behaviour
+# bit-for-bit.
+
+ARCHETYPES = ("aggressive", "balanced", "defensive")
+
+# archetype -> {intent: multiplier} plus swing/leave adjustments
+ARCHETYPE_TUNING = {
+    "aggressive": dict(intents={"defensive": 0.45, "normal": 0.90,
+                                "aggressive": 1.35, "lofted": 1.45},
+                       swing_chance_delta=0.03, leave_delta=-0.10,
+                       timing_sd_mult=1.06),
+    "balanced":   dict(intents={"defensive": 1.00, "normal": 1.00,
+                                "aggressive": 1.00, "lofted": 1.00},
+                       swing_chance_delta=0.0, leave_delta=0.0,
+                       timing_sd_mult=1.00),
+    "defensive":  dict(intents={"defensive": 1.80, "normal": 1.10,
+                                "aggressive": 0.55, "lofted": 0.30},
+                       swing_chance_delta=-0.05, leave_delta=0.12,
+                       timing_sd_mult=0.92),
+}
+
 
 def _weighted_pick(rng, weights):
-    roll = rng.random()
+    total = sum(weights.values())
+    if total <= 0:
+        return list(weights.keys())[-1]
+    roll = rng.random() * total
     acc = 0.0
     for k, v in weights.items():
         acc += v
@@ -82,16 +110,18 @@ def _timing_offset(rng, sd, mistake):
 
 
 def ai_batting_plan(rng, delivery, ctx, difficulty="medium",
-                    hits_stumps_hint=None):
+                    hits_stumps_hint=None, archetype="balanced"):
     """Decides how the AI plays one delivery.
 
     ctx: dict(target, score, balls_remaining including this ball,
               wickets_remaining) - for the first innings the chase fields may
               be None and the AI bats 'balanced with intent to score'.
+    archetype (Phase 4): 'aggressive' | 'balanced' | 'defensive' personality.
     Returns dict(state, swing, intent, angle, strength, offset, foot_target,
                  leave_reason).
     """
     tune = DIFFICULTY_TUNING[difficulty]
+    arch = ARCHETYPE_TUNING.get(archetype, ARCHETYPE_TUNING["balanced"])
 
     if ctx.get("target") is None:
         # First innings: score, but without chase pressure.
@@ -107,7 +137,10 @@ def ai_batting_plan(rng, delivery, ctx, difficulty="medium",
             state = "balanced"
 
     swing_chance, sd, leave_wide = STATE_SKILL[state]
-    sd *= tune["timing_sd"]
+    # Phase 4 archetype: personality nudges swing/leave discipline and timing.
+    swing_chance = clamp(swing_chance + arch["swing_chance_delta"], 0.0, 1.0)
+    leave_wide = clamp(leave_wide + arch["leave_delta"], 0.0, 0.9)
+    sd *= tune["timing_sd"] * arch["timing_sd_mult"]
     mistake = tune["mistake"] + (0.14 if state == "desperate" else 0.0)
 
     plan = {"state": state, "swing": False, "intent": "normal",
@@ -138,7 +171,9 @@ def ai_batting_plan(rng, delivery, ctx, difficulty="medium",
         return plan
 
     plan["swing"] = True
-    plan["intent"] = _weighted_pick(rng, STATE_INTENTS[state])
+    # Situation sets the base weights; archetype personality rescales them.
+    weights = {k: v * arch["intents"][k] for k, v in STATE_INTENTS[state].items()}
+    plan["intent"] = _weighted_pick(rng, weights)
     # Aim with the ball's line: off-stump balls driven through cover,
     # leg-side balls flicked square-ish. Desperate swings go straight/lofted.
     if state == "desperate":

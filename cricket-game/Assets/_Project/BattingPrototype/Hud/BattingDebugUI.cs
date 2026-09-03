@@ -106,8 +106,24 @@ namespace CricketGame.BattingPrototype.Hud
             BuildButton(rect, "BALLS +1", () => NudgeInnings(0, 0, 1), -114, 312, 96, 26);
             BuildButton(rect, "RESET MATCH", ResetMatch, -322, 346, 150, 26);
             BuildButton(rect, "END INNINGS", EndInnings, -164, 346, 130, 26);
+            // Phase 4: cycle the AI batter's personality.
+            archBtnLabel = BuildButton(rect, "AI: BALANCED", CycleArchetype, -26, 346, 128, 26);
 
             SetVisible(StartVisible);
+        }
+
+        private Text archBtnLabel;
+
+        private void CycleArchetype()
+        {
+            var cur = matchCtl.AiArchetype;
+            var next = cur == CricketGame.Core.AI.AiBatterArchetype.Balanced
+                ? CricketGame.Core.AI.AiBatterArchetype.Aggressive
+                : cur == CricketGame.Core.AI.AiBatterArchetype.Aggressive
+                    ? CricketGame.Core.AI.AiBatterArchetype.Defensive
+                    : CricketGame.Core.AI.AiBatterArchetype.Balanced;
+            matchCtl.AiArchetype = next;
+            archBtnLabel.text = "AI: " + next.ToString().ToUpper();
         }
 
         // ------------------------------------------------------------- phase 3 debug

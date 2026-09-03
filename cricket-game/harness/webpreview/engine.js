@@ -315,7 +315,8 @@ function resolveContact(rand, delivery, shot, direction, timingOffset, windowKin
 
 /* ---------------- bowling factory ---------------- */
 const DELIVERY_TYPES = ["fast_straight", "fast_inswinger", "fast_outswinger", "yorker",
-                        "full_ball", "good_length", "short_ball", "bouncer"];
+                        "full_ball", "good_length", "short_ball", "bouncer",
+                        "off_cutter", "leg_cutter", "slower_ball"];
 
 const DELIVERY_SPECS = {
   fast_straight:   { speed: [132, 142], line: [-0.18, 0.18], length: [0.45, 0.65], swing: [-0.15, 0.15], seam: [-0.25, 0.25], bounce: [0.95, 1.05] },
@@ -326,32 +327,50 @@ const DELIVERY_SPECS = {
   good_length:     { speed: [121, 133], line: [-0.20, 0.40], length: [0.45, 0.62], swing: [-0.35, 0.35], seam: [-0.40, 0.40], bounce: [0.95, 1.05] },
   short_ball:      { speed: [129, 140], line: [-0.50, 0.10], length: [0.72, 0.86], swing: [-0.20, 0.20], seam: [-0.25, 0.25], bounce: [1.00, 1.15] },
   bouncer:         { speed: [133, 145], line: [-0.55, 0.05], length: [0.88, 0.97], swing: [-0.15, 0.15], seam: [-0.15, 0.15], bounce: [1.10, 1.30] },
+  off_cutter:      { speed: [112, 122], line: [-0.10, 0.35], length: [0.40, 0.60], swing: [-0.20, 0.20], seam: [0.30, 0.75], bounce: [0.90, 1.00] },
+  leg_cutter:      { speed: [112, 122], line: [-0.35, 0.10], length: [0.40, 0.60], swing: [-0.20, 0.20], seam: [-0.75, -0.30], bounce: [0.90, 1.00] },
+  slower_ball:     { speed: [102, 114], line: [-0.20, 0.30], length: [0.15, 0.45], swing: [-0.25, 0.25], seam: [-0.20, 0.20], bounce: [0.88, 0.98] },
 };
 
 const DEFAULT_PLAN = {
   good_length: 0.20, fast_straight: 0.15, full_ball: 0.12, short_ball: 0.13,
   fast_inswinger: 0.12, fast_outswinger: 0.10, yorker: 0.10, bouncer: 0.08,
+  off_cutter: 0.05, leg_cutter: 0.05, slower_ball: 0.05,
 };
 
 const DELIVERY_LABELS = {
   fast_straight: "FAST STRAIGHT", fast_inswinger: "INSWINGER", fast_outswinger: "OUTSWINGER",
   yorker: "YORKER", full_ball: "FULL", good_length: "GOOD LENGTH",
   short_ball: "SHORT", bouncer: "BOUNCER",
+  off_cutter: "OFF-CUTTER", leg_cutter: "LEG-CUTTER", slower_ball: "SLOWER BALL",
 };
 
 function randRange(rand, lohi) { return lohi[0] + (lohi[1] - lohi[0]) * rand(); }
 
-function buildDelivery(dtype, rand, accuracy) {
+function buildDelivery(dtype, rand, accuracy, opts) {
+  // Phase 4 opts: { lineHint, lengthHint, profile } - all optional.
+  opts = opts || {};
   const spec = DELIVERY_SPECS[dtype];
   let line = randRange(rand, spec.line);
   let length = randRange(rand, spec.length);
+  if (opts.lineHint != null) line = clamp(line * 0.4 + opts.lineHint * 0.6, -1.2, 1.2);
+  if (opts.lengthHint != null) length = clamp01(length * 0.4 + opts.lengthHint * 0.6);
   const disp = 1 - clamp01(accuracy);
   line = clamp(line + (rand() * 2 - 1) * 0.45 * disp, -1.2, 1.2);
   length = clamp01(length + (rand() * 2 - 1) * 0.30 * disp);
+  let speed = randRange(rand, spec.speed);
+  let swing = randRange(rand, spec.swing);
+  let seam = randRange(rand, spec.seam);
+  const prof = opts.profile && BOWLER_PROFILES[opts.profile];
+  if (prof) {
+    speed *= prof.speed_mult;
+    swing = clamp(swing * prof.swing_mult, -1.5, 1.5);
+    seam = clamp(seam * prof.seam_mult, -1.5, 1.5);
+  }
   return makeDelivery(
-    Math.round(randRange(rand, spec.speed) * 10) / 10,
-    line, length, randRange(rand, spec.swing),
-    { dtype, seam: randRange(rand, spec.seam), bounce: randRange(rand, spec.bounce) });
+    Math.round(speed * 10) / 10,
+    line, length, swing,
+    { dtype, seam, bounce: randRange(rand, spec.bounce) });
 }
 
 function nextDeliveryType(rand, plan) {
@@ -763,8 +782,21 @@ function aiTimingOffset(rand, sd, mistake) {
   return g * sd * 2;
 }
 
-function aiBattingPlan(rand, delivery, ctx, difficulty, hitsStumpsHint) {
+// Phase 4 (spec section 8): batter personality. Deterministic weight shaping;
+// 'balanced' reproduces Phase 3 behaviour exactly.
+const ARCHETYPES = ["aggressive", "balanced", "defensive"];
+const ARCHETYPE_TUNING = {
+  aggressive: { intents: { defensive: 0.45, normal: 0.90, aggressive: 1.35, lofted: 1.45 },
+                swing_delta: 0.03, leave_delta: -0.10, sd_mult: 1.06 },
+  balanced:   { intents: { defensive: 1.00, normal: 1.00, aggressive: 1.00, lofted: 1.00 },
+                swing_delta: 0.00, leave_delta: 0.00, sd_mult: 1.00 },
+  defensive:  { intents: { defensive: 1.80, normal: 1.10, aggressive: 0.55, lofted: 0.30 },
+                swing_delta: -0.05, leave_delta: 0.12, sd_mult: 0.92 },
+};
+
+function aiBattingPlan(rand, delivery, ctx, difficulty, hitsStumpsHint, archetype) {
   const tune = AI_DIFFICULTY[difficulty];
+  const arch = ARCHETYPE_TUNING[archetype || "balanced"];
   let state, required = null;
   if (ctx.target == null) {
     state = "balanced";
@@ -774,7 +806,9 @@ function aiBattingPlan(rand, delivery, ctx, difficulty, hitsStumpsHint) {
     if (required <= 2 && ctx.balls_remaining >= 1 && state === "safe") state = "balanced";
   }
   const skill = STATE_SKILL[state];
-  const sd = skill.sd * tune.timing_sd;
+  const swingChance = clamp(skill.swing + arch.swing_delta, 0, 1);
+  const leaveWide = clamp(skill.leave_wide + arch.leave_delta, 0, 0.9);
+  const sd = skill.sd * tune.timing_sd * arch.sd_mult;
   const mistake = tune.mistake + (state === "desperate" ? 0.14 : 0);
 
   const plan = { state, swing: false, intent: "normal", angle: 0, strength: 0.8,
@@ -788,15 +822,21 @@ function aiBattingPlan(rand, delivery, ctx, difficulty, hitsStumpsHint) {
   const wideBall = Math.abs(delivery.line) > 0.55;
   const hitsStumps = hitsStumpsHint != null ? hitsStumpsHint
     : Math.abs(delivery.line * 0.45) <= 0.18;
-  if (state === "safe" && wideBall && !hitsStumps && rand() < skill.leave_wide) {
+  if (state === "safe" && wideBall && !hitsStumps && rand() < leaveWide) {
     plan.leave_reason = "wide_outside_off";
     return plan;
   }
-  if (rand() > skill.swing) { plan.leave_reason = "held_back"; return plan; }
+  if (rand() > swingChance) { plan.leave_reason = "held_back"; return plan; }
 
   plan.swing = true;
-  const weights = STATE_INTENTS[state];
-  let roll = rand(), acc = 0;
+  // Situation base weights rescaled by archetype personality.
+  const weights = {};
+  let wTotal = 0;
+  for (const k of ["defensive", "normal", "aggressive", "lofted"]) {
+    weights[k] = STATE_INTENTS[state][k] * arch.intents[k];
+    wTotal += weights[k];
+  }
+  let roll = rand() * (wTotal > 0 ? wTotal : 1), acc = 0;
   for (const k of ["defensive", "normal", "aggressive", "lofted"]) {
     acc += weights[k];
     if (roll < acc) { plan.intent = k; break; }
@@ -841,16 +881,18 @@ class SuperOverMatchJS {
   startSecondInnings() { this.phase = "second"; }
 
   recordDelivery(outcome) {
-    // outcome: { kind: "legal"|"wicket", runs, dismissal }
+    // outcome: { kind: "legal" | "wicket" | "wide", runs, dismissal }
     const inn = this.currentInnings();
     inn.runs += outcome.runs || 0;
     if (outcome.kind === "legal") inn.legal_balls += 1;
     if (outcome.kind === "wicket") {
       inn.wickets = Math.min(this.maxWickets, inn.wickets + 1);
       // replacement batter guards the striker's end (no swap)
-    } else if ((outcome.runs || 0) % 2 === 1) {
+    } else if (outcome.kind === "legal" && (outcome.runs || 0) % 2 === 1) {
       [inn.striker, inn.non_striker] = [inn.non_striker, inn.striker];
     }
+    // Phase 4: "wide" adds a run but consumes NO legal ball and never swaps
+    // strike - mirrors superover_reference.py exactly.
 
     if (this.phase === "second") {
       const target = this.innings[0].runs + 1;
@@ -877,4 +919,224 @@ class SuperOverMatchJS {
     };
     this.phase = "completed";
   }
+}
+
+/* ================= Phase 4: polish & advanced gameplay ================= */
+
+// --- timing FEEL (spec section 3) -------------------------------------------
+const TIMING_TIERS = {
+  perfect:    { power: 1.12, control: 1.00, label: "PERFECT",    haptic: 0.35, bat_shake: 0.30, camera: 0.25 },
+  good:       { power: 0.95, control: 0.90, label: "GOOD",       haptic: 0.18, bat_shake: 0.15, camera: 0.10 },
+  early:      { power: 0.72, control: 0.62, label: "EARLY",      haptic: 0.08, bat_shake: 0.08, camera: 0.04 },
+  late:       { power: 0.72, control: 0.62, label: "LATE",       haptic: 0.08, bat_shake: 0.08, camera: 0.04 },
+  very_early: { power: 0.45, control: 0.30, label: "VERY EARLY", haptic: 0.03, bat_shake: 0.04, camera: 0.02 },
+  very_late:  { power: 0.45, control: 0.30, label: "VERY LATE",  haptic: 0.03, bat_shake: 0.04, camera: 0.02 },
+  missed:     { power: 0.00, control: 0.00, label: "MISSED",     haptic: 0.00, bat_shake: 0.00, camera: 0.00 },
+};
+
+function timingFeedback(window, intent) {
+  const tier = TIMING_TIERS[window] || TIMING_TIERS.missed;
+  const attacking = intent === "aggressive" || intent === "lofted";
+  return {
+    window,
+    power_mult: tier.power,
+    control_mult: tier.control,
+    label: tier.label,
+    haptic: tier.haptic,
+    bat_shake: tier.bat_shake,
+    camera: tier.camera,
+    attack_boost: attacking ? tier.power : Math.min(tier.power, 1.0),
+  };
+}
+
+// --- shot context (spec section 4) -------------------------------------------
+const ALLOWED_SECTORS = {
+  yorker: ["straight", "cover", "mid_wicket"],
+  full:   ["straight", "cover", "mid_wicket", "square_leg", "fine_leg"],
+  good:   ["straight", "cover", "point", "mid_wicket", "square_leg"],
+  short:  ["straight", "point", "square_leg", "mid_wicket", "cover", "third_man", "fine_leg"],
+};
+const SECTOR_ANGLES = {
+  straight: 0, cover: 38 * Math.PI / 180, point: 80 * Math.PI / 180,
+  third_man: 128 * Math.PI / 180, mid_wicket: -38 * Math.PI / 180,
+  square_leg: -80 * Math.PI / 180, fine_leg: -128 * Math.PI / 180,
+};
+const SECTOR_SHOT_FAMILY = {
+  straight: "drive", cover: "drive", point: "cut", third_man: "cut",
+  mid_wicket: "flick", square_leg: "flick", fine_leg: "glance",
+};
+
+function lengthBucket(length) {
+  if (length < 0.12) return "yorker";
+  if (length < 0.35) return "full";
+  if (length < 0.72) return "good";
+  return "short";
+}
+
+function angleDiff(a, b) {
+  return ((a - b + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+}
+
+function validateShotRequest(angleRad, length) {
+  const bucket = lengthBucket(length);
+  const allowed = ALLOWED_SECTORS[bucket];
+  const sector = sectorOf(angleRad);
+  if (allowed.indexOf(sector) >= 0) {
+    return { sector, angle: angleRad, snapped: false,
+             family: SECTOR_SHOT_FAMILY[sector], bucket };
+  }
+  let best = allowed[0], bestD = Infinity;
+  for (const s of allowed) {
+    const d = Math.abs(angleDiff(angleRad, SECTOR_ANGLES[s]));
+    if (d < bestD) { bestD = d; best = s; }
+  }
+  return { sector: best, angle: SECTOR_ANGLES[best], snapped: true,
+           family: SECTOR_SHOT_FAMILY[best], bucket };
+}
+
+// --- advanced bowling (spec sections 5-7) ------------------------------------
+const BOWLER_PROFILES = {
+  fast:      { name: "FAST BOWLER", speed_mult: 1.06, swing_mult: 0.70, seam_mult: 0.80, accuracy: 0.78 },
+  swing:     { name: "SWING BOWLER", speed_mult: 0.96, swing_mult: 1.35, seam_mult: 0.70, accuracy: 0.74 },
+  variation: { name: "PACE VARIATION BOWLER", speed_mult: 0.92, swing_mult: 0.80, seam_mult: 1.25, accuracy: 0.80 },
+};
+
+const WIDE_LINE_THRESHOLD = 0.95;
+function deliveryLegality(line) { return Math.abs(line) > WIDE_LINE_THRESHOLD ? "wide" : "legal"; }
+
+const RELEASE_PERFECT_WINDOW = 0.03;
+const RELEASE_MAX_ERROR = 0.14;
+
+function releaseQuality(offset) {
+  const a = Math.abs(offset);
+  if (a <= RELEASE_PERFECT_WINDOW) return "perfect";
+  if (a <= 0.07) return "good";
+  if (a <= RELEASE_MAX_ERROR) return offset < 0 ? "early" : "late";
+  return offset < 0 ? "very_early" : "very_late";
+}
+
+function applyRelease(delivery, releaseOffset, accuracy) {
+  const q = releaseQuality(releaseOffset);
+  if (q === "perfect") return delivery;
+  const err = Math.min(1.6, Math.abs(releaseOffset) / RELEASE_MAX_ERROR);
+  const blur = 1.25 - clamp01(accuracy);
+  const sign = delivery.line >= 0 ? 1 : -1;
+  const d = Object.assign({}, delivery);
+  if (releaseOffset < 0) {
+    d.length = clamp01(d.length - 0.34 * err * blur);
+    d.line = clamp(d.line + 0.40 * err * blur * sign, -1.2, 1.2);
+  } else {
+    d.length = clamp01(d.length + 0.30 * err * blur);
+    d.line = clamp(d.line - 0.30 * err * blur * sign, -1.2, 1.2);
+  }
+  return d;
+}
+
+const SPRAY_RATE = { easy: 0.100, medium: 0.080, hard: 0.060 };
+function sprayProbability(accuracy, difficulty) {
+  return Math.min(0.12, (1 - clamp01(accuracy)) * (SPRAY_RATE[difficulty] || SPRAY_RATE.medium));
+}
+
+function bowlWithRelease(rand, delivery, releaseOffset, accuracy, difficulty) {
+  let d = applyRelease(delivery, releaseOffset, accuracy);
+  const quality = releaseQuality(releaseOffset);
+  let wide = false;
+  if (rand() < sprayProbability(accuracy, difficulty)) {
+    const sign = d.line >= 0 ? 1 : -1;
+    d = Object.assign({}, d, { line: clamp(sign * (0.98 + rand() * 0.22), -1.2, 1.2) });
+    wide = true;
+  } else {
+    wide = deliveryLegality(d.line) === "wide";
+  }
+  return { delivery: d, quality, wide };
+}
+
+// --- AI bowling strategy (spec section 10) ------------------------------------
+const RELEASE_SD = { easy: 0.062, medium: 0.055, hard: 0.051 };
+
+function aiBowlingPlan(rand, history, ctx, difficulty) {
+  const plan = { type: "good_length", line_hint: 0.10, length_hint: 0.52, reason: "stock_good_length" };
+  const recent = (history || []).slice(-3);
+  const sectors = recent.map(h => h.sector).filter(Boolean);
+  const recentRuns = recent.reduce((s, h) => s + (h.runs || 0), 0);
+
+  if (sectors.length >= 2 && new Set(sectors).size === 1) {
+    const s = sectors[0];
+    if (["cover", "point", "third_man"].indexOf(s) >= 0) {
+      return Object.assign(plan, { type: "leg_cutter", line_hint: -0.25, length_hint: 0.55,
+                                   reason: "attack_stumps_away_from_" + s });
+    }
+    if (["mid_wicket", "square_leg", "fine_leg"].indexOf(s) >= 0) {
+      return Object.assign(plan, { type: "off_cutter", line_hint: 0.30, length_hint: 0.50,
+                                   reason: "take_leg_side_out_" + s });
+    }
+    if (s === "straight") {
+      return Object.assign(plan, { type: "slower_ball", line_hint: 0.05, length_hint: 0.28,
+                                   reason: "deception_down_the_ground" });
+    }
+  }
+  if (recentRuns >= 8) {
+    if (rand() < 0.55) {
+      return Object.assign(plan, { type: "slower_ball", line_hint: 0.10, length_hint: 0.30,
+                                   reason: "pace_off_vs_aggression" });
+    }
+    return Object.assign(plan, { type: "yorker", line_hint: 0.05, length_hint: 0.03,
+                                 reason: "yorker_vs_aggression" });
+  }
+  if ((ctx.balls_remaining || 6) <= 2 && (ctx.wickets_remaining || 2) >= 1) {
+    return Object.assign(plan, { type: "yorker", line_hint: 0.02, length_hint: 0.03,
+                                 reason: "yorker_at_the_death" });
+  }
+  const shortContest = recent.some(h => h.intent === "lofted");
+  if (shortContest && rand() < 0.5) {
+    return Object.assign(plan, { type: "full_ball", line_hint: 0.15, length_hint: 0.16,
+                                 reason: "full_after_short_contest" });
+  }
+  if (difficulty === "hard" && rand() < 0.35) {
+    if (rand() < 0.5) {
+      return Object.assign(plan, { type: "fast_inswinger", line_hint: 0.30, length_hint: 0.45,
+                                   reason: "hard_mode_inswing" });
+    }
+    return Object.assign(plan, { type: "fast_outswinger", line_hint: 0.05, length_hint: 0.45,
+                                 reason: "hard_mode_outswing" });
+  }
+  return plan;
+}
+
+// --- fielding polish (spec sections 12-15) -------------------------------------
+function catchGrade(ballSpeedKph, height, distanceToFielder, isEdge) {
+  if (isEdge) return "edge";
+  const pressure = ballSpeedKph / 130 + Math.max(0, 1.6 - height) * 0.25;
+  if (distanceToFielder < 3 && ballSpeedKph > 95) return "difficult";
+  if (pressure > 1.05 || height > 6) return "difficult";
+  if (pressure > 0.72 || height > 3.2) return "medium";
+  return "easy";
+}
+const GRADE_SUCCESS_BIAS = { easy: 1.15, medium: 1.00, difficult: 0.72, edge: 0.55 };
+
+const DIVE_REACH = 2.6;
+function diveDecision(fielder, distToBall, ballSpeedH, headingForRope, lofted) {
+  if (distToBall <= 1.1) return "none";
+  if (distToBall > DIVE_REACH + 0.9) return "none";
+  if (headingForRope && ballSpeedH > 16) return "boundary_save";
+  if (lofted) return "catch";
+  return "ground";
+}
+function diveSuccessProbability(fielder, diveKind, ballSpeedH) {
+  let base = 0.55;
+  if (diveKind === "boundary_save") base *= Math.max(0.35, 1.15 - ballSpeedH / 40);
+  else if (diveKind === "catch") base *= 0.8;
+  const ability = diveKind === "catch" ? fielder.catching
+    : fielder.ground * 0.6 + fielder.catching * 0.4;
+  return clamp(base * (0.55 + 0.75 * ability * (fielder.scale || 1)), 0.05, 0.92);
+}
+
+function throwReturn(fielder, distance) {
+  const arm = Math.max(12, fielder.throwSpeed != null ? fielder.throwSpeed : fielder.throw_speed);
+  const acc = fielder.throwAcc != null ? fielder.throwAcc : fielder.throw_acc;
+  const flat = arm >= 23;
+  let travel = distance / arm * (flat ? 1.12 : 1.30);
+  const errant = acc < 0.72;
+  if (errant) travel *= 1.25;
+  return { travel_time: travel, flat, errant };
 }

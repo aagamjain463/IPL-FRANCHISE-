@@ -169,7 +169,7 @@ namespace CricketGame.Core.Batting
         }
     }
 
-    /// <summary>The eight stock Phase 2 delivery types (spec section 1).</summary>
+    /// <summary>The stock delivery types (Phase 2 base + Phase 4 variations).</summary>
     public enum DeliveryType
     {
         FastStraight,
@@ -179,7 +179,11 @@ namespace CricketGame.Core.Batting
         FullBall,
         GoodLength,
         ShortBall,
-        Bouncer
+        Bouncer,
+        // Phase 4 variations: pace-off and seam-position deliveries.
+        OffCutter,
+        LegCutter,
+        SlowerBall
     }
 
     /// <summary>

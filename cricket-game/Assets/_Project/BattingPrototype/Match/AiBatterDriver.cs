@@ -30,9 +30,11 @@ namespace CricketGame.BattingPrototype.Match
 
         /// <summary>Plans one delivery against the live chase context.</summary>
         public void BeginDelivery(DeliveryData delivery, AiChaseContext ctx,
-                                  AiDifficulty difficulty, bool hitsStumpsHint)
+                                  AiDifficulty difficulty, bool hitsStumpsHint,
+                                  AiBatterArchetype archetype = AiBatterArchetype.Balanced)
         {
-            plan = AiBattingPlanner.Plan(rng, delivery, ctx, difficulty, hitsStumpsHint);
+            plan = AiBattingPlanner.Plan(rng, delivery, ctx, difficulty, hitsStumpsHint,
+                                         archetype);
             fired = false;
             active = true;
             swingFrameTime = -1f;

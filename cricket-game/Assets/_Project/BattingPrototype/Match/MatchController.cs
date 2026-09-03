@@ -1,5 +1,6 @@
 using System.Collections;
 using CricketGame.Core.AI;
+using CricketGame.Core.Batting;
 using CricketGame.Core.Fielding;
 using CricketGame.Core.Rules;
 using CricketGame.BattingPrototype.Audio;
@@ -35,6 +36,10 @@ namespace CricketGame.BattingPrototype.Match
         private AiDifficulty difficulty = AiDifficulty.Medium;
         private MatchFlowState flow = MatchFlowState.PreMatch;
         private bool waitingForPlayAgain;
+
+        /// <summary>Phase 4 (spec section 8): the AI batter's personality.
+        /// Adjustable live from the debug panel.</summary>
+        public AiBatterArchetype AiArchetype = AiBatterArchetype.Balanced;
 
         public event System.Action<MatchFlowState> FlowChanged;
         public event System.Action TargetReached;
@@ -78,6 +83,7 @@ namespace CricketGame.BattingPrototype.Match
             match.MatchCompleted += OnMatchCompleted;
             match.Start();
             waitingForPlayAgain = false;
+            ClearBatterHistory();          // Phase 4: fresh bowler memory
             SetFlow(MatchFlowState.Innings1);
             AudioManager.Play(GameSound.InningsStart);
         }
@@ -131,6 +137,49 @@ namespace CricketGame.BattingPrototype.Match
         public float AiBowlingAccuracy
         {
             get { return AiDifficultyTuning.For(difficulty).AiBowlingAccuracy; }
+        }
+
+        // ------------------------------------------------------------------ Phase 4
+        // AI bowling strategy (spec section 10): the bowler remembers the
+        // player's recent scoring and adapts. Understandable + tunable.
+        private readonly System.Collections.Generic.List<BatterHistoryEntry> batterHistory
+            = new System.Collections.Generic.List<BatterHistoryEntry>();
+        private readonly CricketGame.Core.Simulation.IRng bowlRng
+            = new CricketGame.Core.Simulation.SystemRng();
+
+        /// <summary>Runner records what the player did with each shot so the
+        /// AI bowler can read it (sector / runs / intent).</summary>
+        public void NoteBatterShot(DirectionSector sector, int runs, ShotIntent intent)
+        {
+            batterHistory.Add(new BatterHistoryEntry
+            {
+                HasSector = true,
+                Sector = sector,
+                Runs = runs,
+                Intent = intent
+            });
+            while (batterHistory.Count > 6) batterHistory.RemoveAt(0);
+        }
+
+        /// <summary>Clears the bowler's memory (new innings / new match).</summary>
+        public void ClearBatterHistory()
+        {
+            batterHistory.Clear();
+        }
+
+        /// <summary>The AI bowler's plan for the next ball (null when the
+        /// player is batting and no adaptive bowling applies).</summary>
+        public AiBowlingPlan? NextAiBowlingPlan()
+        {
+            if (!PlayerIsBatting || match == null || match.IsComplete) return null;
+            Innings current = match.CurrentInnings;
+            var ctx = new AiBowlingContext
+            {
+                Score = current != null ? current.Runs : 0,
+                WicketsRemaining = current != null ? current.WicketsRemaining : 0,
+                BallsRemaining = current != null ? current.BallsRemaining : 0,
+            };
+            return AiBowlingPlanner.Plan(bowlRng, batterHistory.ToArray(), ctx, difficulty);
         }
 
         // ------------------------------------------------------------------ recording

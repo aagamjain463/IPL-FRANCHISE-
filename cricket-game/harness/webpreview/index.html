@@ -97,8 +97,9 @@
   }
   #bowlPanel {
     bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
-    display: none; align-items: center; gap: 8px; background: rgba(8,12,22,0.66);
-    padding: 8px 12px; border-radius: 12px;
+    display: none; align-items: center; gap: 6px; background: rgba(8,12,22,0.66);
+    padding: 8px 12px; border-radius: 12px; flex-wrap: wrap; justify-content: center;
+    max-width: min(96vw, 780px);
   }
   #bowlPanel button {
     min-width: clamp(52px, 9vmin, 78px); padding: 10px 6px; border: 0; border-radius: 9px;
@@ -135,9 +136,14 @@
   <button id="bpRight">&#9654;</button>
   <div id="bowlReadout">LINE: STUMPS<br>LENGTH: GOOD</div>
   <button class="btype sel" data-bt="fast_straight">FAST</button>
-  <button class="btype" data-bt="fast_inswinger">SWING</button>
+  <button class="btype" data-bt="fast_inswinger">IN&#8209;SWING</button>
+  <button class="btype" data-bt="fast_outswinger">OUT&#8209;SWING</button>
   <button class="btype" data-bt="yorker">YORKER</button>
   <button class="btype" data-bt="short_ball">SHORT</button>
+  <button class="btype" data-bt="bouncer">BOUNCER</button>
+  <button class="btype" data-bt="off_cutter">OFF&#8209;CUT</button>
+  <button class="btype" data-bt="leg_cutter">LEG&#8209;CUT</button>
+  <button class="btype" data-bt="slower_ball">SLOWER</button>
 </div>
 
 <div id="intentBar" class="ui">
@@ -179,6 +185,7 @@
     <button id="bRuns2">RUNS +2</button>
     <button id="bWkts1">WKTS +1</button>
     <button id="bEndInn">END INNINGS</button>
+    <button id="bArchetype">AI BAT: BALANCED</button>
   </div>
 </div>
 
