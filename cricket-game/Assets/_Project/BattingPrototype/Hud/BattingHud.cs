@@ -849,44 +849,49 @@ namespace CricketGame.BattingPrototype.Hud
                             (corners[2].y - corners[0].y) * scale);
         }
 
-        private void LateUpdate()
-        {
-            if (input == null) return;
-
-            // The joystick visuals are created exactly once in
-            // BuildJoystickVisuals(). If they are missing at runtime, skip all
-            // joystick positioning instead of dereferencing null references.
-            bool joystickReady = joyBase != null && joyKnob != null;
-
-            if (joystickReady && input.JoystickActive)
-            {
-                SetJoystickVisible(true);
-                Vector2 local;
-                if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                        CanvasRect, input.JoystickAnchorScreen, null, out local))
-                {
-                    joyBase.rectTransform.anchoredPosition = local;
-                    joyKnob.rectTransform.anchoredPosition =
-                        local + ScreenToCanvas(input.JoystickVector * Screen.height * 0.11f);
-                }
-            }
-           else if (joystickReady && joystickShown && battingControlsVisible)
+      private void LateUpdate()
 {
-    if (joyBase == null)
+    if (input == null)
+        return;
+
+    // Make sure all required UI references exist
+    if (CanvasRect == null)
     {
-        Debug.LogError("BattingHud: joyBase is NULL!");
+        Debug.LogError("BattingHud: CanvasRect is NULL!");
         return;
     }
 
-    if (joyKnob == null)
+    bool joystickReady = joyBase != null && joyKnob != null;
+
+    if (joystickReady && input.JoystickActive)
     {
-        Debug.LogError("BattingHud: joyKnob is NULL!");
-        return;
+        SetJoystickVisible(true);
+
+        Vector2 local;
+
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                CanvasRect,
+                input.JoystickAnchorScreen,
+                null,
+                out local))
+        {
+            joyBase.rectTransform.anchoredPosition = local;
+
+            joyKnob.rectTransform.anchoredPosition =
+                local + ScreenToCanvas(
+                    input.JoystickVector * Screen.height * 0.11f
+                );
+        }
     }
+    else if (joystickReady && joystickShown && battingControlsVisible)
+    {
+        joyBase.rectTransform.anchoredPosition =
+            new Vector2(
+                -Screen.width * 0.32f,
+                -Screen.height * 0.28f
+            );
 
-    joyBase.rectTransform.anchoredPosition =
-        new Vector2(-Screen.width * 0.32f, -Screen.height * 0.28f);
-
-    joyKnob.rectTransform.anchoredPosition =
-        joyBase.rectTransform.anchoredPosition;
+        joyKnob.rectTransform.anchoredPosition =
+            joyBase.rectTransform.anchoredPosition;
+    }
 }
